@@ -30,7 +30,7 @@ set -e
 cd "$(dirname "$0")"
 
 # ---- Config (EDIT THESE IF YOU WANT) ----
-REPO_NAME="dfcl-app"
+REPO_NAME="dfcl-inv"
 REPO_DESC="DFCL Inventory Management System — Next.js 16 + Prisma + SQLite"
 REPO_VISIBILITY="private"   # or "public"
 GITHUB_USERNAME=""          # leave empty to auto-detect from gh/credentials
