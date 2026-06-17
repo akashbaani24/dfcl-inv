@@ -56,6 +56,10 @@ function createPrismaClient(): PrismaClient {
   // 1. Cloudflare D1
   const d1 = getCloudflareD1()
   if (d1) {
+    // Override DATABASE_URL to satisfy Prisma's schema validation
+    if (typeof process !== 'undefined') {
+      process.env.DATABASE_URL = 'file:db.sqlite'
+    }
     const adapter = new PrismaD1(d1)
     return new PrismaClient({ adapter, log: ['error'] })
   }
@@ -63,6 +67,13 @@ function createPrismaClient(): PrismaClient {
   // 2. Turso (Vercel production)
   const turso = getTursoConfig()
   if (turso) {
+    // CRITICAL: Override DATABASE_URL to satisfy Prisma's schema validation.
+    // On Vercel, DATABASE_URL might be set to a non-sqlite URL (e.g. from a previous
+    // Postgres/Neon setup). Since our schema.prisma says provider = "sqlite",
+    // Prisma validates the URL even when using an adapter. Force a valid file: URL.
+    if (typeof process !== 'undefined') {
+      process.env.DATABASE_URL = 'file:db.sqlite'
+    }
     const libsql = createClient({
       url: turso.url,
       authToken: turso.authToken,
@@ -71,7 +82,7 @@ function createPrismaClient(): PrismaClient {
     return new PrismaClient({ adapter, log: ['error'] })
   }
 
-  // 3. Local SQLite (development)
+  // 3. Local SQLite (development) — DATABASE_URL stays as user configured
   return new PrismaClient({
     log: ['error'],
   })
