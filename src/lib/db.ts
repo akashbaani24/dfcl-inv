@@ -1,52 +1,77 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaD1 } from '@prisma/adapter-d1'
+import { PrismaLibSql } from '@prisma/adapter-libsql'
+import { createClient } from '@libsql/client'
 
 /**
  * Environment-aware database client.
  *
- * - On Cloudflare Pages/Workers (Edge runtime): uses D1 binding via getRequestContext()
- * - Locally / on space-z.ai platform (Node runtime): uses SQLite via PrismaClient
+ * Supports THREE deployment targets, auto-detected at runtime:
  *
- * The detection is done by checking for the Cloudflare env binding on globalThis.
- * In Cloudflare Pages with @cloudflare/next-on-pages, the env bindings are attached
- * to globalThis by `getRequestContext()` from `@cloudflare/next-on-pages`.
+ * 1. Cloudflare Pages + D1 (Edge runtime)
+ *    - D1 binding available via globalThis.__env.DB or process.env.DB
+ *    - Used when CF_PAGES=1 and D1 binding is configured
+ *
+ * 2. Vercel + Turso (Node.js runtime)
+ *    - TURSO_DATABASE_URL + TURSO_AUTH_TOKEN env vars set
+ *    - Used for production deployment on Vercel
+ *
+ * 3. Local development (Node.js runtime)
+ *    - SQLite file at DATABASE_URL (default: file:./db/custom.db)
+ *    - Used when no other env vars are detected
+ *
+ * Detection priority: D1 > Turso > Local SQLite
  */
 
 const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined
-  __cf_env?: { DB: D1Database } | undefined
+  __env?: { DB?: D1Database } | undefined
 }
 
-// Cloudflare D1 detection
+// ---------- Cloudflare D1 detection ----------
 function getCloudflareD1(): D1Database | null {
   try {
-    // @cloudflare/next-on-pages exposes env via getRequestContext()
-    // It also patches globalThis with the env in newer versions
     const env = (globalThis as unknown as { __env?: { DB?: D1Database } }).__env
     if (env?.DB) return env.DB
-
-    // Try the Cloudflare Pages env (set by next-on-pages)
-    const cfEnv = (globalThis as unknown as { CF_PAGES_ENV_DB?: D1Database }).CF_PAGES_ENV_DB
-    if (cfEnv) return cfEnv
   } catch { /* not on Cloudflare */ }
 
-  // Also try process.env.DB (works when wrangler injects env vars)
-  if (typeof process !== 'undefined' && process.env?.DB) {
+  if (typeof process !== 'undefined' && process.env?.DB && process.env.CF_PAGES === '1') {
     return process.env.DB as unknown as D1Database
   }
 
   return null
 }
 
+// ---------- Turso detection ----------
+function getTursoConfig(): { url: string; authToken: string } | null {
+  if (typeof process === 'undefined') return null
+  const url = process.env.TURSO_DATABASE_URL
+  const authToken = process.env.TURSO_AUTH_TOKEN
+  if (url && authToken) return { url, authToken }
+  return null
+}
+
+// ---------- Client factory ----------
 function createPrismaClient(): PrismaClient {
+  // 1. Cloudflare D1
   const d1 = getCloudflareD1()
   if (d1) {
-    // Running on Cloudflare with D1 binding
     const adapter = new PrismaD1(d1)
     return new PrismaClient({ adapter, log: ['error'] })
   }
 
-  // Local / Node runtime — use SQLite directly
+  // 2. Turso (Vercel production)
+  const turso = getTursoConfig()
+  if (turso) {
+    const libsql = createClient({
+      url: turso.url,
+      authToken: turso.authToken,
+    })
+    const adapter = new PrismaLibSql(libsql)
+    return new PrismaClient({ adapter, log: ['error'] })
+  }
+
+  // 3. Local SQLite (development)
   return new PrismaClient({
     log: ['error'],
   })
