@@ -5,7 +5,10 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
+  // Use PRISMA_DATABASE_URL (with file: fallback) instead of DATABASE_URL directly,
+  // so that Vercel's DATABASE_URL (which might be postgres:// from another service)
+  // doesn't break Prisma's runtime validation when using driver adapters.
+  url      = env("PRISMA_DATABASE_URL")
 }
 
 model User {
