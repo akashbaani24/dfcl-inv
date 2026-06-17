@@ -19,6 +19,7 @@
     "cf:d1:migrate:local": "wrangler d1 execute dfcl-inv-db --local --file=migrations/d1_initial.sql",
     "cf:d1:seed:local": "wrangler d1 execute dfcl-inv-db --local --file=migrations/d1_seed.sql",
     "cf:d1:query": "wrangler d1 execute dfcl-inv-db --remote --command"
+    "build:cloudflare": "npx @opennextjs/cloudflare@latest build",
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",
