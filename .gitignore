@@ -1,0 +1,59 @@
+# dependencies
+node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# testing
+/coverage
+
+# next.js
+/.next/
+/out/
+.vercel/
+
+# production
+/build
+
+# misc
+.DS_Store
+*.pem
+Thumbs.db
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log
+dev.log
+server.log
+
+# local env files (use .env.example as template)
+.env
+.env.local
+.env.*.local
+
+# platform scripts internals
+.zscripts/dev.log
+.zscripts/dev.pid
+.zscripts/mini-service-*.log
+
+# prisma generated (regenerated on install)
+node_modules/.prisma/
+
+# cloudflare wrangler
+.wrangler/
+
+# uploads (user-generated)
+upload/
+uploaded/
+tool-results/
+
+# build artifacts and zips
+download/
+skills/
+upload/
+uploaded/

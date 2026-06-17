@@ -1,0 +1,297 @@
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["driverAdapters"]
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(cuid())
+  username      String   @unique
+  password      String
+  displayName   String
+  role          String   @default("user") // "admin", "manager", or "user"
+  canCreateItem Boolean  @default(false)
+  canModifyItem Boolean  @default(false)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  columnAccess  UserColumnAccess[]
+  entityAccess  UserEntityAccess[]
+  menuAccess    UserMenuAccess[]
+  sessions      Session[]
+}
+
+model UserColumnAccess {
+  id         String @id @default(cuid())
+  userId     String
+  columnName String  // "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "stockQty"
+  canView    Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, columnName])
+}
+
+model UserEntityAccess {
+  id       String @id @default(cuid())
+  userId   String
+  entityId String
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entityId])
+}
+
+model UserMenuAccess {
+  id       String @id @default(cuid())
+  userId   String
+  menuKey  String  // "itemPrice", "myEntityStock", "allEntityStock", "itemAdjustment", "transfer", "receive", "salesOrder", "salesReturn", "incentive", "reports"
+  visible  Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, menuKey])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model Entity {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  userAccess      UserEntityAccess[]
+  stocks          Stock[]
+  adjustments     ItemAdjustment[]
+  transfersFrom   Transfer[]         @relation("TransfersFrom")
+  transfersTo     Transfer[]         @relation("TransfersTo")
+  receives        Receive[]          @relation("ReceivesTo")
+  receivesFrom    Receive[]          @relation("ReceivesFrom")
+  salesOrders     SalesOrder[]
+  salesReturns    SalesReturn[]
+  incentives      Incentive[]
+}
+
+model Item {
+  id          String   @id @default(cuid())
+  year        String
+  lcNo        String
+  group       String
+  subGroup    String
+  itemName    String
+  price       Float
+  uom         String   @default("PCS")
+  supplierId  String?
+  createdBy   String?
+  updatedBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  stocks       Stock[]
+  supplier     Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  adjustments  ItemAdjustment[]
+  transfers    Transfer[]
+  receives     Receive[]
+  salesOrders  SalesOrder[]
+  salesReturns SalesReturn[]
+  incentives   Incentive[]
+}
+
+model Stock {
+  id       String @id @default(cuid())
+  itemId   String
+  entityId String
+  quantity Int    @default(0)
+
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([itemId, entityId])
+}
+
+// ---- Master Data Models (Head Office) ----
+
+model Tailor {
+  id             String   @id @default(cuid())
+  name           String
+  phone          String   @default("")
+  address        String   @default("")
+  specialization String   @default("")  // e.g. "Shirt", "Pant", "Suit"
+  status         String   @default("active") // "active" or "inactive"
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  incentives Incentive[]
+}
+
+model MakingInfo {
+  id          String   @id @default(cuid())
+  name        String   // e.g. "Stitching", "Cutting", "Finishing", "Ironing"
+  description String   @default("")
+  cost        Float    @default(0)
+  unit        String   @default("PCS")
+  status      String   @default("active") // "active" or "inactive"
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model UoM {
+  id          String   @id @default(cuid())
+  name        String   @unique // e.g. "PCS", "KG", "LTR", "MTR", "BOX", "SET", "DOZ", "PACK"
+  description String   @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Supplier {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @default("")
+  email     String   @default("")
+  address   String   @default("")
+  status    String   @default("active") // "active" or "inactive"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  items Item[]
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  name      String
+  phone     String   @default("")
+  email     String   @default("")
+  address   String   @default("")
+  type      String   @default("regular") // "regular", "wholesale", "corporate"
+  status    String   @default("active") // "active" or "inactive"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  salesOrders  SalesOrder[]
+  salesReturns SalesReturn[]
+}
+
+// ---- Transaction Models (Entity-level) ----
+
+model ItemAdjustment {
+  id             String   @id @default(cuid())
+  itemId         String
+  entityId       String
+  adjustmentType String   // "increase" or "decrease"
+  quantity       Int
+  reason         String
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+}
+
+model Transfer {
+  id           String   @id @default(cuid())
+  itemId       String
+  fromEntityId String
+  toEntityId   String
+  quantity     Int
+  status       String   @default("pending") // "pending", "approved", "completed", "cancelled"
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  item       Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromEntity Entity @relation("TransfersFrom", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntity   Entity @relation("TransfersTo", fields: [toEntityId], references: [id], onDelete: Cascade)
+}
+
+model Receive {
+  id             String   @id @default(cuid())
+  itemId         String
+  entityId       String
+  quantity       Int
+  sourceEntityId String?  // if received from another entity (transfer)
+  referenceNo    String?
+  notes          String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  item         Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity       Entity  @relation("ReceivesTo", fields: [entityId], references: [id], onDelete: Cascade)
+  sourceEntity Entity? @relation("ReceivesFrom", fields: [sourceEntityId], references: [id], onDelete: SetNull)
+}
+
+model SalesOrder {
+  id            String    @id @default(cuid())
+  itemId        String
+  entityId      String
+  customerId    String
+  quantity      Int
+  price         Float
+  makingCharge  Float     @default(0)
+  deliveryDate  DateTime?
+  status        String    @default("pending") // "pending", "processing", "making", "ready", "delivered", "cancelled"
+  notes         String?
+  createdBy     String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  item       Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity     Entity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  returns    SalesReturn[]
+}
+
+model SalesReturn {
+  id           String   @id @default(cuid())
+  itemId       String
+  entityId     String
+  customerId   String
+  salesOrderId String?
+  quantity     Int
+  price        Float
+  reason       String
+  status       String   @default("pending") // "pending", "approved", "rejected"
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  item       Item        @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity     Entity      @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  customer   Customer    @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salesOrder SalesOrder? @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
+}
+
+model Incentive {
+  id        String   @id @default(cuid())
+  itemId    String
+  entityId  String
+  tailorId  String?
+  amount    Float
+  type      String   // "tailor", "sales", "bonus"
+  status    String   @default("pending") // "pending", "paid", "cancelled"
+  notes     String?
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  tailor  Tailor? @relation(fields: [tailorId], references: [id], onDelete: SetNull)
+}

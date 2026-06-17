@@ -1,0 +1,13 @@
+name = "dfcl-app"
+pages_build_output_dir = ".next"
+compatibility_date = "2025-01-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "dfcl-inv-db"
+database_id = "f85696ac-e6ac-43ca-96cb-6cda76cf7fc5"
+
+# Local dev with D1 (use `wrangler pages dev` for testing D1 locally)
+[vars]
+NODE_ENV = "production"
