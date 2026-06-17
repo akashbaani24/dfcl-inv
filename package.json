@@ -2,7 +2,7 @@
   "name": "nextjs_tailwind_shadcn_ts",
   "version": "0.2.0",
   "private": true,
-  "scripts": {
+ "scripts": {
     "dev": "next dev -p 3000 2>&1 | tee dev.log",
     "build": "next build && cp -r .next/static .next/standalone/.next/ && cp -r public .next/standalone/ && mkdir -p .next/standalone/node_modules && cp -r node_modules/bcryptjs .next/standalone/node_modules/ && cp -r node_modules/@prisma .next/standalone/node_modules/ 2>/dev/null || true && cp -r node_modules/.prisma .next/standalone/node_modules/ 2>/dev/null || true",
     "start": "NODE_ENV=production bun .next/standalone/server.js 2>&1 | tee server.log",
@@ -18,8 +18,8 @@
     "cf:d1:seed:remote": "wrangler d1 execute dfcl-inv-db --remote --file=migrations/d1_seed.sql",
     "cf:d1:migrate:local": "wrangler d1 execute dfcl-inv-db --local --file=migrations/d1_initial.sql",
     "cf:d1:seed:local": "wrangler d1 execute dfcl-inv-db --local --file=migrations/d1_seed.sql",
-    "cf:d1:query": "wrangler d1 execute dfcl-inv-db --remote --command"
-    "build:cloudflare": "npx @opennextjs/cloudflare@latest build",
+    "cf:d1:query": "wrangler d1 execute dfcl-inv-db --remote --command",
+    "build:cloudflare": "npx @opennextjs/cloudflare@latest build"
   },
   "dependencies": {
     "@cloudflare/next-on-pages": "^1.13.16",
