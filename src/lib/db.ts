@@ -1,6 +1,6 @@
 import { PrismaClient } from '@prisma/client'
 import { PrismaD1 } from '@prisma/adapter-d1'
-import { PrismaLibSql } from '@prisma/adapter-libsql'
+import { PrismaLibSQL } from '@prisma/adapter-libsql'
 import { createClient } from '@libsql/client'
 
 const globalForPrisma = globalThis as unknown as {
@@ -42,7 +42,7 @@ function createPrismaClient(): PrismaClient {
     // Override DATABASE_URL to satisfy Prisma schema validation
     if (typeof process !== 'undefined') process.env.DATABASE_URL = 'file:db.sqlite'
     const libsql = createClient({ url: turso.url, authToken: turso.authToken })
-    const adapter = new PrismaLibSql(libsql)
+    const adapter = new PrismaLibSQL(libsql)
     return new PrismaClient({ adapter, log: ['error'] })
   }
 
