@@ -57,3 +57,7 @@ download/
 skills/
 upload/
 uploaded/
+deploy.yml
+
+# GitHub Actions workflow file (add manually via GitHub web UI
+# because token doesn't have 'workflow' scope)
