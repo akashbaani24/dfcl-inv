@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 // Simple version endpoint to verify which deployment is live
 export async function GET() {
   return NextResponse.json({
-    version: 'v8-datasourceUrl-override',
+    version: 'v9-build-command-prisma-url',
     timestamp: new Date().toISOString(),
     deployId: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'unknown',
   });

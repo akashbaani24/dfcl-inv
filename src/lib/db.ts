@@ -32,12 +32,7 @@ function createPrismaClient(): PrismaClient {
   const d1 = getCloudflareD1()
   if (d1) {
     const adapter = new PrismaD1(d1)
-    // datasourceUrl forces Prisma to skip env var URL validation
-    return new PrismaClient({
-      adapter,
-      log: ['error'],
-      datasourceUrl: 'file:db.sqlite',
-    })
+    return new PrismaClient({ adapter, log: ['error'] })
   }
 
   // 2. Turso (Vercel production)
@@ -45,13 +40,9 @@ function createPrismaClient(): PrismaClient {
   if (turso) {
     const libsql = createClient({ url: turso.url, authToken: turso.authToken })
     const adapter = new PrismaLibSQL(libsql)
-    // CRITICAL: pass datasourceUrl to force Prisma to use a valid file: URL
-    // instead of trying to read DATABASE_URL from env (which may be postgres://)
-    return new PrismaClient({
-      adapter,
-      log: ['error'],
-      datasourceUrl: 'file:db.sqlite',
-    })
+    // NOTE: Cannot use datasourceUrl with adapter (Prisma throws error).
+    // PRISMA_DATABASE_URL must be set as a real env var on Vercel.
+    return new PrismaClient({ adapter, log: ['error'] })
   }
 
   // 3. Local SQLite fallback
