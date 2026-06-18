@@ -910,15 +910,97 @@ export default function Home() {
   const printSalesInvoice = (s: any) => {
     const win = window.open('', '_blank', 'width=800,height=600')
     if (!win) return
+    const entityName = s.entity?.name || workingEntity?.name || ''
+    const entityDesc = s.entity?.description || ''
+    const custName = s.customer?.name || '—'
+    const custPhone = s.customer?.phone || ''
+    const custAddr = s.customer?.address || ''
     const itemsHtml = (s.items || []).map((si: any, i: number) => {
-      const making = (si.makingEntries || []).map((me: any) => `<tr><td colspan="4" style="padding:3px 12px;border:1px solid #eee;font-size:11px;color:#666">↳ Making: ${me.name}</td><td style="padding:3px 12px;border:1px solid #eee;text-align:right;font-size:11px">${me.quantity}</td><td style="padding:3px 12px;border:1px solid #eee;text-align:right;font-size:11px">${me.unitPrice.toFixed(2)}</td><td style="padding:3px 12px;border:1px solid #eee;text-align:right;font-size:11px">${(me.quantity * me.unitPrice).toFixed(2)}</td></tr>`).join('')
+      const makingRows = (si.makingEntries || []).map((me: any) =>
+        `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666;text-align:center">—</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">↳ Making: ${me.name} (${me.quantity} × ${me.unitPrice.toFixed(2)})</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666;text-align:right">—</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666;text-align:right">${(me.quantity * me.unitPrice).toFixed(2)}</td></tr>`
+      ).join('')
       const itemTotal = si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0)
-      return `<tr><td style="padding:6px 12px;border:1px solid #ddd">${i+1}</td><td style="padding:6px 12px;border:1px solid #ddd">${si.item?.itemName || '—'}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${si.quantity}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${si.unitPrice.toFixed(2)}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${(si.quantity*si.unitPrice).toFixed(2)}</td></tr>${making}`
+      return `<tr><td style="padding:8px;border:1px solid #ddd;text-align:center">${i+1}</td><td style="padding:8px;border:1px solid #ddd">${si.item?.itemName || '—'}<br><span style="font-size:11px;color:#666">Qty: ${si.quantity} × ${si.unitPrice.toFixed(2)}</span></td><td style="padding:8px;border:1px solid #ddd;text-align:right">${si.unitPrice.toFixed(2)}</td><td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold">${itemTotal.toFixed(2)}</td></tr>${makingRows}`
     }).join('')
-    const grandTotal = (s.items || []).reduce((sum: number, si: any) => sum + si.quantity*si.unitPrice + (si.makingEntries||[]).reduce((m:number,me:any)=>m+me.quantity*me.unitPrice,0), 0)
+    const subTotal = (s.items || []).reduce((sum: number, si: any) => sum + si.quantity*si.unitPrice, 0)
+    const makingTotal = (s.items || []).reduce((sum: number, si: any) => sum + (si.makingEntries||[]).reduce((m:number,me:any)=>m+me.quantity*me.unitPrice,0), 0)
+    const grandTotal = subTotal + makingTotal
     const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
-    const paymentsHtml = (s.payments || []).map((p: any) => `<tr><td style="padding:4px 12px;border:1px solid #eee">${p.receiptNo}</td><td style="padding:4px 12px;border:1px solid #eee">${new Date(p.paymentDate).toLocaleDateString()}</td><td style="padding:4px 12px;border:1px solid #eee">${p.paymentType}</td><td style="padding:4px 12px;border:1px solid #eee">${p.paymentMode}</td><td style="padding:4px 12px;border:1px solid #eee;text-align:right">${p.amount.toFixed(2)}</td></tr>`).join('')
-    win.document.write(`<html><head><title>Invoice ${s.salesNo||''}</title><style>body{font-family:Arial;padding:40px}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#f0f0f0;padding:8px 12px;border:1px solid #ddd;text-align:left}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:15px}.sig{margin-top:50px;display:flex;justify-content:space-between}.sig div{border-top:1px solid #000;padding-top:5px;width:200px;text-align:center;font-size:12px}</style></head><body><h1>SALES INVOICE</h1><p>Invoice No: <strong>${s.salesNo||''}</strong></p><div style="display:flex;gap:40px;margin:20px 0"><div><strong>Customer:</strong> ${s.customer?.name||'—'}<br>${s.customer?.phone?'Phone: '+s.customer.phone:''}</div><div><strong>Order Date:</strong> ${new Date(s.orderDate||s.createdAt).toLocaleDateString()}<br><strong>Delivery:</strong> ${s.deliveryDate?new Date(s.deliveryDate).toLocaleDateString():'—'}</div><div><strong>Entity:</strong> ${s.entity?.name||''}<br><strong>Status:</strong> ${s.status}</div></div><table><thead><tr><th style="padding:8px 12px;border:1px solid #ddd">SL</th><th style="padding:8px 12px;border:1px solid #ddd">Item</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Qty</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Unit Price</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Total</th></tr></thead><tbody>${itemsHtml}</tbody></table><div class="total">Grand Total: ${grandTotal.toFixed(2)}</div>${paymentsHtml?`<h3>Payment History</h3><table><thead><tr><th style="padding:8px 12px;border:1px solid #ddd">Receipt No</th><th style="padding:8px 12px;border:1px solid #ddd">Date</th><th style="padding:8px 12px;border:1px solid #ddd">Type</th><th style="padding:8px 12px;border:1px solid #ddd">Mode</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Amount</th></tr></thead><tbody>${paymentsHtml}</tbody></table><div class="total">Paid: ${totalPaid.toFixed(2)} | Due: ${(grandTotal-totalPaid).toFixed(2)}</div>`:''}${s.notes?`<p style="margin-top:15px"><strong>Notes:</strong> ${s.notes}</p>`:''}<div class="sig"><div>Authorized Signature</div><div>Customer Signature</div></div><script>window.onload=()=>window.print()</script></body></html>`)
+    const due = grandTotal - totalPaid
+    const paymentsHtml = (s.payments || []).map((p: any) =>
+      `<tr><td style="padding:5px 8px;border:1px solid #ddd">${p.receiptNo}</td><td style="padding:5px 8px;border:1px solid #ddd">${new Date(p.paymentDate).toLocaleDateString()}</td><td style="padding:5px 8px;border:1px solid #ddd">${p.paymentType}</td><td style="padding:5px 8px;border:1px solid #ddd">${p.paymentMode}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right">${p.amount.toFixed(2)}</td></tr>`
+    ).join('')
+    win.document.write(`<html><head><title>Invoice ${s.salesNo||''}</title><style>
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{font-family:Arial,sans-serif;padding:30px 40px;color:#222}
+      .header{display:flex;justify-content:space-between;margin-bottom:25px}
+      .header-left{font-size:13px;line-height:1.6}
+      .header-left h2{font-size:18px;margin-bottom:3px}
+      .header-right{text-align:right;font-size:13px;line-height:1.8}
+      .header-right h2{font-size:18px;margin-bottom:5px}
+      .invoice-title{text-align:center;font-size:20px;font-weight:bold;margin:15px 0;padding:8px;border-top:2px solid #222;border-bottom:2px solid #222}
+      table{width:100%;border-collapse:collapse;margin:10px 0}
+      th{background:#f5f5f5;padding:8px;border:1px solid #ddd;font-size:12px;text-align:left}
+      td{padding:6px 8px;border:1px solid #ddd;font-size:12px}
+      .totals{width:300px;margin-left:auto;margin-top:10px}
+      .totals table{width:100%}
+      .totals td{padding:5px 10px;border:1px solid #ddd;font-size:13px}
+      .totals .grand{font-weight:bold;font-size:15px;background:#f5f5f5}
+      .pay-section{margin-top:15px}
+      .pay-section h3{font-size:14px;margin-bottom:5px}
+      .sig{margin-top:50px;display:flex;justify-content:space-between}
+      .sig div{border-top:1px solid #222;padding-top:5px;width:200px;text-align:center;font-size:12px}
+    </style></head><body>
+      <div class="header">
+        <div class="header-left">
+          <h2>${entityName}</h2>
+          ${entityDesc ? entityDesc : ''}
+        </div>
+        <div class="header-right">
+          <h2>SALES INVOICE</h2>
+          <strong>Invoice No:</strong> ${s.salesNo || ''}<br>
+          <strong>Order Date:</strong> ${new Date(s.orderDate || s.createdAt).toLocaleDateString()}<br>
+          <strong>Delivery Date:</strong> ${s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : '—'}<br>
+          ${s.notes ? `<strong>Sales Note:</strong> ${s.notes}` : ''}
+        </div>
+      </div>
+      <div style="margin-bottom:15px;font-size:13px;line-height:1.6;border:1px solid #ddd;padding:10px 15px;border-radius:4px">
+        <strong>Customer:</strong> ${custName}<br>
+        ${custPhone ? `<strong>Phone:</strong> ${custPhone}<br>` : ''}
+        ${custAddr ? `<strong>Address:</strong> ${custAddr}` : ''}
+      </div>
+      <table>
+        <thead><tr><th style="width:40px;text-align:center">SL</th><th>Item Description</th><th style="width:80px;text-align:right">Unit Price</th><th style="width:90px;text-align:right">Total</th></tr></thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+      <div class="totals">
+        <table>
+          <tr><td>Sub Total</td><td style="text-align:right">${subTotal.toFixed(2)}</td></tr>
+          <tr><td>Making Charges</td><td style="text-align:right">${makingTotal.toFixed(2)}</td></tr>
+          <tr><td>Total Amount</td><td style="text-align:right">${grandTotal.toFixed(2)}</td></tr>
+          <tr class="grand"><td>Grand Total</td><td style="text-align:right">${grandTotal.toFixed(2)}</td></tr>
+        </table>
+      </div>
+      ${paymentsHtml ? `
+      <div class="pay-section">
+        <h3>Payment Information</h3>
+        <table>
+          <thead><tr><th>Receipt No</th><th>Date</th><th>Method</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead>
+          <tbody>${paymentsHtml}</tbody>
+        </table>
+        <div class="totals">
+          <table>
+            <tr><td>Total Paid</td><td style="text-align:right">${totalPaid.toFixed(2)}</td></tr>
+            <tr class="grand"><td>Due Amount</td><td style="text-align:right">${due.toFixed(2)}</td></tr>
+          </table>
+        </div>
+      </div>` : `<div class="totals"><table><tr class="grand"><td>Due Amount</td><td style="text-align:right">${due.toFixed(2)}</td></tr></table></div>`}
+      <div class="sig">
+        <div>Authorized Signature</div>
+        <div>Customer Signature</div>
+      </div>
+      <script>window.onload=()=>window.print()</script>
+    </body></html>`)
     win.document.close()
   }
 
@@ -4275,7 +4357,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
               <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive shrink-0" onClick={handleLogout} title="Sign Out"><LogOut className="w-4 h-4" /></Button>
             </div>
           </div>
-          <ScrollArea className="flex-1">
+          <div className="flex-1 overflow-y-auto overflow-x-hidden">
             <nav className="p-3 space-y-1">
               {renderFunctionMenu()}
               {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && (<><div className="my-2"><Separator /></div>{renderMasterDataSection()}</>)}
@@ -4285,7 +4367,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
                 </button>
               )}
             </nav>
-          </ScrollArea>
+          </div>
           <div className="p-3 border-t space-y-2">
             <div className="px-3 py-2 bg-muted/50 rounded-lg">
               <p className="text-xs font-medium truncate">{user.displayName}</p>
@@ -4300,11 +4382,11 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
             <SheetTrigger asChild><Button variant="ghost" size="icon" className="mb-4"><Menu className="w-5 h-5" /></Button></SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
               <div className="p-4 border-b"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center"><Package className="w-5 h-5 text-primary-foreground" /></div><div><h1 className="font-bold text-sm">Item Management</h1><button onClick={() => setWorkingEntity(null)} className="flex items-center gap-1 text-xs text-primary hover:underline"><Building2 className="w-3 h-3" />{workingEntity.name}</button></div></div></div>
-              <ScrollArea className="flex-1"><nav className="p-3 space-y-1">
+              <div className="flex-1 overflow-y-auto overflow-x-hidden"><nav className="p-3 space-y-1">
                 {renderFunctionMenu()}
                 {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && (<><div className="my-2"><Separator /></div>{renderMasterDataSection()}</>)}
                 {isAdmin && <button onClick={() => { setCurrentView('settings'); }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${currentView === 'settings' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}><Settings2 className="w-4 h-4 shrink-0" />Settings</button>}
-              </nav></ScrollArea>
+              </nav></div>
               <div className="absolute bottom-0 left-0 right-0 p-3 border-t space-y-2">
                 <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sign Out</Button>
               </div>
