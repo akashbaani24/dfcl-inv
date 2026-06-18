@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server';
 // Simple version endpoint to verify which deployment is live
 export async function GET() {
   return NextResponse.json({
-    version: 'v23-master-data-permissions',
+    version: 'v24-fix-auth-me-master-data',
     timestamp: new Date().toISOString(),
     deployId: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) || 'unknown',
   });

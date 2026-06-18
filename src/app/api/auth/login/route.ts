@@ -16,6 +16,7 @@ export async function POST(request: NextRequest) {
         columnAccess: true,
         entityAccess: { include: { entity: true } },
         menuAccess: true,
+        masterDataAccess: true,
       },
     });
 
@@ -42,6 +43,7 @@ export async function POST(request: NextRequest) {
         columnAccess: user.columnAccess.map(ca => ({ columnName: ca.columnName, canView: ca.canView })),
         entityAccess: user.entityAccess.map(ea => ({ entityId: ea.entityId, entityName: ea.entity.name })),
         menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible })),
+        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible })),
       },
     });
 
