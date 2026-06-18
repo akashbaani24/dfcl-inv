@@ -337,6 +337,9 @@ export default function Home() {
   const [uploadFile, setUploadFile] = useState<File | null>(null)
   const [uploading, setUploading] = useState(false)
 
+  // Export state (for Excel download)
+  const [exporting, setExporting] = useState(false)
+
   // Reports state
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
@@ -766,6 +769,43 @@ export default function Home() {
     toast({ title: 'Downloaded', description: 'items-upload-format.csv' })
   }
 
+  // Export items to Excel/CSV — downloads all items (respecting search + entity filters)
+  const handleExportItems = async () => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (searchQuery) params.set('search', searchQuery)
+      if (selectedEntityId && selectedEntityId !== 'all') params.set('entityId', selectedEntityId)
+      params.set('format', 'xlsx')
+
+      const res = await authFetch(`/api/items/export?${params.toString()}`)
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({ error: 'Export failed' }))
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+        return
+      }
+
+      // Get the binary data and trigger download
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      // Extract filename from Content-Disposition header, fallback to default
+      const disposition = res.headers.get('Content-Disposition') || ''
+      const filenameMatch = disposition.match(/filename="?([^"]+)"?/)
+      link.download = filenameMatch ? filenameMatch[1] : `items-export-${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      toast({ title: 'Downloaded', description: link.download })
+    } catch {
+      toast({ title: 'Error', description: 'Export failed', variant: 'destructive' })
+    } finally {
+      setExporting(false)
+    }
+  }
+
   // Download stock CSV template
   const downloadStockTemplate = () => {
     const csv = 'itemName,entityName,quantity\n' +
@@ -1143,12 +1183,16 @@ export default function Home() {
 
   const renderItemPricePage = () => (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-semibold">Item Price - {workingEntity?.name}</h2>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 flex-wrap">
           <Input placeholder="Search items..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-64" onKeyDown={e => e.key === 'Enter' && handleSearch()} />
           <Button variant="outline" onClick={handleSearch}><Search className="w-4 h-4" /></Button>
           <Button variant="ghost" onClick={handleSearchReset}><RotateCcw className="w-4 h-4" /></Button>
+          <Button variant="outline" onClick={handleExportItems} disabled={exporting} title="Download as Excel file">
+            {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {exporting ? 'Exporting...' : 'Excel'}
+          </Button>
         </div>
       </div>
       <div className="border rounded-lg overflow-hidden">
@@ -2379,6 +2423,10 @@ export default function Home() {
           </Select>
           <Button onClick={handleSearch}><Search className="w-4 h-4 mr-2" />Search</Button>
           <Button variant="outline" onClick={handleSearchReset}><RotateCcw className="w-4 h-4 mr-2" />Reset</Button>
+          <Button variant="outline" onClick={handleExportItems} disabled={exporting} title="Download as Excel file">
+            {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
+            {exporting ? 'Exporting...' : 'Excel'}
+          </Button>
         </div>
       </div>
 
