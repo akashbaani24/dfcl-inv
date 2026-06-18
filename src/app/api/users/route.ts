@@ -29,10 +29,10 @@ export async function GET(request: NextRequest) {
           },
         },
         menuAccess: {
-          select: { menuKey: true, visible: true },
+          select: { menuKey: true, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true },
         },
         masterDataAccess: {
-          select: { masterDataKey: true, visible: true },
+          select: { masterDataKey: true, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true },
         },
       },
       orderBy: { createdAt: 'desc' },
@@ -83,19 +83,31 @@ export async function POST(request: NextRequest) {
 
     const entityAccessData = (entityIds || []).map((entityId: string) => ({ entityId }));
 
-    // Build menu access data: default all visible if not provided
-    const menuAccessData = (menuAccess || MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))).map(
-      (ma: { menuKey: string; visible: boolean }) => ({
+    // ★ Build menu access with the 5 per-menu permission flags
+    type MenuAccessInput = { menuKey: string; visible: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean; canUpload?: boolean; canExport?: boolean };
+    const menuAccessData: MenuAccessInput[] = (menuAccess || MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))).map(
+      (ma: MenuAccessInput) => ({
         menuKey: ma.menuKey,
         visible: ma.visible,
+        canCreate: !!ma.canCreate,
+        canEdit: !!ma.canEdit,
+        canDelete: !!ma.canDelete,
+        canUpload: !!ma.canUpload,
+        canExport: !!ma.canExport,
       })
     );
 
-    // Build master data access: default all visible if not provided
-    const masterDataAccessData = (masterDataAccess || MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true }))).map(
-      (mda: { masterDataKey: string; visible: boolean }) => ({
+    // ★ Build master data access with the 5 per-master-data permission flags
+    type MasterDataAccessInput = { masterDataKey: string; visible: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean; canUpload?: boolean; canExport?: boolean };
+    const masterDataAccessData: MasterDataAccessInput[] = (masterDataAccess || MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true }))).map(
+      (mda: MasterDataAccessInput) => ({
         masterDataKey: mda.masterDataKey,
         visible: mda.visible,
+        canCreate: !!mda.canCreate,
+        canEdit: !!mda.canEdit,
+        canDelete: !!mda.canDelete,
+        canUpload: !!mda.canUpload,
+        canExport: !!mda.canExport,
       })
     );
 
@@ -138,8 +150,8 @@ export async function POST(request: NextRequest) {
         canModifyItem: user.canModifyItem,
         columnAccess: user.columnAccess.map(ca => ({ columnName: ca.columnName, canView: ca.canView })),
         entityAccess: user.entityAccess.map(ea => ({ entityId: ea.entityId, entityName: ea.entity.name })),
-        menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible })),
-        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible })),
+        menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible, canCreate: ma.canCreate, canEdit: ma.canEdit, canDelete: ma.canDelete, canUpload: ma.canUpload, canExport: ma.canExport })),
+        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible, canCreate: mda.canCreate, canEdit: mda.canEdit, canDelete: mda.canDelete, canUpload: mda.canUpload, canExport: mda.canExport })),
       },
     });
   } catch (error) {

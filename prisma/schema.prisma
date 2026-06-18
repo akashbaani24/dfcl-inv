@@ -52,10 +52,18 @@ model UserEntityAccess {
 }
 
 model UserMenuAccess {
-  id       String @id @default(cuid())
-  userId   String
-  menuKey  String  // "itemPrice", "myEntityStock", "allEntityStock", "itemAdjustment", "transfer", "receive", "salesOrder", "salesReturn", "incentive", "reports"
-  visible  Boolean @default(true)
+  id         String  @id @default(cuid())
+  userId     String
+  menuKey    String  // "itemPrice", "myEntityStock", "allEntityStock", "itemAdjustment", "transfer", "receive", "salesOrder", "salesReturn", "incentive", "reports"
+  visible    Boolean @default(true)
+  // ★ Per-menu action permissions (Req #1: replace the global canCreateItem/canModifyItem toggles)
+  // If visible=false, the user can't see the menu at all and these flags are ignored.
+  canCreate  Boolean @default(false)  // Show "+New" buttons for this menu
+  canEdit    Boolean @default(false)  // Show Edit buttons for this menu
+  canDelete  Boolean @default(false)  // Show Delete buttons for this menu
+  // ★ Per-menu data-transfer permissions (Req #2)
+  canUpload  Boolean @default(false)  // Show "Upload CSV" / "Upload Stock" buttons for this menu
+  canExport  Boolean @default(false)  // Show "Excel" / "Download" buttons for this menu
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
@@ -70,6 +78,12 @@ model UserMasterDataAccess {
   userId        String
   masterDataKey String  // e.g. "items", "newItem", "upload", "entities", "users", "tailors", "makingInfo", "uom", "suppliers", "customers"
   visible       Boolean @default(true)
+  // ★ Per-master-data action permissions (same scheme as menus)
+  canCreate     Boolean @default(false)
+  canEdit       Boolean @default(false)
+  canDelete     Boolean @default(false)
+  canUpload     Boolean @default(false)
+  canExport     Boolean @default(false)
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

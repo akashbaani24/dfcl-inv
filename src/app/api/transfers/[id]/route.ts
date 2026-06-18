@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // PUT update transfer
 // Note: transfers are completed automatically when the destination entity creates a Receive
@@ -14,8 +14,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
-      return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
+    if (!canMenu(currentUser, 'transfer', 'edit')) {
+      return NextResponse.json({ error: 'You do not have permission to edit transfers' }, { status: 403 });
     }
 
     const { id } = await params;
@@ -57,8 +57,8 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (currentUser.role !== 'admin' && currentUser.role !== 'manager') {
-      return NextResponse.json({ error: 'Only admins and managers can delete' }, { status: 403 });
+    if (currentUser.role !== 'admin' && currentUser.role !== 'manager' && !canMenu(currentUser, 'transfer', 'delete')) {
+      return NextResponse.json({ error: 'Only admins, managers, or users with delete permission can delete' }, { status: 403 });
     }
 
     const { id } = await params;

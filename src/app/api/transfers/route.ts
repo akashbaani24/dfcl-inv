@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // GET all transfers
 export async function GET(request: NextRequest) {
@@ -62,8 +62,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
-      return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
+    if (!canMenu(currentUser, 'transfer', 'create')) {
+      return NextResponse.json({ error: 'You do not have permission to create transfers' }, { status: 403 });
     }
 
     const { itemId, fromEntityId, toEntityId, quantity, notes } = await request.json();

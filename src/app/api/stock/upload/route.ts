@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // POST /api/stock/upload?entityId=xxx — bulk upload stock entries from CSV
 // Required CSV columns: entityName, barcode OR itemCode OR itemName, quantity, uom
@@ -16,7 +16,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    // ★ Per-menu upload permission (Function → My Entity Stock / All Entity Stock → Upload)
+    if (!canMenu(currentUser, 'myEntityStock', 'upload')) {
       return NextResponse.json({ error: 'You do not have permission to upload stock' }, { status: 403 });
     }
 

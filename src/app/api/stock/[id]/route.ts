@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // GET stock detail for a specific item across entities
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -31,7 +31,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!currentUser) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    if (!canMenu(currentUser, 'myEntityStock', 'delete')) {
       return NextResponse.json({ error: 'You do not have permission to delete stock' }, { status: 403 });
     }
 

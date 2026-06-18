@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMasterData } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
 // GET items with search, server-side pagination, and stock data
@@ -137,7 +137,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canCreateItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    if (!canMasterData(currentUser, 'newItem', 'create')) {
       return NextResponse.json({ error: 'You do not have permission to create items' }, { status: 403 });
     }
 

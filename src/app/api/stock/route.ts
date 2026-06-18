@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
 // GET stock data - returns items with stock quantities for selected entity
@@ -144,7 +144,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    if (!canMenu(currentUser, 'myEntityStock', 'edit')) {
       return NextResponse.json({ error: 'You do not have permission to modify stock' }, { status: 403 });
     }
 

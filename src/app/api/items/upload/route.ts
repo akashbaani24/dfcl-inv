@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMasterData } from '@/lib/auth';
 import { createClient } from '@libsql/client';
 
 // POST /api/items/upload — bulk upload items from CSV
@@ -14,7 +14,8 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canCreateItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    // ★ Per-master-data upload permission (Master Data → Upload CSV)
+    if (!canMasterData(currentUser, 'upload', 'upload')) {
       return NextResponse.json({ error: 'You do not have permission to upload items' }, { status: 403 });
     }
 

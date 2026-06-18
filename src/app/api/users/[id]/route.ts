@@ -50,10 +50,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Update menu access if provided
     if (menuAccess !== undefined) {
       await db.userMenuAccess.deleteMany({ where: { userId: id } });
-      const menuAccessData = (menuAccess as { menuKey: string; visible: boolean }[]).map(ma => ({
+      type MenuAccessInput = { menuKey: string; visible: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean; canUpload?: boolean; canExport?: boolean };
+      const menuAccessData = (menuAccess as MenuAccessInput[]).map(ma => ({
         userId: id,
         menuKey: ma.menuKey,
         visible: ma.visible,
+        canCreate: !!ma.canCreate,
+        canEdit: !!ma.canEdit,
+        canDelete: !!ma.canDelete,
+        canUpload: !!ma.canUpload,
+        canExport: !!ma.canExport,
       }));
       if (menuAccessData.length > 0) {
         await db.userMenuAccess.createMany({ data: menuAccessData });
@@ -63,10 +69,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     // Update master data access if provided
     if (masterDataAccess !== undefined) {
       await db.userMasterDataAccess.deleteMany({ where: { userId: id } });
-      const masterDataAccessData = (masterDataAccess as { masterDataKey: string; visible: boolean }[]).map(mda => ({
+      type MasterDataAccessInput = { masterDataKey: string; visible: boolean; canCreate?: boolean; canEdit?: boolean; canDelete?: boolean; canUpload?: boolean; canExport?: boolean };
+      const masterDataAccessData = (masterDataAccess as MasterDataAccessInput[]).map(mda => ({
         userId: id,
         masterDataKey: mda.masterDataKey,
         visible: mda.visible,
+        canCreate: !!mda.canCreate,
+        canEdit: !!mda.canEdit,
+        canDelete: !!mda.canDelete,
+        canUpload: !!mda.canUpload,
+        canExport: !!mda.canExport,
       }));
       if (masterDataAccessData.length > 0) {
         await db.userMasterDataAccess.createMany({ data: masterDataAccessData });
@@ -94,8 +106,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         canModifyItem: user.canModifyItem,
         columnAccess: user.columnAccess.map(ca => ({ columnName: ca.columnName, canView: ca.canView })),
         entityAccess: user.entityAccess.map(ea => ({ entityId: ea.entityId, entityName: ea.entity.name })),
-        menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible })),
-        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible })),
+        menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible, canCreate: ma.canCreate, canEdit: ma.canEdit, canDelete: ma.canDelete, canUpload: ma.canUpload, canExport: ma.canExport })),
+        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible, canCreate: mda.canCreate, canEdit: mda.canEdit, canDelete: mda.canDelete, canUpload: mda.canUpload, canExport: mda.canExport })),
       },
     });
   } catch (error) {

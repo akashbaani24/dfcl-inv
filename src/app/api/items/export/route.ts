@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMasterData } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
 // GET /api/items/export — download all items as Excel (.xlsx) file
@@ -13,6 +13,11 @@ export async function GET(request: NextRequest) {
     const currentUser = await getCurrentUser(request);
     if (!currentUser) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    }
+
+    // ★ Per-master-data export permission (Master Data → Item Information → Export)
+    if (!canMasterData(currentUser, 'items', 'export')) {
+      return NextResponse.json({ error: 'You do not have permission to export items' }, { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;

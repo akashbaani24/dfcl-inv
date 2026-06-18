@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // PUT update item adjustment
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,8 +10,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
-      return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
+    if (!canMenu(currentUser, 'itemAdjustment', 'edit')) {
+      return NextResponse.json({ error: 'You do not have permission to edit adjustments' }, { status: 403 });
     }
 
     const { id } = await params;

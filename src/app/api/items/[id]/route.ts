@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUser, canMasterData } from '@/lib/auth';
 
 // PUT update item
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -10,7 +10,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    if (!canMasterData(currentUser, 'items', 'edit')) {
       return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
     }
 
@@ -46,7 +46,7 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    if (!canMasterData(currentUser, 'items', 'delete')) {
       return NextResponse.json({ error: 'You do not have permission to delete items' }, { status: 403 });
     }
 
