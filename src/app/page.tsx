@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -1853,9 +1853,13 @@ export default function Home() {
 
   // Reusable stock table component
   const StockTable = ({ entityId, entityLabel }: { entityId: string; entityLabel: string }) => {
-    const [stockData, setStockData] = useState<{ itemId: string; itemName: string; group: string; subGroup: string; uom: string; entityName: string; quantity: number }[]>([])
+    const [stockData, setStockData] = useState<{ itemId: string; itemName: string; barcode: string | null; itemCode: string | null; group: string; subGroup: string; uom: string; entityName: string; quantity: number; bookedQty: number; bookings: { bookingNo: string; tillDate: string | null; forEntityName: string }[] }[]>([])
     const [stkLoading, setStkLoading] = useState(false)
     const [stkSearch, setStkSearch] = useState('')
+    const [uploadOpen, setUploadOpen] = useState(false)
+    const [uploading, setUploading] = useState(false)
+    const [uploadResult, setUploadResult] = useState<any>(null)
+    const fileInputRef = useRef<HTMLInputElement | null>(null)
 
     useEffect(() => {
       const fetchStock = async () => {
@@ -1863,11 +1867,21 @@ export default function Home() {
         try {
           const params = new URLSearchParams()
           if (entityId) params.set('entityId', entityId)
-          const res = await authFetch(`/api/stock?${params}`)
+          const res = await authFetch(`/api/stock/by-entity?${params}`)
           if (res.ok) {
             const data = await res.json()
-            const mapped = data.stocks.map((s: any) => ({
-              itemId: s.itemId, itemName: s.item?.itemName || '', group: s.item?.group || '', subGroup: s.item?.subGroup || '', uom: s.item?.uom || 'PCS', entityName: s.entity?.name || '', quantity: s.quantity
+            const mapped = (data.stocks || []).map((s: any) => ({
+              itemId: s.itemId,
+              itemName: s.item?.itemName || '',
+              barcode: s.item?.barcode || null,
+              itemCode: s.item?.itemCode || null,
+              group: s.item?.group || '',
+              subGroup: s.item?.subGroup || '',
+              uom: s.item?.uom || 'PCS',
+              entityName: s.entityName || '',
+              quantity: s.quantity,
+              bookedQty: s.bookedQty || 0,
+              bookings: s.bookings || [],
             }))
             setStockData(mapped)
           }
@@ -1876,37 +1890,167 @@ export default function Home() {
       fetchStock()
     }, [entityId])
 
-    const filtered = stkSearch ? stockData.filter(s => s.itemName.toLowerCase().includes(stkSearch.toLowerCase()) || s.entityName.toLowerCase().includes(stkSearch.toLowerCase())) : stockData
+    const filtered = stkSearch ? stockData.filter(s =>
+      s.itemName.toLowerCase().includes(stkSearch.toLowerCase()) ||
+      s.entityName.toLowerCase().includes(stkSearch.toLowerCase()) ||
+      (s.barcode || '').toLowerCase().includes(stkSearch.toLowerCase()) ||
+      (s.itemCode || '').toLowerCase().includes(stkSearch.toLowerCase())
+    ) : stockData
+
+    // Download CSV template — pre-filled with the selected entity name
+    const downloadFormat = () => {
+      const csv = `entityName,barcode,itemCode,quantity,uom\n${entityLabel},,ITEM-001,10,PCS\n${entityLabel},BARCODE-002,ITEM-002,5,PCS\n`
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `stock-upload-format-${entityLabel.replace(/\s+/g, '-').toLowerCase()}.csv`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    }
+
+    const handleUpload = async (e: React.FormEvent) => {
+      e.preventDefault()
+      const file = fileInputRef.current?.files?.[0]
+      if (!file) return
+      if (!entityId) {
+        setUploadResult({ error: 'Please select an entity first.' })
+        return
+      }
+      setUploading(true)
+      setUploadResult(null)
+      try {
+        const formData = new FormData()
+        formData.append('file', file)
+        const res = await authFetch(`/api/stock/upload?entityId=${entityId}`, { method: 'POST', body: formData })
+        const data = await res.json()
+        if (res.ok) {
+          setUploadResult(data)
+          // Refresh stock list
+          const params = new URLSearchParams()
+          if (entityId) params.set('entityId', entityId)
+          const refetch = await authFetch(`/api/stock/by-entity?${params}`)
+          if (refetch.ok) {
+            const r = await refetch.json()
+            setStockData((r.stocks || []).map((s: any) => ({
+              itemId: s.itemId, itemName: s.item?.itemName || '', barcode: s.item?.barcode || null, itemCode: s.item?.itemCode || null,
+              group: s.item?.group || '', subGroup: s.item?.subGroup || '', uom: s.item?.uom || 'PCS',
+              entityName: s.entityName || '', quantity: s.quantity, bookedQty: s.bookedQty || 0, bookings: s.bookings || [],
+            })))
+          }
+          if (fileInputRef.current) fileInputRef.current.value = ''
+        } else {
+          setUploadResult({ error: data.error || 'Upload failed' })
+        }
+      } catch (err) {
+        setUploadResult({ error: String(err) })
+      } finally { setUploading(false) }
+    }
 
     return (
       <div className="space-y-3">
-        <Input placeholder="Search..." value={stkSearch} onChange={e => setStkSearch(e.target.value)} className="w-64" />
+        <div className="flex flex-wrap items-center gap-2 justify-between">
+          <Input placeholder="Search by item name, barcode, item code..." value={stkSearch} onChange={e => setStkSearch(e.target.value)} className="w-72" />
+          <div className="flex gap-2">
+            <Button variant="outline" size="sm" onClick={downloadFormat} title="Download CSV format for stock upload"><Download className="w-4 h-4 mr-1.5" />Format</Button>
+            {(user.role === 'admin' || user.role === 'manager') && (
+              <Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="w-4 h-4 mr-1.5" />Upload Stock</Button>
+            )}
+          </div>
+        </div>
         <div className="border rounded-lg overflow-hidden">
           <Table>
             <TableHeader><TableRow className="bg-muted/50">
               <TableHead className="font-semibold">Item Name</TableHead>
+              <TableHead className="font-semibold">Barcode</TableHead>
+              <TableHead className="font-semibold">Item Code</TableHead>
               <TableHead className="font-semibold">Group</TableHead>
               <TableHead className="font-semibold">Sub Group</TableHead>
               {!entityId && <TableHead className="font-semibold">Entity</TableHead>}
               <TableHead className="font-semibold">UoM</TableHead>
-              <TableHead className="font-semibold text-right">Quantity</TableHead>
+              <TableHead className="font-semibold text-right">In Stock</TableHead>
+              <TableHead className="font-semibold text-right">Booked</TableHead>
+              <TableHead className="font-semibold text-right">Available</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {stkLoading ? <TableRow><TableCell colSpan={entityId ? 5 : 6} className="text-center py-8">Loading...</TableCell></TableRow>
-              : filtered.length === 0 ? <TableRow><TableCell colSpan={entityId ? 5 : 6} className="text-center py-8 text-muted-foreground">No stock data</TableCell></TableRow>
-              : filtered.map((s, i) => (
-                <TableRow key={i} className="hover:bg-muted/30">
+              {stkLoading ? <TableRow><TableCell colSpan={entityId ? 9 : 10} className="text-center py-8">Loading...</TableCell></TableRow>
+              : filtered.length === 0 ? <TableRow><TableCell colSpan={entityId ? 9 : 10} className="text-center py-8 text-muted-foreground">No stock data</TableCell></TableRow>
+              : filtered.map((s, i) => {
+                const available = s.quantity - s.bookedQty
+                return (
+                <TableRow key={i} className={`hover:bg-muted/30 ${s.bookedQty > 0 ? 'bg-amber-50/40' : ''}`}>
                   <TableCell className="font-medium">{s.itemName}</TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">{s.barcode || '—'}</TableCell>
+                  <TableCell className="text-xs font-mono text-muted-foreground">{s.itemCode || '—'}</TableCell>
                   <TableCell>{s.group}</TableCell>
                   <TableCell>{s.subGroup}</TableCell>
                   {!entityId && <TableCell>{s.entityName}</TableCell>}
                   <TableCell>{s.uom}</TableCell>
                   <TableCell className="text-right font-semibold">{s.quantity}</TableCell>
+                  <TableCell className="text-right">
+                    {s.bookedQty > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title={`${s.bookings.length} active booking(s)\n${s.bookings.map((b: any) => `• ${b.bookingNo} → ${b.forEntityName}${b.tillDate ? ` (till ${new Date(b.tillDate).toLocaleDateString()})` : ''}`).join('\n')}`}>
+                        <Receipt className="w-3 h-3" />{s.bookedQty}
+                      </span>
+                    ) : <span className="text-muted-foreground">0</span>}
+                  </TableCell>
+                  <TableCell className={`text-right font-bold ${available < 0 ? 'text-red-600' : available === 0 ? 'text-amber-600' : 'text-green-700'}`}>{available}</TableCell>
                 </TableRow>
-              ))}
+              )})}
             </TableBody>
           </Table>
         </div>
+
+        {/* Upload Dialog */}
+        <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Upload Stock — {entityLabel}</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1.5">
+                <p className="font-semibold">📋 CSV Format (must include header row):</p>
+                <p className="font-mono">entityName, barcode, itemCode, quantity, uom</p>
+                <p className="text-[11px] mt-1">• <strong>entityName</strong> must match the selected entity "<strong>{entityLabel}</strong>" — otherwise rows are rejected.</p>
+                <p className="text-[11px]">• Provide at least one of: <strong>barcode</strong>, <strong>itemCode</strong>, or <strong>itemName</strong> (you can add an itemName column too).</p>
+                <p className="text-[11px]">• Item is matched by barcode first → itemCode → itemName.</p>
+                <p className="text-[11px]">• Empty cells → "N/A" (quantity → 0, uom → "PCS").</p>
+                <p className="text-[11px]">• Both comma and semicolon delimiters are auto-detected.</p>
+              </div>
+              <Button type="button" variant="outline" size="sm" onClick={downloadFormat}><Download className="w-4 h-4 mr-1.5" />Download Format (pre-filled with {entityLabel})</Button>
+              <form onSubmit={handleUpload} className="space-y-3">
+                <div>
+                  <Label className="text-xs">CSV File</Label>
+                  <Input type="file" accept=".csv" ref={fileInputRef} required />
+                </div>
+                <Button type="submit" disabled={uploading} className="w-full">
+                  {uploading ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Uploading...</> : <><Upload className="w-4 h-4 mr-2" />Upload</>}
+                </Button>
+              </form>
+              {uploadResult && (
+                <div className={`rounded-md border p-3 text-xs ${uploadResult.error ? 'bg-red-50 border-red-200 text-red-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+                  {uploadResult.error ? (
+                    <p>❌ {uploadResult.error}</p>
+                  ) : (
+                    <div className="space-y-1">
+                      <p className="font-semibold">✅ Upload complete for "{uploadResult.selectedEntity}"</p>
+                      <p>Upserted: <strong>{uploadResult.upserted}</strong> / {uploadResult.total}</p>
+                      <p>Skipped: {uploadResult.skipped}{uploadResult.wrongEntity ? ` (of which wrong entity: ${uploadResult.wrongEntity})` : ''}</p>
+                      {uploadResult.errors && uploadResult.errors.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-red-700 font-medium">First {uploadResult.errors.length} warning(s)</summary>
+                          <ul className="list-disc list-inside mt-1 space-y-0.5">{uploadResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}</ul>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }

@@ -119,6 +119,8 @@ model Item {
   itemName    String
   price       Float
   uom         String   @default("PCS")
+  barcode     String?  @unique
+  itemCode    String?
   supplierId  String?
   createdBy   String?
   updatedBy   String?
@@ -136,6 +138,7 @@ model Item {
   incentives   Incentive[]
 
   @@index([itemName])
+  @@index([itemCode])
   @@index([year])
   @@index([lcNo])
   @@index([group])

@@ -48,6 +48,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST create new receive
+// If sourceEntityId is provided (i.e. receiving from another entity), this will:
+//   1. Increment the receiving entity's stock (as before)
+//   2. Decrement the source entity's stock (★ Requirement #3)
+//   3. Mark any matching pending transfer as "completed" (★ Requirement #2 + #3)
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -59,7 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
     }
 
-    const { itemId, entityId, quantity, sourceEntityId, referenceNo, notes } = await request.json();
+    const { itemId, entityId, quantity, sourceEntityId, referenceNo, notes, transferId } = await request.json();
 
     if (!itemId || !entityId || !quantity) {
       return NextResponse.json(
@@ -70,32 +74,79 @@ export async function POST(request: NextRequest) {
 
     const qty = parseInt(quantity);
 
-    const receive = await db.receive.create({
-      data: {
-        itemId,
-        entityId,
-        quantity: qty,
-        sourceEntityId: sourceEntityId || null,
-        referenceNo: referenceNo || null,
-        notes: notes || null,
-        createdBy: currentUser.id,
-      },
-      include: {
-        item: true,
-        entity: true,
-        sourceEntity: true,
-      },
-    });
+    // Use a transaction so all stock + transfer updates happen atomically
+    const receive = await db.$transaction(async (tx) => {
+      // 1. Create the Receive entry
+      const r = await tx.receive.create({
+        data: {
+          itemId,
+          entityId,
+          quantity: qty,
+          sourceEntityId: sourceEntityId || null,
+          referenceNo: referenceNo || null,
+          notes: notes || null,
+          createdBy: currentUser.id,
+        },
+        include: {
+          item: true,
+          entity: true,
+          sourceEntity: true,
+        },
+      });
 
-    // Increase stock for the receiving entity
-    const existingStock = await db.stock.findUnique({
-      where: { itemId_entityId: { itemId, entityId } },
-    });
-    const newQuantity = (existingStock?.quantity || 0) + qty;
-    await db.stock.upsert({
-      where: { itemId_entityId: { itemId, entityId } },
-      update: { quantity: newQuantity },
-      create: { itemId, entityId, quantity: newQuantity },
+      // 2. Increment receiving entity's stock
+      const existingStock = await tx.stock.findUnique({
+        where: { itemId_entityId: { itemId, entityId } },
+      });
+      const newQuantity = (existingStock?.quantity || 0) + qty;
+      await tx.stock.upsert({
+        where: { itemId_entityId: { itemId, entityId } },
+        update: { quantity: newQuantity },
+        create: { itemId, entityId, quantity: newQuantity },
+      });
+
+      // 3. If receiving from another entity → decrement source stock + complete matching transfer
+      if (sourceEntityId && sourceEntityId !== entityId) {
+        // Decrement source entity's stock
+        const srcStock = await tx.stock.findUnique({
+          where: { itemId_entityId: { itemId, entityId: sourceEntityId } },
+        });
+        const srcNewQty = (srcStock?.quantity || 0) - qty;
+        await tx.stock.upsert({
+          where: { itemId_entityId: { itemId, entityId: sourceEntityId } },
+          update: { quantity: srcNewQty },
+          create: { itemId, entityId: sourceEntityId, quantity: srcNewQty },
+        });
+
+        // Find matching pending transfer (either by explicit transferId, or by item+from+to)
+        let transfer: any = null;
+        if (transferId) {
+          transfer = await tx.transfer.findUnique({ where: { id: transferId } });
+        } else {
+          // Find the oldest pending transfer matching itemId + fromEntityId + toEntityId
+          transfer = await tx.transfer.findFirst({
+            where: {
+              itemId,
+              fromEntityId: sourceEntityId,
+              toEntityId: entityId,
+              status: 'pending',
+            },
+            orderBy: { createdAt: 'asc' },
+          });
+        }
+
+        if (transfer && transfer.status !== 'completed') {
+          await tx.transfer.update({
+            where: { id: transfer.id },
+            data: {
+              status: 'completed',
+              notes: (transfer.notes ? transfer.notes + ' | ' : '') + `Received via ${r.id} on ${new Date().toISOString()}`,
+            },
+          });
+        }
+      }
+
+      return r;
     });
 
     return NextResponse.json({ receive });

@@ -51,6 +51,10 @@ export async function GET(request: NextRequest) {
 }
 
 // POST create new transfer
+// Transfers are always created as "pending" — stock is NOT touched at creation time.
+// Stock moves from source → destination only when the destination entity creates a Receive
+// (see /api/receives POST). This implements the requirement:
+//   "Nijer stock theke onno joner entity te transfer korle ta jeno oi entity receive korar por nijer entity theke minus hoy."
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -62,7 +66,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
     }
 
-    const { itemId, fromEntityId, toEntityId, quantity, status, notes } = await request.json();
+    const { itemId, fromEntityId, toEntityId, quantity, notes } = await request.json();
 
     if (!itemId || !fromEntityId || !toEntityId || !quantity) {
       return NextResponse.json(
@@ -75,15 +79,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Source and destination entities cannot be the same' }, { status: 400 });
     }
 
-    const transferStatus = status || 'pending';
-
     const transfer = await db.transfer.create({
       data: {
         itemId,
         fromEntityId,
         toEntityId,
         quantity: parseInt(quantity),
-        status: transferStatus,
+        status: 'pending',
         notes: notes || null,
         createdBy: currentUser.id,
       },
@@ -93,45 +95,6 @@ export async function POST(request: NextRequest) {
         toEntity: true,
       },
     });
-
-    // When status is "completed", update stock and create a Receive entry
-    if (transferStatus === 'completed') {
-      const qty = parseInt(quantity);
-
-      // Decrease stock at fromEntity
-      const fromStock = await db.stock.findUnique({
-        where: { itemId_entityId: { itemId, entityId: fromEntityId } },
-      });
-      const fromNewQty = (fromStock?.quantity || 0) - qty;
-      await db.stock.upsert({
-        where: { itemId_entityId: { itemId, entityId: fromEntityId } },
-        update: { quantity: fromNewQty },
-        create: { itemId, entityId: fromEntityId, quantity: fromNewQty },
-      });
-
-      // Increase stock at toEntity
-      const toStock = await db.stock.findUnique({
-        where: { itemId_entityId: { itemId, entityId: toEntityId } },
-      });
-      const toNewQty = (toStock?.quantity || 0) + qty;
-      await db.stock.upsert({
-        where: { itemId_entityId: { itemId, entityId: toEntityId } },
-        update: { quantity: toNewQty },
-        create: { itemId, entityId: toEntityId, quantity: toNewQty },
-      });
-
-      // Create a Receive entry
-      await db.receive.create({
-        data: {
-          itemId,
-          entityId: toEntityId,
-          quantity: qty,
-          sourceEntityId: fromEntityId,
-          notes: `Auto-created from transfer ${transfer.id}`,
-          createdBy: currentUser.id,
-        },
-      });
-    }
 
     return NextResponse.json({ transfer });
   } catch (error) {

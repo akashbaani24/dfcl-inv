@@ -33,6 +33,18 @@ export async function GET(request: NextRequest) {
       });
     }
 
+    // ★ Requirement #1: enforce entity access — non-admin/manager cannot query an entity they don't have access to
+    if (entityId && userEntityIds && !userEntityIds.includes(entityId)) {
+      return NextResponse.json({
+        items: [],
+        total: 0,
+        page,
+        pageSize,
+        totalPages: 0,
+        visibleColumns: ['serial'],
+      });
+    }
+
     const skip = (page - 1) * pageSize;
 
     // Build where clause
