@@ -1270,9 +1270,8 @@ export default function Home() {
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
     ]},
-    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt, isParent: true, children: [
-      { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText },
-    ]},
+    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
+    { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText },
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
   ].filter(item => {
@@ -3776,6 +3775,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           <Button variant={currentView === 'receive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('receive')} title="Receive"><ArrowDownToLine className="w-4 h-4" /></Button>
           <Button variant={['salesOrder','salesReturn'].includes(currentView) ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('salesOrder')} title="Sales"><ShoppingCart className="w-4 h-4" /></Button>
           <Button variant={currentView === 'booking' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('booking')} title="Booking"><Receipt className="w-4 h-4" /></Button>
+          <Button variant={currentView === 'bookingReasons' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('bookingReasons')} title="Booking Reasons"><FileText className="w-4 h-4" /></Button>
           <Button variant={currentView === 'incentive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('incentive')} title="Incentive"><DollarSign className="w-4 h-4" /></Button>
           <Button variant={currentView === 'reports' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('reports')} title="Reports"><FileText className="w-4 h-4" /></Button>
           {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && <Button variant={isMasterDataActive ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => { const firstVisible = visibleMasterDataItems[0]; if (firstVisible) setCurrentView(firstVisible.key); }} title="Master Data"><Database className="w-4 h-4" /></Button>}
