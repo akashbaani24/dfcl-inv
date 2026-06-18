@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": "nextjs",
-  "buildCommand": "PRISMA_DATABASE_URL=file:db.sqlite prisma generate && next build",
+  "buildCommand": "PRISMA_DATABASE_URL=file:db.sqlite prisma generate && (if [ -n \"$TURSO_DATABASE_URL\" ] && [ -n \"$TURSO_AUTH_TOKEN\" ]; then PRISMA_DATABASE_URL=\"${TURSO_DATABASE_URL}?authToken=${TURSO_AUTH_TOKEN}\" prisma db push --accept-data-loss || true; fi) && next build",
   "installCommand": "bun install",
   "functions": {
     "src/app/api/items/upload/route.ts": {
