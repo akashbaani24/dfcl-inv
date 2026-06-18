@@ -59,6 +59,8 @@ import {
   Store,
   ClipboardList,
   Receipt,
+  CheckCircle2,
+  Printer,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -159,6 +161,7 @@ type ViewType =
   | 'entitySelect'
   | 'itemPrice' | 'myEntityStock' | 'allEntityStock'
   | 'itemAdjustment' | 'transfer' | 'receive'
+  | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
   | 'booking' | 'incentive' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
@@ -194,6 +197,8 @@ const ALL_MENU_ITEMS = [
   { key: 'itemAdjustment', label: 'Item Adjustment', group: 'Function' },
   { key: 'transfer', label: 'Transfer', group: 'Function' },
   { key: 'receive', label: 'Receive', group: 'Function' },
+  { key: 'purchase', label: 'Purchase', group: 'Purchase' },
+  { key: 'purchaseApproval', label: 'Purchase Approval', group: 'Purchase' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
@@ -277,6 +282,22 @@ export default function Home() {
   const [receives, setReceives] = useState<ReceiveData[]>([])
   const [receiveForm, setReceiveForm] = useState({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
   const [showReceiveDialog, setShowReceiveDialog] = useState(false)
+
+  // ★ Purchase state
+  const [purchases, setPurchases] = useState<any[]>([])
+  const [purchaseForm, setPurchaseForm] = useState({
+    purchaseDate: new Date().toISOString().split('T')[0],
+    purchaseType: 'local' as 'foreign' | 'local',
+    entityId: '',
+    supplierId: '',
+    billNo: '',
+    notes: '',
+    items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; uom: string }>,
+  })
+  const [purchaseItemSearch, setPurchaseItemSearch] = useState('')
+  const [purchaseItemResults, setPurchaseItemResults] = useState<any[]>([])
+  const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
+  const [showPurchaseDetailDialog, setShowPurchaseDetailDialog] = useState(false)
 
   const [salesOrders, setSalesOrders] = useState<Array<any>>([])
   const [salesOrderForm, setSalesOrderForm] = useState({
@@ -1140,6 +1161,8 @@ export default function Home() {
   useEffect(() => { if (currentView === 'itemAdjustment') fetchAdjustments() }, [currentView])
   useEffect(() => { if (currentView === 'transfer') fetchTransfers() }, [currentView])
   useEffect(() => { if (currentView === 'receive') fetchReceives() }, [currentView])
+  // ★ Fetch purchases when entering Purchase list or Purchase Approval page
+  useEffect(() => { if (currentView === 'purchase' || currentView === 'purchaseApproval') fetchPurchases() }, [currentView])
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
@@ -1659,6 +1682,10 @@ export default function Home() {
     { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', icon: Settings2 },
     { key: 'transfer' as ViewType, label: 'Transfer', icon: ArrowRightLeft },
     { key: 'receive' as ViewType, label: 'Receive', icon: ArrowDownToLine },
+    { key: 'purchase' as ViewType, label: 'Purchase', icon: ShoppingCart, isParent: true, children: [
+      { key: 'purchase' as ViewType, label: 'Purchase List', icon: ClipboardList },
+      { key: 'purchaseApproval' as ViewType, label: 'Purchase Approval', icon: CheckCircle2 },
+    ]},
     { key: 'sales' as ViewType, label: 'Sales', icon: ShoppingCart, isParent: true, children: [
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
@@ -2203,18 +2230,32 @@ export default function Home() {
             <TableHead className="font-semibold">Source</TableHead>
             <TableHead className="font-semibold">Ref No</TableHead>
             <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {receives.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No receives</TableCell></TableRow>
-            : receives.map(r => (
-              <TableRow key={r.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{r.itemName}</TableCell>
+            {receives.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No receives</TableCell></TableRow>
+            : receives.map(r => {
+              const isFromPurchase = !!(r as any).referenceNo && (r as any).referenceNo.startsWith('PUR-')
+              return (
+              <TableRow key={r.id} className={`hover:bg-muted/30 ${isFromPurchase ? 'bg-blue-50/30' : ''}`}>
+                <TableCell className="font-medium">
+                  {r.itemName}
+                  {isFromPurchase && <Badge variant="outline" className="ml-2 text-[10px] bg-blue-100 text-blue-700">Purchase</Badge>}
+                </TableCell>
                 <TableCell className="text-right">{r.quantity}</TableCell>
-                <TableCell>{r.sourceEntityName || '-'}</TableCell>
-                <TableCell>{r.referenceNo || '-'}</TableCell>
+                <TableCell>{r.sourceEntityName || (isFromPurchase ? 'Supplier' : '-')}</TableCell>
+                <TableCell className="font-mono text-xs">{r.referenceNo || '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-center">
+                  {isFromPurchase && (
+                    <Button variant="ghost" size="sm" title="Print Barcodes" onClick={() => printPurchaseBarcodes(r.id, r.referenceNo, [{ item: { itemName: r.itemName, barcode: (r as any).item?.barcode, itemCode: (r as any).item?.itemCode, uom: (r as any).item?.uom }, quantity: r.quantity, uom: 'PCS' }])}>
+                      <Printer className="w-4 h-4" />
+                    </Button>
+                  )}
+                </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </div>
@@ -2823,6 +2864,509 @@ export default function Home() {
     </div>
     )
   }
+
+  // ─── Purchase module ────────────────────────────────────────────────────
+  // Fetch purchases list (called from useEffect when entering Purchase list page)
+  const fetchPurchases = useCallback(async (statusFilter = '') => {
+    try {
+      const params = new URLSearchParams()
+      if (workingEntity?.id) params.set('entityId', workingEntity.id)
+      if (statusFilter) params.set('status', statusFilter)
+      const res = await authFetch(`/api/purchases?${params}`)
+      if (res.ok) {
+        const data = await res.json()
+        setPurchases(data.purchases || [])
+      }
+    } catch {}
+  }, [workingEntity?.id])
+
+  const resetPurchaseForm = () => {
+    setPurchaseForm({
+      purchaseDate: new Date().toISOString().split('T')[0],
+      purchaseType: 'local',
+      entityId: workingEntity?.id || '',
+      supplierId: '',
+      billNo: '',
+      notes: '',
+      items: [],
+    })
+    setPurchaseItemSearch('')
+    setPurchaseItemResults([])
+  }
+
+  // Item search for purchase form (uses master item list)
+  const handlePurchaseItemSearch = async () => {
+    if (!purchaseItemSearch.trim()) return
+    try {
+      const res = await authFetch(`/api/items?search=${encodeURIComponent(purchaseItemSearch)}&pageSize=20`)
+      if (res.ok) {
+        const data = await res.json()
+        setPurchaseItemResults(data.items || [])
+      }
+    } catch {}
+  }
+
+  const addPurchaseItem = (item: any) => {
+    setPurchaseForm(f => ({
+      ...f,
+      items: [...f.items, {
+        itemId: item.id || '',
+        itemName: item.itemName || '',
+        quantity: '1',
+        unitPrice: (item.price || 0).toString(),
+        uom: item.uom || 'PCS',
+      }],
+    }))
+    setPurchaseItemSearch('')
+    setPurchaseItemResults([])
+  }
+
+  const updatePurchaseItem = (index: number, field: 'quantity' | 'unitPrice' | 'uom', value: string) => {
+    setPurchaseForm(f => {
+      const items = [...f.items]
+      items[index] = { ...items[index], [field]: value }
+      return { ...f, items }
+    })
+  }
+
+  const removePurchaseItem = (index: number) => {
+    setPurchaseForm(f => ({ ...f, items: f.items.filter((_, i) => i !== index) }))
+  }
+
+  const handleSavePurchase = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!purchaseForm.entityId) {
+      toast({ title: 'Error', description: 'Please select "Purchase For" entity', variant: 'destructive' })
+      return
+    }
+    if (purchaseForm.items.length === 0) {
+      toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' })
+      return
+    }
+    try {
+      const payload = {
+        purchaseDate: purchaseForm.purchaseDate,
+        purchaseType: purchaseForm.purchaseType,
+        entityId: purchaseForm.entityId,
+        supplierId: purchaseForm.supplierId || undefined,
+        billNo: purchaseForm.billNo || undefined,
+        notes: purchaseForm.notes || undefined,
+        items: purchaseForm.items.map(i => ({
+          itemId: i.itemId,
+          quantity: parseInt(i.quantity) || 1,
+          unitPrice: parseFloat(i.unitPrice) || 0,
+          uom: i.uom || 'PCS',
+        })),
+      }
+      const res = await authFetch('/api/purchases', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Success', description: `Purchase created: ${data.purchase?.purchaseNo || ''}` })
+        resetPurchaseForm()
+        setCurrentView('purchase')
+        fetchPurchases()
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to create purchase', variant: 'destructive' })
+    }
+  }
+
+  const handleApprovePurchase = async (id: string) => {
+    if (!confirm('Approve this purchase? This will create Receive entries and add stock to the destination entity.')) return
+    try {
+      const res = await authFetch(`/api/purchases/${id}/approve`, { method: 'POST' })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Approved', description: data.message || `Purchase approved. ${data.receiveCount} items received.` })
+        fetchPurchases()
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to approve', variant: 'destructive' })
+    }
+  }
+
+  const handleDeletePurchase = async (id: string) => {
+    if (!confirm('Delete this purchase? Only pending purchases can be deleted.')) return
+    try {
+      const res = await authFetch(`/api/purchases/${id}`, { method: 'DELETE' })
+      if (res.ok) {
+        toast({ title: 'Deleted', description: 'Purchase deleted' })
+        fetchPurchases()
+      } else {
+        const data = await res.json()
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to delete', variant: 'destructive' })
+    }
+  }
+
+  // Print barcodes for all items in a purchase (called from Receive page when receive is linked to a purchase)
+  const printPurchaseBarcodes = (purchaseId: string, purchaseNo: string, items: any[]) => {
+    const win = window.open('', '_blank', 'width=800,height=600')
+    if (!win) return
+    const labels = items.map((pi: any) => {
+      const code = pi.item?.barcode || pi.item?.itemCode || pi.itemId
+      const name = pi.item?.itemName || '—'
+      const uom = pi.uom || pi.item?.uom || 'PCS'
+      const qty = pi.quantity
+      // Build N labels (one per unit) — capped at 20 for safety
+      const labelCount = Math.min(qty, 20)
+      const labels = Array.from({ length: labelCount }).map((_, idx) => `
+        <div class="label">
+          <div class="title">${escapeHtml(name)}</div>
+          <svg class="barcode" jsbarcode-format="CODE128" jsbarcode-value="${escapeHtml(code || 'X')}" jsbarcode-width="2" jsbarcode-height="40" jsbarcode-displayvalue="true"></svg>
+          <div class="meta">
+            <span>UoM: ${escapeHtml(uom)}</span>
+            <span>#${idx + 1}/${qty}</span>
+            <span>${escapeHtml(purchaseNo)}</span>
+          </div>
+        </div>
+      `).join('')
+      return labels
+    }).join('')
+
+    win.document.write(`<!doctype html><html><head><title>Barcodes - ${escapeHtml(purchaseNo)}</title>
+      <style>
+        *{box-sizing:border-box}
+        body{font-family:Arial,sans-serif;padding:15px;background:#fff}
+        h1{font-size:18px;margin:0 0 10px;color:#1e3a8a;border-bottom:2px solid #1e3a8a;padding-bottom:5px}
+        .info{font-size:11px;color:#666;margin-bottom:15px}
+        .labels{display:flex;flex-wrap:wrap;gap:6px}
+        .label{width:180px;height:100px;border:1px solid #999;padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;page-break-inside:avoid}
+        .label .title{font-size:11px;font-weight:700;text-align:center;color:#1e293b;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .label .barcode{display:block}
+        .label .meta{font-size:8px;color:#666;display:flex;justify-content:space-between;width:100%;padding:0 3px}
+        @media print{body{padding:8mm}.label{border:1px dashed #999}}
+      </style>
+      <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+      </head><body>
+        <h1>BARCODES — ${escapeHtml(purchaseNo)}</h1>
+        <div class="info">Purchase ID: ${escapeHtml(purchaseId)} | ${items.length} item(s) | Generated: ${new Date().toLocaleString()}</div>
+        <div class="labels">${labels}</div>
+        <script>
+          window.onload = function() {
+            if (typeof JsBarcode !== 'undefined') {
+              try { JsBarcode(".barcode").init(); } catch(e) { console.error(e); }
+            }
+            setTimeout(function() { window.print(); }, 400);
+          };
+        </script>
+      </body></html>`)
+    win.document.close()
+  }
+
+  function escapeHtml(s: any): string {
+    if (s === null || s === undefined) return ''
+    return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] || c))
+  }
+
+  // Purchase List page — summary table + New Purchase button
+  const renderPurchaseListPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Purchase List - {workingEntity?.name}</h2>
+        <Button onClick={() => { resetPurchaseForm(); setCurrentView('newPurchase') }} className="gap-2" style={{ display: hasPermission('menu', 'purchase', 'create') ? '' : 'none' }}>
+          <Plus className="w-4 h-4" />New Purchase
+        </Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Purchase No</TableHead>
+            <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold">Type</TableHead>
+            <TableHead className="font-semibold">Supplier</TableHead>
+            <TableHead className="font-semibold">Bill No</TableHead>
+            <TableHead className="font-semibold text-center">Items</TableHead>
+            <TableHead className="font-semibold text-right">Amount</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {purchases.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No purchases yet. Click "New Purchase" to create one.</TableCell></TableRow>
+            : purchases.map(p => (
+              <TableRow key={p.id} className="hover:bg-muted/30">
+                <TableCell className="font-mono text-xs font-semibold">{p.purchaseNo}</TableCell>
+                <TableCell className="text-xs">{new Date(p.purchaseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                <TableCell><Badge variant="outline" className={p.purchaseType === 'foreign' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>{p.purchaseType}</Badge></TableCell>
+                <TableCell>{p.supplier?.name || '—'}</TableCell>
+                <TableCell className="text-xs font-mono">{p.billNo || '—'}</TableCell>
+                <TableCell className="text-center">{p.itemCount || 0}</TableCell>
+                <TableCell className="text-right font-semibold">{(p.grandTotal || 0).toFixed(2)}</TableCell>
+                <TableCell>{statusBadge(p.status)}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedPurchase(p); setShowPurchaseDetailDialog(true) }} title="View Details"><Eye className="w-4 h-4" /></Button>
+                    {p.status === 'pending' && hasPermission('menu', 'purchase', 'delete') && (
+                      <Button variant="ghost" size="sm" onClick={() => handleDeletePurchase(p.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+
+      {/* Purchase Detail Dialog */}
+      <Dialog open={showPurchaseDetailDialog} onOpenChange={setShowPurchaseDetailDialog}>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          {selectedPurchase && (
+            <>
+              <DialogHeader><DialogTitle>Purchase: {selectedPurchase.purchaseNo}</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Date:</strong> {new Date(selectedPurchase.purchaseDate).toLocaleDateString()}</div>
+                  <div><strong>Type:</strong> {selectedPurchase.purchaseType}</div>
+                  <div><strong>Supplier:</strong> {selectedPurchase.supplier?.name || '—'}</div>
+                  <div><strong>Bill No:</strong> {selectedPurchase.billNo || '—'}</div>
+                  <div><strong>Entity:</strong> {selectedPurchase.entity?.name}</div>
+                  <div><strong>Status:</strong> {statusBadge(selectedPurchase.status)}</div>
+                </div>
+                {selectedPurchase.notes && <div className="text-sm"><strong>Notes:</strong> {selectedPurchase.notes}</div>}
+                <Separator />
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Items</h4>
+                  <Table>
+                    <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-right">Qty</TableHead><TableHead className="text-xs">UoM</TableHead><TableHead className="text-xs text-right">Unit Price</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(selectedPurchase.items || []).map((pi: any, i: number) => (
+                        <TableRow key={i}>
+                          <TableCell className="text-xs">
+                            {pi.item?.itemName || '—'}
+                            {pi.item?.barcode && <div className="text-[10px] text-muted-foreground font-mono">BC: {pi.item.barcode}</div>}
+                          </TableCell>
+                          <TableCell className="text-xs text-right">{pi.quantity}</TableCell>
+                          <TableCell className="text-xs">{pi.uom}</TableCell>
+                          <TableCell className="text-xs text-right">{pi.unitPrice.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs text-right font-semibold">{pi.total.toFixed(2)}</TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </div>
+                <div className="flex justify-end">
+                  <div className="text-right border rounded-lg p-3 bg-muted/30 min-w-[200px]">
+                    <p className="text-sm">Grand Total: <span className="font-bold text-lg">{(selectedPurchase.grandTotal || 0).toFixed(2)}</span></p>
+                  </div>
+                </div>
+                {selectedPurchase.status === 'approved' && (
+                  <Button variant="outline" size="sm" onClick={() => printPurchaseBarcodes(selectedPurchase.id, selectedPurchase.purchaseNo, selectedPurchase.items || [])}>
+                    <Printer className="w-4 h-4 mr-2" />Print Barcodes for All Items
+                  </Button>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <Button variant="ghost" size="sm" onClick={() => setShowPurchaseDetailDialog(false)}><X className="w-4 h-4 mr-2" />Close</Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+
+  // New Purchase entry page
+  const renderNewPurchasePage = () => {
+    const grandTotal = purchaseForm.items.reduce((s, it) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0)
+    return (
+      <div className="space-y-4 max-w-6xl mx-auto">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-bold">New Purchase</h2>
+          <Button variant="outline" onClick={() => { resetPurchaseForm(); setCurrentView('purchase') }}><X className="w-4 h-4 mr-2" />Back to List</Button>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSavePurchase} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Purchase Date *</Label>
+                  <Input type="date" value={purchaseForm.purchaseDate} onChange={e => setPurchaseForm({ ...purchaseForm, purchaseDate: e.target.value })} required />
+                </div>
+                <div className="space-y-2">
+                  <Label>Purchase Type *</Label>
+                  <Select value={purchaseForm.purchaseType} onValueChange={v => setPurchaseForm({ ...purchaseForm, purchaseType: v as 'foreign' | 'local' })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="local">Local</SelectItem>
+                      <SelectItem value="foreign">Foreign</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Purchase For (Entity) *</Label>
+                  <Select value={purchaseForm.entityId} onValueChange={v => setPurchaseForm({ ...purchaseForm, entityId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger>
+                    <SelectContent>
+                      {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Supplier</Label>
+                  <Select value={purchaseForm.supplierId} onValueChange={v => setPurchaseForm({ ...purchaseForm, supplierId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select supplier (optional)" /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="">— None —</SelectItem>
+                      {suppliers.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}{s.phone ? ` (${s.phone})` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                  <p className="text-[11px] text-muted-foreground">Add new suppliers via Master Data → Suppliers</p>
+                </div>
+                <div className="space-y-2">
+                  <Label>Bill Number</Label>
+                  <Input placeholder="Supplier's bill/challan number" value={purchaseForm.billNo} onChange={e => setPurchaseForm({ ...purchaseForm, billNo: e.target.value })} />
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Items */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Label className="text-sm font-bold">Items</Label>
+                  <span className="text-xs text-muted-foreground">Purchase ID auto-generated on save</span>
+                </div>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Search item to add..."
+                    value={purchaseItemSearch}
+                    onChange={e => setPurchaseItemSearch(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handlePurchaseItemSearch())}
+                    className="flex-1"
+                  />
+                  <Button type="button" variant="outline" onClick={handlePurchaseItemSearch}><Search className="w-4 h-4" /></Button>
+                </div>
+                {purchaseItemResults.length > 0 && (
+                  <div className="border rounded-md max-h-40 overflow-y-auto bg-background shadow-lg relative z-[1000]">
+                    {purchaseItemResults.map((item, idx) => (
+                      <div key={item.id || idx} onClick={() => addPurchaseItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
+                        {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''} {item.itemCode ? `• ${item.itemCode}` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {purchaseForm.items.length > 0 ? (
+                  <div className="border rounded-md overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-primary text-primary-foreground">
+                        <tr>
+                          <th className="px-2 py-2 text-center w-10 text-[11px] uppercase tracking-wide">SL</th>
+                          <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
+                          <th className="px-2 py-2 text-right w-24 text-[11px] uppercase tracking-wide">Qty</th>
+                          <th className="px-2 py-2 text-right w-28 text-[11px] uppercase tracking-wide">Unit Price</th>
+                          <th className="px-2 py-2 text-left w-20 text-[11px] uppercase tracking-wide">UoM</th>
+                          <th className="px-2 py-2 text-right w-28 text-[11px] uppercase tracking-wide">Total</th>
+                          <th className="px-2 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {purchaseForm.items.map((item, i) => {
+                          const total = (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+                          return (
+                            <tr key={i} className="border-t hover:bg-muted/20">
+                              <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
+                              <td className="px-2 py-2 font-medium">{item.itemName}</td>
+                              <td className="px-2 py-2 text-right"><Input type="number" min="1" value={item.quantity} onChange={e => updatePurchaseItem(i, 'quantity', e.target.value)} className="h-8 text-right text-sm w-full min-w-[70px]" /></td>
+                              <td className="px-2 py-2 text-right"><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updatePurchaseItem(i, 'unitPrice', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
+                              <td className="px-2 py-2"><Input value={item.uom} onChange={e => updatePurchaseItem(i, 'uom', e.target.value)} className="h-8 text-sm w-full min-w-[60px]" /></td>
+                              <td className="px-2 py-2 text-right font-bold">{total.toFixed(2)}</td>
+                              <td className="px-2 py-2 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removePurchaseItem(i)} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button></td>
+                            </tr>
+                          )
+                        })}
+                        <tr className="border-t bg-muted/30">
+                          <td colSpan={5} className="px-2 py-2 text-right text-sm font-semibold">GRAND TOTAL:</td>
+                          <td className="px-2 py-2 text-right font-bold text-primary text-base">{grandTotal.toFixed(2)}</td>
+                          <td></td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="text-sm text-muted-foreground text-center py-6 border rounded-md border-dashed">No items added yet. Search and add items above.</p>}
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Input value={purchaseForm.notes} onChange={e => setPurchaseForm({ ...purchaseForm, notes: e.target.value })} placeholder="Optional notes about this purchase..." />
+              </div>
+
+              <div className="flex gap-3 pt-2">
+                <Button type="submit" size="lg"><Save className="w-4 h-4 mr-2" />Create Purchase</Button>
+                <Button type="button" variant="outline" size="lg" onClick={() => { resetPurchaseForm(); setCurrentView('purchase') }}>Cancel</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
+  // Purchase Approval page — list of pending purchases with approve/cancel buttons
+  const renderPurchaseApprovalPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-semibold">Purchase Approval - {workingEntity?.name}</h2>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Purchase No</TableHead>
+            <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold">Type</TableHead>
+            <TableHead className="font-semibold">Supplier</TableHead>
+            <TableHead className="font-semibold">For</TableHead>
+            <TableHead className="font-semibold text-center">Items</TableHead>
+            <TableHead className="font-semibold text-right">Amount</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {purchases.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No purchases awaiting approval.</TableCell></TableRow>
+            : purchases.map(p => (
+              <TableRow key={p.id} className={`hover:bg-muted/30 ${p.status === 'pending' ? 'bg-amber-50/40' : ''}`}>
+                <TableCell className="font-mono text-xs font-semibold">{p.purchaseNo}</TableCell>
+                <TableCell className="text-xs">{new Date(p.purchaseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                <TableCell><Badge variant="outline" className={p.purchaseType === 'foreign' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}>{p.purchaseType}</Badge></TableCell>
+                <TableCell>{p.supplier?.name || '—'}</TableCell>
+                <TableCell>{p.entity?.name}</TableCell>
+                <TableCell className="text-center">{p.itemCount || 0}</TableCell>
+                <TableCell className="text-right font-semibold">{(p.grandTotal || 0).toFixed(2)}</TableCell>
+                <TableCell>{statusBadge(p.status)}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setSelectedPurchase(p); setShowPurchaseDetailDialog(true) }} title="View Details"><Eye className="w-4 h-4" /></Button>
+                    {p.status === 'pending' && hasPermission('menu', 'purchaseApproval', 'edit') && (
+                      <Button variant="ghost" size="sm" onClick={() => handleApprovePurchase(p.id)} title="Approve" className="text-green-700 hover:text-green-800"><CheckCircle2 className="w-4 h-4" /></Button>
+                    )}
+                    {p.status === 'approved' && (
+                      <Button variant="ghost" size="sm" onClick={() => printPurchaseBarcodes(p.id, p.purchaseNo, p.items || [])} title="Print Barcodes"><Printer className="w-4 h-4" /></Button>
+                    )}
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+
+  // Purchase Detail page (currently unused — could be a full page in future)
+  const renderPurchaseDetailPage = () => <div>{renderPurchaseListPage()}</div>
 
   const renderSalesReturnPage = () => (
     <div className="space-y-4">
@@ -4028,6 +4572,10 @@ export default function Home() {
       case 'itemAdjustment': return renderItemAdjustmentPage()
       case 'transfer': return renderTransferPage()
       case 'receive': return renderReceivePage()
+      case 'purchase': return renderPurchaseListPage()
+      case 'newPurchase': return renderNewPurchasePage()
+      case 'purchaseApproval': return renderPurchaseApprovalPage()
+      case 'purchaseDetail': return renderPurchaseDetailPage()
       case 'salesOrder': return renderSalesOrderPage()
       case 'newSalesOrder': return renderNewSalesOrderPage()
       case 'salesReturn': return renderSalesReturnPage()
@@ -4937,6 +5485,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
             <Button variant={currentView === 'itemAdjustment' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('itemAdjustment')} title="Adjustment"><Settings2 className="w-4 h-4" /></Button>
             <Button variant={currentView === 'transfer' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('transfer')} title="Transfer"><ArrowRightLeft className="w-4 h-4" /></Button>
             <Button variant={currentView === 'receive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('receive')} title="Receive"><ArrowDownToLine className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'purchase' || currentView === 'purchaseApproval' || currentView === 'newPurchase' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('purchase')} title="Purchase"><ShoppingCart className="w-4 h-4" /></Button>
             <Button variant={['salesOrder','salesReturn'].includes(currentView) ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('salesOrder')} title="Sales"><ShoppingCart className="w-4 h-4" /></Button>
             <Button variant={currentView === 'booking' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('booking')} title="Booking"><Receipt className="w-4 h-4" /></Button>
             <Button variant={currentView === 'bookingReasons' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('bookingReasons')} title="Booking Reasons"><FileText className="w-4 h-4" /></Button>

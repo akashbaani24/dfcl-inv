@@ -113,6 +113,8 @@ export const MENU_ITEMS = [
   { key: 'itemAdjustment', label: 'Item Adjustment', group: 'Function' },
   { key: 'transfer', label: 'Transfer', group: 'Function' },
   { key: 'receive', label: 'Receive', group: 'Function' },
+  { key: 'purchase', label: 'Purchase', group: 'Purchase' },
+  { key: 'purchaseApproval', label: 'Purchase Approval', group: 'Purchase' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },

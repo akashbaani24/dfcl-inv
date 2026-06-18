@@ -80,6 +80,92 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE UserMasterDataAccess ADD COLUMN canExport BOOLEAN NOT NULL DEFAULT 0',
     description: 'Add canExport column to UserMasterDataAccess',
   },
+  // v46: Add purchaseId column to Receive (nullable, links Receive to Purchase)
+  {
+    id: '2026_06_19_receive_purchaseId',
+    sql: 'ALTER TABLE Receive ADD COLUMN purchaseId TEXT',
+    description: 'Add purchaseId column to Receive (nullable FK to Purchase)',
+  },
+  // v46: Create Purchase table
+  {
+    id: '2026_06_19_create_Purchase',
+    sql: `CREATE TABLE IF NOT EXISTS "Purchase" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "purchaseNo" TEXT NOT NULL,
+      "purchaseDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "purchaseType" TEXT NOT NULL DEFAULT 'local',
+      "entityId" TEXT NOT NULL,
+      "supplierId" TEXT,
+      "billNo" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'pending',
+      "notes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      FOREIGN KEY ("entityId") REFERENCES "Entity"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE SET NULL
+    )`,
+    description: 'Create Purchase table',
+  },
+  // v46: Create PurchaseItem table
+  {
+    id: '2026_06_19_create_PurchaseItem',
+    sql: `CREATE TABLE IF NOT EXISTS "PurchaseItem" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "purchaseId" TEXT NOT NULL,
+      "itemId" TEXT NOT NULL,
+      "quantity" INTEGER NOT NULL,
+      "unitPrice" REAL NOT NULL,
+      "uom" TEXT NOT NULL DEFAULT 'PCS',
+      "total" REAL NOT NULL,
+      FOREIGN KEY ("purchaseId") REFERENCES "Purchase"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create PurchaseItem table',
+  },
+  // v46: Add purchaseId FK back to Purchase (now that Purchase exists)
+  {
+    id: '2026_06_19_receive_purchase_fk',
+    sql: 'CREATE INDEX IF NOT EXISTS `Receive_purchaseId_idx` ON `Receive`(`purchaseId`)',
+    description: 'Index on Receive.purchaseId',
+  },
+  // v46: Indexes for Purchase
+  {
+    id: '2026_06_19_purchase_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `Purchase_entityId_idx` ON `Purchase`(`entityId`)',
+    description: 'Index on Purchase.entityId',
+  },
+  {
+    id: '2026_06_19_purchase_idx_supplier',
+    sql: 'CREATE INDEX IF NOT EXISTS `Purchase_supplierId_idx` ON `Purchase`(`supplierId`)',
+    description: 'Index on Purchase.supplierId',
+  },
+  {
+    id: '2026_06_19_purchase_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `Purchase_status_idx` ON `Purchase`(`status`)',
+    description: 'Index on Purchase.status',
+  },
+  {
+    id: '2026_06_19_purchase_idx_type',
+    sql: 'CREATE INDEX IF NOT EXISTS `Purchase_purchaseType_idx` ON `Purchase`(`purchaseType`)',
+    description: 'Index on Purchase.purchaseType',
+  },
+  {
+    id: '2026_06_19_purchase_unique_no',
+    sql: 'CREATE UNIQUE INDEX IF NOT EXISTS `Purchase_purchaseNo_key` ON `Purchase`(`purchaseNo`)',
+    description: 'Unique index on Purchase.purchaseNo',
+  },
+  // v46: Indexes for PurchaseItem
+  {
+    id: '2026_06_19_pitem_idx_purchase',
+    sql: 'CREATE INDEX IF NOT EXISTS `PurchaseItem_purchaseId_idx` ON `PurchaseItem`(`purchaseId`)',
+    description: 'Index on PurchaseItem.purchaseId',
+  },
+  {
+    id: '2026_06_19_pitem_idx_item',
+    sql: 'CREATE INDEX IF NOT EXISTS `PurchaseItem_itemId_idx` ON `PurchaseItem`(`itemId`)',
+    description: 'Index on PurchaseItem.itemId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

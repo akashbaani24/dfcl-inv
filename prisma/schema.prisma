@@ -122,6 +122,7 @@ model Entity {
   bookings        Booking[]
   bookingFromItems BookingItem[] @relation("BookingFromEntity")
   salesOrderItems SalesOrderItem[] @relation("SalesOrderEntity")
+  purchases       Purchase[]
 }
 
 model Item {
@@ -150,6 +151,7 @@ model Item {
   salesReturns SalesReturn[]
   bookingItems BookingItem[]
   incentives   Incentive[]
+  purchaseItems PurchaseItem[]
 
   @@index([itemName])
   @@index([itemCode])
@@ -243,6 +245,56 @@ model Supplier {
   updatedAt DateTime @updatedAt
 
   items Item[]
+  purchases Purchase[]
+}
+
+// ★ Purchase module — for tracking inventory purchases from suppliers
+// Flow:
+//   1. User creates a Purchase (status="pending") with multiple items
+//   2. Admin/Manager approves the Purchase (status="approved")
+//      → automatically creates Receive entries for each item (entityId = purchase.entityId)
+//      → each Receive increments stock for that entity
+//   3. After approval, user can print barcodes for all received items using purchase ID
+model Purchase {
+  id           String   @id @default(cuid())
+  purchaseNo   String   @unique  // PUR-YYYYMMDD-XXXX
+  purchaseDate DateTime @default(now())
+  purchaseType String   @default("local")  // "foreign" or "local"
+  entityId     String   // "Purchase For" — which entity is receiving the items
+  supplierId   String?
+  billNo       String?
+  status       String   @default("pending")  // "pending", "approved", "cancelled"
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  entity   Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  items    PurchaseItem[]
+  receives Receive[]
+
+  @@index([entityId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([purchaseType])
+}
+
+// ★ One Purchase can have multiple items
+model PurchaseItem {
+  id          String  @id @default(cuid())
+  purchaseId  String
+  itemId      String
+  quantity    Int
+  unitPrice   Float
+  uom         String  @default("PCS")
+  total       Float   // quantity * unitPrice (denormalized for fast reporting)
+
+  purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
+  item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@index([purchaseId])
+  @@index([itemId])
 }
 
 model Customer {
@@ -301,6 +353,7 @@ model Receive {
   entityId       String
   quantity       Int
   sourceEntityId String?  // if received from another entity (transfer)
+  purchaseId     String?  // ★ if received from a purchase (after approval)
   referenceNo    String?
   notes          String?
   createdBy      String?
@@ -310,6 +363,7 @@ model Receive {
   item         Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   entity       Entity  @relation("ReceivesTo", fields: [entityId], references: [id], onDelete: Cascade)
   sourceEntity Entity? @relation("ReceivesFrom", fields: [sourceEntityId], references: [id], onDelete: SetNull)
+  purchase     Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
 }
 
 model SalesOrder {
