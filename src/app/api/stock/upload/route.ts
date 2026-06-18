@@ -81,12 +81,12 @@ export async function POST(request: NextRequest) {
     const errors: string[] = [];
 
     const startTime = Date.now();
-    const MAX_PROCESSING_MS = 14 * 60 * 1000; // 14 minutes (Vercel maxDuration = 15min)
+    const MAX_PROCESSING_MS = 50 * 1000; // 50 seconds (Vercel free plan maxDuration = 60s)
 
     for (let i = 1; i < lines.length; i++) {
       // Time budget check
       if (Date.now() - startTime > MAX_PROCESSING_MS) {
-        errors.push(`Stopped at row ${i + 1} to avoid timeout. ${lines.length - i} rows not processed. Split CSV into smaller files.`);
+        errors.push(`Stopped at row ${i + 1} (60s timeout). ${lines.length - i} rows not processed. Split your CSV into smaller files of ~3000-5000 rows each.`);
         skipped += lines.length - i;
         break;
       }

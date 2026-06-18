@@ -100,12 +100,12 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     const startTime = Date.now();
-    const MAX_PROCESSING_MS = 14 * 60 * 1000; // 14 minutes — Vercel maxDuration is 15min (900s), leave 1min buffer for batch insert
+    const MAX_PROCESSING_MS = 50 * 1000; // 50 seconds — Vercel free plan maxDuration is 60s, leave 10s buffer for batch insert
 
     for (let i = 1; i < lines.length; i++) {
       // Time budget check — stop processing if we're near Vercel's timeout
       if (Date.now() - startTime > MAX_PROCESSING_MS) {
-        errors.push(`Stopped processing at row ${i + 1} to avoid server timeout. ${lines.length - i} rows not processed. Please split your CSV into smaller files (max ~5000 rows per file).`);
+        errors.push(`Stopped at row ${i + 1} (60s timeout). ${lines.length - i} rows not processed. Split your CSV into smaller files of ~3000-5000 rows each, or upgrade Vercel to Pro plan for 5min timeout.`);
         skipped += lines.length - i;
         break;
       }
