@@ -272,7 +272,7 @@ export default function Home() {
   const [receiveForm, setReceiveForm] = useState({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
   const [showReceiveDialog, setShowReceiveDialog] = useState(false)
 
-  const [salesOrders, setSalesOrders] = useState<SalesOrderData[]>([])
+  const [salesOrders, setSalesOrders] = useState<Array<any>>([])([])
   const [salesOrderForm, setSalesOrderForm] = useState({ itemId: '', customerId: '', quantity: '', price: '', makingCharge: '0', deliveryDate: '', notes: '' })
   const [showSalesOrderDialog, setShowSalesOrderDialog] = useState(false)
 
@@ -668,7 +668,7 @@ export default function Home() {
   const fetchAdjustments = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/item-adjustments?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setAdjustments(d.adjustments.map((a: any) => ({ ...a, itemName: a.item?.itemName || '', entityName: a.entity?.name || '' }))) } } catch {} }
   const fetchTransfers = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/transfers?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setTransfers(d.transfers.map((t: any) => ({ ...t, itemName: t.item?.itemName || '', fromEntityName: t.fromEntity?.name || '', toEntityName: t.toEntity?.name || '' }))) } } catch {} }
   const fetchReceives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/receives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setReceives(d.receives.map((r: any) => ({ ...r, itemName: r.item?.itemName || '', entityName: r.entity?.name || '', sourceEntityName: r.sourceEntity?.name || '' }))) } } catch {} }
-  const fetchSalesOrders = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-orders?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesOrders(d.salesOrders.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
+  const fetchSalesOrders = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-orders?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesOrders(d.salesOrders || []) } } catch {} }
   const fetchSalesReturns = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-returns?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesReturns(d.salesReturns.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
   const fetchIncentives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/incentives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setIncentives(d.incentives.map((i: any) => ({ ...i, itemName: i.item?.itemName || '', entityName: i.entity?.name || '', tailorName: i.tailor?.name || '' }))) } } catch {} }
 
@@ -797,10 +797,10 @@ export default function Home() {
 
   const handleSaveSalesOrder = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!workingEntity || !salesOrderForm.itemId || !salesOrderForm.customerId || !salesOrderForm.quantity) return
+    if (!workingEntity || !salesOrderForm.customerId || !salesOrderForm.itemId || !salesOrderForm.quantity) return
     try {
-      const res = await authFetch('/api/sales-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...salesOrderForm, entityId: workingEntity.id, quantity: parseInt(salesOrderForm.quantity), price: parseFloat(salesOrderForm.price), makingCharge: parseFloat(salesOrderForm.makingCharge), deliveryDate: salesOrderForm.deliveryDate || undefined }) })
-      if (res.ok) { toast({ title: 'Success', description: 'Sales order created' }); setShowSalesOrderDialog(false); setSalesOrderForm({ itemId: '', customerId: '', quantity: '', price: '', makingCharge: '0', deliveryDate: '', notes: '' }); fetchSalesOrders() }
+      const res = await authFetch('/api/sales-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityId: workingEntity.id, customerId: salesOrderForm.customerId, items: [{ itemId: salesOrderForm.itemId, quantity: parseInt(salesOrderForm.quantity) || 1, unitPrice: parseFloat(salesOrderForm.price) || 0, makingEntries: salesOrderForm.makingCharge && parseFloat(salesOrderForm.makingCharge) > 0 ? [{ name: 'Making', unitPrice: parseFloat(salesOrderForm.makingCharge), quantity: 1 }] : [] }], deliveryDate: salesOrderForm.deliveryDate || undefined, notes: salesOrderForm.notes }) })
+      if (res.ok) { const data = await res.json(); toast({ title: 'Success', description: `Sales order created: ${data.salesOrder?.salesNo || ''}` }); setShowSalesOrderDialog(false); setSalesOrderForm({ itemId: '', customerId: '', quantity: '', price: '', makingCharge: '0', deliveryDate: '', notes: '' }); fetchSalesOrders() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -1402,14 +1402,8 @@ export default function Home() {
     return e.ctrlKey || e.metaKey || e.button === 1
   }
 
-  // Right-click context menu state
+  // Right-click context menu state (declared before ALL conditional returns — React hooks rule)
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; view: ViewType } | null>(null)
-
-  // Handle right-click on menu items
-  const handleContextMenu = (e: React.MouseEvent, view: ViewType) => {
-    e.preventDefault()
-    setContextMenu({ x: e.clientX, y: e.clientY, view })
-  }
 
   // Close context menu on any click
   useEffect(() => {
@@ -1420,6 +1414,12 @@ export default function Home() {
       return () => { window.removeEventListener('click', close); window.removeEventListener('scroll', close) }
     }
   }, [contextMenu])
+
+  // Handle right-click on menu items
+  const handleContextMenu = (e: React.MouseEvent, view: ViewType) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, view })
+  }
 
   // Helper: render function menu section
   const renderFunctionMenu = (onNavigate?: () => void) => (
@@ -1773,27 +1773,41 @@ export default function Home() {
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
-            <TableHead className="font-semibold">Item</TableHead>
+            <TableHead className="font-semibold">Sales No</TableHead>
             <TableHead className="font-semibold">Customer</TableHead>
-            <TableHead className="font-semibold text-right">Qty</TableHead>
-            <TableHead className="font-semibold text-right">Price</TableHead>
-            <TableHead className="font-semibold text-right">Making</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold">Items</TableHead>
+            <TableHead className="font-semibold">Order Date</TableHead>
             <TableHead className="font-semibold">Delivery</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {salesOrders.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
-            : salesOrders.map(s => (
+            : salesOrders.map((s: any) => {
+              const totalAmount = (s.items || []).reduce((sum: number, si: any) => sum + (si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.unitPrice * me.quantity, 0)), 0)
+              const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
+              return (
               <TableRow key={s.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{s.itemName}</TableCell>
-                <TableCell>{s.customerName}</TableCell>
-                <TableCell className="text-right">{s.quantity}</TableCell>
-                <TableCell className="text-right">{s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
-                <TableCell className="text-right">{s.makingCharge.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                <TableCell className="font-medium">{s.salesNo || s.id?.slice(0, 8)}</TableCell>
+                <TableCell>{s.customer?.name || '—'}</TableCell>
+                <TableCell>
+                  {(s.items || []).map((si: any, i: number) => (
+                    <div key={i} className="text-xs">
+                      {si.item?.itemName || '—'} ×{si.quantity} @ {si.unitPrice?.toFixed(2)}
+                      {(si.makingEntries || []).length > 0 && <span className="text-muted-foreground"> +{(si.makingEntries || []).map((me: any) => me.name + ':' + me.unitPrice).join(', ')}</span>}
+                    </div>
+                  ))}
+                  <div className="text-xs font-semibold mt-1">Total: {totalAmount.toFixed(2)} | Paid: {totalPaid.toFixed(2)}</div>
+                </TableCell>
+                <TableCell className="text-xs">{new Date(s.orderDate || s.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-xs">{s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : '—'}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
-                <TableCell className="text-muted-foreground">{s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : '-'}</TableCell>
+                <TableCell className="text-center">
+                  <Button variant="ghost" size="sm" onClick={() => printSalesOrder(s)} title="Print / Invoice"><FileText className="w-4 h-4" /></Button>
+                </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </div>
@@ -1804,7 +1818,7 @@ export default function Home() {
             <div className="space-y-2"><Label>Customer*</Label><Select value={salesOrderForm.customerId} onValueChange={v => setSalesOrderForm(f => ({ ...f, customerId: v }))}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={salesOrderForm.quantity} onChange={e => setSalesOrderForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
-              <div className="space-y-2"><Label>Price*</Label><Input type="number" step="0.01" value={salesOrderForm.price} onChange={e => setSalesOrderForm(f => ({ ...f, price: e.target.value }))} required /></div>
+              <div className="space-y-2"><Label>Unit Price*</Label><Input type="number" step="0.01" value={salesOrderForm.price} onChange={e => setSalesOrderForm(f => ({ ...f, price: e.target.value }))} required /></div>
             </div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Making Charge</Label><Input type="number" step="0.01" value={salesOrderForm.makingCharge} onChange={e => setSalesOrderForm(f => ({ ...f, makingCharge: e.target.value }))} /></div>
@@ -1817,6 +1831,22 @@ export default function Home() {
       </Dialog>
     </div>
   )
+
+  // Print sales order / invoice
+  const printSalesOrder = (s: any) => {
+    const win = window.open('', '_blank', 'width=800,height=600')
+    if (!win) { toast({ title: 'Error', description: 'Please allow popups', variant: 'destructive' }); return }
+    const itemsHtml = (s.items || []).map((si: any, i: number) => {
+      const makingHtml = (si.makingEntries || []).map((me: any) => `<tr><td colspan="3" style="padding:4px 12px;border:1px solid #eee;font-size:12px;color:#666">Making: ${me.name}</td><td style="padding:4px 12px;border:1px solid #eee;font-size:12px;text-align:right">${me.quantity}</td><td style="padding:4px 12px;border:1px solid #eee;font-size:12px;text-align:right">${me.unitPrice.toFixed(2)}</td><td style="padding:4px 12px;border:1px solid #eee;font-size:12px;text-align:right">${(me.quantity * me.unitPrice).toFixed(2)}</td></tr>`).join('')
+      const itemTotal = si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0)
+      return `<tr><td style="padding:6px 12px;border:1px solid #ddd">${i + 1}</td><td style="padding:6px 12px;border:1px solid #ddd">${si.item?.itemName || '—'}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${si.quantity}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${si.unitPrice.toFixed(2)}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${(si.quantity * si.unitPrice).toFixed(2)}</td></tr>${makingHtml}<tr><td colspan="5" style="padding:4px 12px;text-align:right;font-weight:bold;border:1px solid #ddd">Item Total: ${itemTotal.toFixed(2)}</td></tr>`
+    }).join('')
+    const grandTotal = (s.items || []).reduce((sum: number, si: any) => sum + si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0), 0)
+    const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
+    const paymentsHtml = (s.payments || []).map((p: any) => `<tr><td style="padding:4px 12px;border:1px solid #eee">${p.receiptNo}</td><td style="padding:4px 12px;border:1px solid #eee">${new Date(p.paymentDate).toLocaleDateString()}</td><td style="padding:4px 12px;border:1px solid #eee">${p.paymentType}</td><td style="padding:4px 12px;border:1px solid #eee">${p.paymentMode}</td><td style="padding:4px 12px;border:1px solid #eee;text-align:right">${p.amount.toFixed(2)}</td></tr>`).join('')
+    win.document.write(`<html><head><title>Sales Invoice ${s.salesNo || ''}</title><style>body{font-family:Arial,sans-serif;padding:40px}h1{font-size:22px;margin-bottom:5px}table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#f0f0f0;padding:8px 12px;border:1px solid #ddd;text-align:left}.footer{margin-top:40px;display:flex;justify-content:space-between}.signature{border-top:1px solid #000;padding-top:5px;width:200px;text-align:center;font-size:12px}</style></head><body><h1>Sales Invoice</h1><p style="font-size:14px;color:#666">Invoice No: <strong>${s.salesNo || ''}</strong></p><div style="display:flex;gap:40px;margin:20px 0"><div><strong>Customer:</strong> ${s.customer?.name || '—'}<br>${s.customer?.phone ? 'Phone: ' + s.customer.phone : ''}</div><div><strong>Order Date:</strong> ${new Date(s.orderDate || s.createdAt).toLocaleDateString()}<br><strong>Delivery Date:</strong> ${s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : '—'}</div><div><strong>Entity:</strong> ${s.entity?.name || ''}<br><strong>Status:</strong> ${s.status}</div></div><table><thead><tr><th style="padding:8px 12px;border:1px solid #ddd">SL</th><th style="padding:8px 12px;border:1px solid #ddd">Item</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Qty</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Unit Price</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Total</th></tr></thead><tbody>${itemsHtml}</tbody></table><h3 style="text-align:right;margin-top:20px">Grand Total: ${grandTotal.toFixed(2)}</h3>${paymentsHtml ? `<h3 style="margin-top:20px">Payment History</h3><table><thead><tr><th style="padding:8px 12px;border:1px solid #ddd">Receipt No</th><th style="padding:8px 12px;border:1px solid #ddd">Date</th><th style="padding:8px 12px;border:1px solid #ddd">Type</th><th style="padding:8px 12px;border:1px solid #ddd">Mode</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Amount</th></tr></thead><tbody>${paymentsHtml}</tbody></table><h3 style="text-align:right">Total Paid: ${totalPaid.toFixed(2)} | Due: ${(grandTotal - totalPaid).toFixed(2)}</h3>` : ''}${s.notes ? `<p style="margin-top:20px"><strong>Notes:</strong> ${s.notes}</p>` : ''}<div class="footer"><div class="signature">Authorized Signature</div><div class="signature">Customer Signature</div></div><script>window.onload=()=>{window.print()}</script></body></html>`)
+    win.document.close()
+  }
 
   const renderSalesReturnPage = () => (
     <div className="space-y-4">
