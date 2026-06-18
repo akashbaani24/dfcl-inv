@@ -189,10 +189,11 @@ export async function POST(request: NextRequest) {
     if (tursoUrl && tursoToken && rowsToInsert.length > 0) {
       const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
 
-      // Build multi-row INSERT statements (90 rows each to stay under SQLite's 999 param limit)
-      // Then send ALL statements in ONE HTTP request via libsql.batch()
-      // 2000 rows = 23 statements × 1 HTTP request = ~3-5 seconds total
-      const ROWS_PER_STATEMENT = 90
+      // Build multi-row INSERT statements
+      // SQLite param limit is 999. With 10 params per row (id + 9 fields), max ~99 rows.
+      // Use 70 rows per statement (70 × 10 = 700 params, safely under 999).
+      // ALL statements sent in ONE HTTP request via libsql.batch()
+      const ROWS_PER_STATEMENT = 70
       const stmts: Array<{ sql: string; args: (string | number)[] }> = []
 
       for (let i = 0; i < rowsToInsert.length; i += ROWS_PER_STATEMENT) {
