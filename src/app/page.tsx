@@ -272,9 +272,23 @@ export default function Home() {
   const [receiveForm, setReceiveForm] = useState({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
   const [showReceiveDialog, setShowReceiveDialog] = useState(false)
 
-  const [salesOrders, setSalesOrders] = useState<SalesOrderData[]>([])
-  const [salesOrderForm, setSalesOrderForm] = useState({ itemId: '', customerId: '', quantity: '', price: '', makingCharge: '0', deliveryDate: '', notes: '' })
+  const [salesOrders, setSalesOrders] = useState<Array<any>>([])
+  const [salesOrderForm, setSalesOrderForm] = useState({
+    customerId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '',
+    items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; makingEntries: Array<{ name: string; unitPrice: string; quantity: string }> }>,
+    payments: [] as Array<{ amount: string; paymentType: string; paymentMode: string; paymentDate: string; chequeNo: string; bankName: string; notes: string }>,
+    newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
+  })
   const [showSalesOrderDialog, setShowSalesOrderDialog] = useState(false)
+  const [editingSalesOrderId, setEditingSalesOrderId] = useState<string | null>(null)
+  const [salesCustomerMode, setSalesCustomerMode] = useState<'existing' | 'new'>('existing')
+  const [salesCustomerSearch, setSalesCustomerSearch] = useState('')
+  const [salesItemSearch, setSalesItemSearch] = useState('')
+  const [salesItemResults, setSalesItemResults] = useState<ItemData[]>([])
+  const [showSalesDetailDialog, setShowSalesDetailDialog] = useState(false)
+  const [selectedSalesOrder, setSelectedSalesOrder] = useState<any>(null)
+  const [addPaymentForm, setAddPaymentForm] = useState({ amount: '', paymentType: 'cash', paymentMode: 'collection', paymentDate: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', notes: '' })
+  const [showAddPaymentDialog, setShowAddPaymentDialog] = useState(false)
 
   const [salesReturns, setSalesReturns] = useState<SalesReturnData[]>([])
   const [salesReturnForm, setSalesReturnForm] = useState({ itemId: '', customerId: '', salesOrderId: '', quantity: '', price: '', reason: '' })
@@ -681,7 +695,7 @@ export default function Home() {
   const fetchAdjustments = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/item-adjustments?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setAdjustments(d.adjustments.map((a: any) => ({ ...a, itemName: a.item?.itemName || '', entityName: a.entity?.name || '' }))) } } catch {} }
   const fetchTransfers = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/transfers?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setTransfers(d.transfers.map((t: any) => ({ ...t, itemName: t.item?.itemName || '', fromEntityName: t.fromEntity?.name || '', toEntityName: t.toEntity?.name || '' }))) } } catch {} }
   const fetchReceives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/receives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setReceives(d.receives.map((r: any) => ({ ...r, itemName: r.item?.itemName || '', entityName: r.entity?.name || '', sourceEntityName: r.sourceEntity?.name || '' }))) } } catch {} }
-  const fetchSalesOrders = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-orders?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesOrders(d.salesOrders.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
+  const fetchSalesOrders = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-orders?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesOrders(d.salesOrders || []) } } catch {} }
   const fetchSalesReturns = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-returns?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesReturns(d.salesReturns.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
   const fetchIncentives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/incentives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setIncentives(d.incentives.map((i: any) => ({ ...i, itemName: i.item?.itemName || '', entityName: i.entity?.name || '', tailorName: i.tailor?.name || '' }))) } } catch {} }
 
@@ -808,14 +822,112 @@ export default function Home() {
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
 
+  // Sales order handlers
+  const resetSalesOrderForm = () => {
+    setSalesOrderForm({ customerId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
+    setEditingSalesOrderId(null); setSalesCustomerMode('existing'); setSalesCustomerSearch(''); setSalesItemSearch(''); setSalesItemResults([])
+  }
+
+  const handleSalesItemSearch = async () => {
+    if (!salesItemSearch.trim()) return
+    try { const params = new URLSearchParams({ page: '1', pageSize: '10', search: salesItemSearch }); const res = await authFetch(`/api/items?${params}`); if (res.ok) { const data = await res.json(); setSalesItemResults(data.items) } } catch {}
+  }
+
+  const addSalesItem = (item: ItemData) => {
+    if (!item.id) return
+    setSalesOrderForm(f => ({ ...f, items: [...f.items, { itemId: item.id!, itemName: item.itemName || '', quantity: '1', unitPrice: item.price?.toString() || '0', makingEntries: [] }] }))
+    setSalesItemSearch(''); setSalesItemResults([])
+  }
+
+  const removeSalesItem = (index: number) => {
+    setSalesOrderForm(f => ({ ...f, items: f.items.filter((_, i) => i !== index) }))
+  }
+
+  const updateSalesItem = (index: number, field: 'quantity' | 'unitPrice', value: string) => {
+    setSalesOrderForm(f => { const items = [...f.items]; items[index] = { ...items[index], [field]: value }; return { ...f, items } })
+  }
+
+  const addMakingEntry = (itemIndex: number) => {
+    setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries.push({ name: '', unitPrice: '0', quantity: '1' }); return { ...f, items } })
+  }
+
+  const removeMakingEntry = (itemIndex: number, meIndex: number) => {
+    setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries = items[itemIndex].makingEntries.filter((_, i) => i !== meIndex); return { ...f, items } })
+  }
+
+  const updateMakingEntry = (itemIndex: number, meIndex: number, field: 'name' | 'unitPrice' | 'quantity', value: string) => {
+    setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries[meIndex] = { ...items[itemIndex].makingEntries[meIndex], [field]: value }; return { ...f, items } })
+  }
+
+  const addPayment = () => {
+    setSalesOrderForm(f => ({ ...f, payments: [...f.payments, { amount: '', paymentType: 'cash', paymentMode: 'advance', paymentDate: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', notes: '' }] }))
+  }
+
+  const removePayment = (index: number) => {
+    setSalesOrderForm(f => ({ ...f, payments: f.payments.filter((_, i) => i !== index) }))
+  }
+
+  const updatePayment = (index: number, field: string, value: string) => {
+    setSalesOrderForm(f => { const payments = [...f.payments]; payments[index] = { ...payments[index], [field]: value }; return { ...f, payments } })
+  }
+
   const handleSaveSalesOrder = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!workingEntity || !salesOrderForm.itemId || !salesOrderForm.customerId || !salesOrderForm.quantity) return
+    if (!workingEntity) return
+    if (salesOrderForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
     try {
-      const res = await authFetch('/api/sales-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...salesOrderForm, entityId: workingEntity.id, quantity: parseInt(salesOrderForm.quantity), price: parseFloat(salesOrderForm.price), makingCharge: parseFloat(salesOrderForm.makingCharge), deliveryDate: salesOrderForm.deliveryDate || undefined }) })
-      if (res.ok) { toast({ title: 'Success', description: 'Sales order created' }); setShowSalesOrderDialog(false); setSalesOrderForm({ itemId: '', customerId: '', quantity: '', price: '', makingCharge: '0', deliveryDate: '', notes: '' }); fetchSalesOrders() }
+      let customerId = salesOrderForm.customerId
+      if (salesCustomerMode === 'new') {
+        if (!salesOrderForm.newCustomerName) { toast({ title: 'Error', description: 'Customer name required', variant: 'destructive' }); return }
+        const custRes = await authFetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: salesOrderForm.newCustomerName, phone: salesOrderForm.newCustomerPhone, email: salesOrderForm.newCustomerEmail, address: salesOrderForm.newCustomerAddress, type: 'regular', status: 'active' }) })
+        const custData = await custRes.json()
+        if (custRes.ok && custData.customer) { customerId = custData.customer.id } else { toast({ title: 'Error', description: 'Failed to create customer', variant: 'destructive' }); return }
+      }
+      const payload = {
+        entityId: workingEntity.id, customerId,
+        orderDate: salesOrderForm.orderDate, deliveryDate: salesOrderForm.deliveryDate || undefined,
+        status: salesOrderForm.status, notes: salesOrderForm.notes,
+        items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseInt(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseInt(me.quantity) || 1 })) })),
+        payments: salesOrderForm.payments.map(p => ({ amount: parseFloat(p.amount) || 0, paymentType: p.paymentType, paymentMode: p.paymentMode, paymentDate: p.paymentDate, chequeNo: p.chequeNo || undefined, bankName: p.bankName || undefined, notes: p.notes || undefined })),
+      }
+      const res = await authFetch('/api/sales-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (res.ok) { const data = await res.json(); toast({ title: 'Success', description: `Sales order created: ${data.salesOrder?.salesNo || ''}` }); setShowSalesOrderDialog(false); resetSalesOrderForm(); fetchSalesOrders() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+
+  // Add payment to existing sales order
+  const handleAddPayment = async () => {
+    if (!editingSalesOrderId || !addPaymentForm.amount) return
+    try {
+      const res = await authFetch(`/api/sales-orders/${editingSalesOrderId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ addPayment: { amount: parseFloat(addPaymentForm.amount), paymentType: addPaymentForm.paymentType, paymentMode: addPaymentForm.paymentMode, paymentDate: addPaymentForm.paymentDate, chequeNo: addPaymentForm.chequeNo || undefined, bankName: addPaymentForm.bankName || undefined, notes: addPaymentForm.notes || undefined } }) })
+      if (res.ok) { const data = await res.json(); toast({ title: 'Payment Added', description: `Receipt: ${data.payment?.receiptNo || ''}` }); setShowAddPaymentDialog(false); setAddPaymentForm({ amount: '', paymentType: 'cash', paymentMode: 'collection', paymentDate: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', notes: '' }); fetchSalesOrders() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+
+  // Print sales invoice
+  const printSalesInvoice = (s: any) => {
+    const win = window.open('', '_blank', 'width=800,height=600')
+    if (!win) return
+    const itemsHtml = (s.items || []).map((si: any, i: number) => {
+      const making = (si.makingEntries || []).map((me: any) => `<tr><td colspan="4" style="padding:3px 12px;border:1px solid #eee;font-size:11px;color:#666">↳ Making: ${me.name}</td><td style="padding:3px 12px;border:1px solid #eee;text-align:right;font-size:11px">${me.quantity}</td><td style="padding:3px 12px;border:1px solid #eee;text-align:right;font-size:11px">${me.unitPrice.toFixed(2)}</td><td style="padding:3px 12px;border:1px solid #eee;text-align:right;font-size:11px">${(me.quantity * me.unitPrice).toFixed(2)}</td></tr>`).join('')
+      const itemTotal = si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0)
+      return `<tr><td style="padding:6px 12px;border:1px solid #ddd">${i+1}</td><td style="padding:6px 12px;border:1px solid #ddd">${si.item?.itemName || '—'}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${si.quantity}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${si.unitPrice.toFixed(2)}</td><td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${(si.quantity*si.unitPrice).toFixed(2)}</td></tr>${making}`
+    }).join('')
+    const grandTotal = (s.items || []).reduce((sum: number, si: any) => sum + si.quantity*si.unitPrice + (si.makingEntries||[]).reduce((m:number,me:any)=>m+me.quantity*me.unitPrice,0), 0)
+    const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
+    const paymentsHtml = (s.payments || []).map((p: any) => `<tr><td style="padding:4px 12px;border:1px solid #eee">${p.receiptNo}</td><td style="padding:4px 12px;border:1px solid #eee">${new Date(p.paymentDate).toLocaleDateString()}</td><td style="padding:4px 12px;border:1px solid #eee">${p.paymentType}</td><td style="padding:4px 12px;border:1px solid #eee">${p.paymentMode}</td><td style="padding:4px 12px;border:1px solid #eee;text-align:right">${p.amount.toFixed(2)}</td></tr>`).join('')
+    win.document.write(`<html><head><title>Invoice ${s.salesNo||''}</title><style>body{font-family:Arial;padding:40px}h1{font-size:22px}table{width:100%;border-collapse:collapse;margin-top:10px}th{background:#f0f0f0;padding:8px 12px;border:1px solid #ddd;text-align:left}.total{text-align:right;font-size:18px;font-weight:bold;margin-top:15px}.sig{margin-top:50px;display:flex;justify-content:space-between}.sig div{border-top:1px solid #000;padding-top:5px;width:200px;text-align:center;font-size:12px}</style></head><body><h1>SALES INVOICE</h1><p>Invoice No: <strong>${s.salesNo||''}</strong></p><div style="display:flex;gap:40px;margin:20px 0"><div><strong>Customer:</strong> ${s.customer?.name||'—'}<br>${s.customer?.phone?'Phone: '+s.customer.phone:''}</div><div><strong>Order Date:</strong> ${new Date(s.orderDate||s.createdAt).toLocaleDateString()}<br><strong>Delivery:</strong> ${s.deliveryDate?new Date(s.deliveryDate).toLocaleDateString():'—'}</div><div><strong>Entity:</strong> ${s.entity?.name||''}<br><strong>Status:</strong> ${s.status}</div></div><table><thead><tr><th style="padding:8px 12px;border:1px solid #ddd">SL</th><th style="padding:8px 12px;border:1px solid #ddd">Item</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Qty</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Unit Price</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Total</th></tr></thead><tbody>${itemsHtml}</tbody></table><div class="total">Grand Total: ${grandTotal.toFixed(2)}</div>${paymentsHtml?`<h3>Payment History</h3><table><thead><tr><th style="padding:8px 12px;border:1px solid #ddd">Receipt No</th><th style="padding:8px 12px;border:1px solid #ddd">Date</th><th style="padding:8px 12px;border:1px solid #ddd">Type</th><th style="padding:8px 12px;border:1px solid #ddd">Mode</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Amount</th></tr></thead><tbody>${paymentsHtml}</tbody></table><div class="total">Paid: ${totalPaid.toFixed(2)} | Due: ${(grandTotal-totalPaid).toFixed(2)}</div>`:''}${s.notes?`<p style="margin-top:15px"><strong>Notes:</strong> ${s.notes}</p>`:''}<div class="sig"><div>Authorized Signature</div><div>Customer Signature</div></div><script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.close()
+  }
+
+  // Print money receipt
+  const printMoneyReceipt = (s: any, p: any) => {
+    const win = window.open('', '_blank', 'width=600,height=500')
+    if (!win) return
+    win.document.write(`<html><head><title>Money Receipt ${p.receiptNo}</title><style>body{font-family:Arial;padding:40px}h1{font-size:20px;text-align:center}.info{margin:20px 0;font-size:14px}.amt{font-size:24px;font-weight:bold;text-align:center;margin:20px 0}.sig{margin-top:50px;text-align:center;border-top:1px solid #000;padding-top:5px;width:250px;margin-left:auto;margin-right:auto;font-size:12px}</style></head><body><h1>MONEY RECEIPT</h1><div class="info"><strong>Receipt No:</strong> ${p.receiptNo}<br><strong>Sales Order:</strong> ${s.salesNo||''}<br><strong>Customer:</strong> ${s.customer?.name||'—'}<br><strong>Date:</strong> ${new Date(p.paymentDate).toLocaleDateString()}<br><strong>Payment Type:</strong> ${p.paymentType}<br><strong>Payment Mode:</strong> ${p.paymentMode}${p.chequeNo?`<br><strong>Cheque No:</strong> ${p.chequeNo}`:''}${p.bankName?`<br><strong>Bank:</strong> ${p.bankName}`:''}</div><div class="amt">Amount: ${p.amount.toFixed(2)}</div>${p.notes?`<p><strong>Notes:</strong> ${p.notes}</p>`:''}<div class="sig">Authorized Signature</div><script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.close()
   }
 
   const handleSaveSalesReturn = async (e: React.FormEvent) => {
@@ -1753,51 +1865,249 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Sales Order - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowSalesOrderDialog(true); setTxItemSearch(''); setTxItemResults([]); fetchCustomers() }}><Plus className="w-4 h-4 mr-2" />New Sales Order</Button>
+        <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); setShowSalesOrderDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
-            <TableHead className="font-semibold">Item</TableHead>
+            <TableHead className="font-semibold">Sales No</TableHead>
             <TableHead className="font-semibold">Customer</TableHead>
-            <TableHead className="font-semibold text-right">Qty</TableHead>
-            <TableHead className="font-semibold text-right">Price</TableHead>
-            <TableHead className="font-semibold text-right">Making</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold">Items</TableHead>
+            <TableHead className="font-semibold text-right">Total</TableHead>
+            <TableHead className="font-semibold text-right">Paid</TableHead>
+            <TableHead className="font-semibold">Order Date</TableHead>
             <TableHead className="font-semibold">Delivery</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {salesOrders.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
-            : salesOrders.map(s => (
-              <TableRow key={s.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{s.itemName}</TableCell>
-                <TableCell>{s.customerName}</TableCell>
-                <TableCell className="text-right">{s.quantity}</TableCell>
-                <TableCell className="text-right">{s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
-                <TableCell className="text-right">{s.makingCharge.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+            {salesOrders.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
+            : salesOrders.map((s: any) => {
+              const total = (s.items||[]).reduce((sum:number,si:any)=>sum+si.quantity*si.unitPrice+(si.makingEntries||[]).reduce((m:number,me:any)=>m+me.quantity*me.unitPrice,0),0)
+              const paid = (s.payments||[]).reduce((sum:number,p:any)=>sum+p.amount,0)
+              return (
+              <TableRow key={s.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => { setSelectedSalesOrder(s); setShowSalesDetailDialog(true) }}>
+                <TableCell className="font-medium">{s.salesNo || s.id?.slice(0,8)}</TableCell>
+                <TableCell>{s.customer?.name || '—'}</TableCell>
+                <TableCell className="text-xs">{(s.items||[]).map((si:any,i:number)=>(<div key={i}>{si.item?.itemName||'—'} ×{si.quantity}</div>))}</TableCell>
+                <TableCell className="text-right font-semibold">{total.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{paid.toFixed(2)}</TableCell>
+                <TableCell className="text-xs">{new Date(s.orderDate||s.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-xs">{s.deliveryDate?new Date(s.deliveryDate).toLocaleDateString():'—'}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
-                <TableCell className="text-muted-foreground">{s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : '-'}</TableCell>
+                <TableCell className="text-center" onClick={(e)=>e.stopPropagation()}>
+                  <Button variant="ghost" size="sm" onClick={() => printSalesInvoice(s)} title="Print Invoice"><FileText className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => { setEditingSalesOrderId(s.id); setShowAddPaymentDialog(true) }} title="Add Payment"><DollarSign className="w-4 h-4" /></Button>
+                </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </div>
+
+      {/* New Sales Order Dialog */}
       <Dialog open={showSalesOrderDialog} onOpenChange={setShowSalesOrderDialog}>
-        <DialogContent className="max-w-lg"><DialogHeader><DialogTitle>New Sales Order</DialogTitle></DialogHeader>
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>New Sales Order</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveSalesOrder} className="space-y-4">
-            {renderItemSearchField(salesOrderForm.itemId, (item) => setSalesOrderForm(f => ({ ...f, itemId: item.id || '', price: item.price?.toString() || '' })))}
-            <div className="space-y-2"><Label>Customer*</Label><Select value={salesOrderForm.customerId} onValueChange={v => setSalesOrderForm(f => ({ ...f, customerId: v }))}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={salesOrderForm.quantity} onChange={e => setSalesOrderForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
-              <div className="space-y-2"><Label>Price*</Label><Input type="number" step="0.01" value={salesOrderForm.price} onChange={e => setSalesOrderForm(f => ({ ...f, price: e.target.value }))} required /></div>
+            {/* Customer: Existing vs New */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Customer</Label>
+              <div className="flex gap-2 mb-2">
+                <Button type="button" size="sm" variant={salesCustomerMode === 'existing' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('existing')}>Existing</Button>
+                <Button type="button" size="sm" variant={salesCustomerMode === 'new' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('new')}>New Customer</Button>
+              </div>
+              {salesCustomerMode === 'existing' ? (
+                <div className="space-y-2">
+                  <Input placeholder="Search by name or phone..." value={salesCustomerSearch} onChange={e => setSalesCustomerSearch(e.target.value)} className="text-sm" />
+                  <Select value={salesOrderForm.customerId} onValueChange={v => setSalesOrderForm({...salesOrderForm, customerId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                    <SelectContent>{customers.filter(c => { if (!salesCustomerSearch) return true; const s = salesCustomerSearch.toLowerCase(); return c.name.toLowerCase().includes(s) || (c.phone||'').includes(salesCustomerSearch) }).map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 border rounded-lg p-3 bg-muted/30">
+                  <div className="space-y-1"><Label className="text-xs">Name *</Label><Input placeholder="Customer name" value={salesOrderForm.newCustomerName} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerName: e.target.value})} required /></div>
+                  <div className="space-y-1"><Label className="text-xs">Phone</Label><Input placeholder="Phone" value={salesOrderForm.newCustomerPhone} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerPhone: e.target.value})} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Email</Label><Input placeholder="Email" value={salesOrderForm.newCustomerEmail} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerEmail: e.target.value})} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Address</Label><Input placeholder="Address" value={salesOrderForm.newCustomerAddress} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerAddress: e.target.value})} /></div>
+                </div>
+              )}
             </div>
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Making Charge</Label><Input type="number" step="0.01" value={salesOrderForm.makingCharge} onChange={e => setSalesOrderForm(f => ({ ...f, makingCharge: e.target.value }))} /></div>
-              <div className="space-y-2"><Label>Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm(f => ({ ...f, deliveryDate: e.target.value }))} /></div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2"><Label>Order Date</Label><Input type="date" value={salesOrderForm.orderDate} onChange={e => setSalesOrderForm({...salesOrderForm, orderDate: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm({...salesOrderForm, deliveryDate: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Status</Label><Select value={salesOrderForm.status} onValueChange={v => setSalesOrderForm({...salesOrderForm, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
             </div>
-            <div className="space-y-2"><Label>Notes</Label><Input value={salesOrderForm.notes} onChange={e => setSalesOrderForm(f => ({ ...f, notes: e.target.value }))} /></div>
-            <DialogFooter><Button type="submit">Create Sales Order</Button></DialogFooter>
+
+            <Separator />
+            {/* Items section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Items</Label>
+                <span className="text-xs text-muted-foreground">Sales ID auto-generated on save</span>
+              </div>
+              <div className="flex gap-2">
+                <Input placeholder="Search item to add..." value={salesItemSearch} onChange={e => setSalesItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSalesItemSearch())} className="flex-1" />
+                <Button type="button" variant="outline" onClick={handleSalesItemSearch}><Search className="w-4 h-4" /></Button>
+              </div>
+              {salesItemResults.length > 0 && (
+                <div className="border rounded-lg max-h-40 overflow-y-auto bg-background shadow-lg" style={{ zIndex: 1000, position: 'relative' }}>
+                  {salesItemResults.map((item, idx) => (
+                    <div key={item.id || idx} onClick={() => addSalesItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
+                      {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {salesOrderForm.items.length > 0 && (
+                <div className="space-y-2">
+                  {salesOrderForm.items.map((item, i) => (
+                    <div key={i} className="border rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-medium">{item.itemName}</span>
+                        <Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive"><X className="w-3 h-3" /></Button>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input type="number" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-sm" /></div>
+                        <div className="space-y-1"><Label className="text-xs">Unit Price</Label><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-8 text-sm" /></div>
+                      </div>
+                      {/* Making entries */}
+                      {item.makingEntries.length > 0 && (
+                        <div className="space-y-1 pl-3 border-l-2 border-muted">
+                          {item.makingEntries.map((me, mi) => (
+                            <div key={mi} className="flex gap-2 items-center">
+                              <Input placeholder="Making name" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs flex-1" />
+                              <Input type="number" placeholder="Qty" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-xs w-16" />
+                              <Input type="number" step="0.01" placeholder="Price" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-xs w-20" />
+                              <Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-7"><X className="w-3 h-3" /></Button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                      <Button type="button" variant="ghost" size="sm" onClick={() => addMakingEntry(i)} className="text-xs h-7">+ Add Making</Button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <Separator />
+            {/* Payments section */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Payments (Optional — can add later)</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addPayment}><Plus className="w-3 h-3 mr-1" />Add Payment</Button>
+              </div>
+              {salesOrderForm.payments.map((p, i) => (
+                <div key={i} className="border rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="space-y-1"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" value={p.amount} onChange={e => updatePayment(i, 'amount', e.target.value)} className="h-8 text-sm" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Type</Label><Select value={p.paymentType} onValueChange={v => updatePayment(i, 'paymentType', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1"><Label className="text-xs">Mode</Label><Select value={p.paymentMode} onValueChange={v => updatePayment(i, 'paymentMode', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="advance">Advance</SelectItem><SelectItem value="collection">Collection</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={p.paymentDate} onChange={e => updatePayment(i, 'paymentDate', e.target.value)} className="h-8 text-sm" /></div>
+                  {p.paymentType === 'cheque' && (<><div className="space-y-1"><Label className="text-xs">Cheque No</Label><Input value={p.chequeNo} onChange={e => updatePayment(i, 'chequeNo', e.target.value)} className="h-8 text-sm" /></div><div className="space-y-1"><Label className="text-xs">Bank</Label><Input value={p.bankName} onChange={e => updatePayment(i, 'bankName', e.target.value)} className="h-8 text-sm" /></div></>)}
+                  <div className="flex items-end"><Button type="button" variant="ghost" size="sm" onClick={() => removePayment(i)} className="text-destructive"><X className="w-3 h-3" /></Button></div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2"><Label>Notes</Label><Input value={salesOrderForm.notes} onChange={e => setSalesOrderForm({...salesOrderForm, notes: e.target.value})} /></div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setShowSalesOrderDialog(false); resetSalesOrderForm() }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+              <Button type="submit"><Save className="w-4 h-4 mr-2" />Create Sales Order</Button>
+            </DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Sales Detail Dialog */}
+      <Dialog open={showSalesDetailDialog} onOpenChange={setShowSalesDetailDialog}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          {selectedSalesOrder && (
+            <>
+              <DialogHeader><DialogTitle>Sales Order: {selectedSalesOrder.salesNo}</DialogTitle></DialogHeader>
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-4 text-sm">
+                  <div><strong>Customer:</strong> {selectedSalesOrder.customer?.name || '—'}</div>
+                  <div><strong>Status:</strong> {statusBadge(selectedSalesOrder.status)}</div>
+                  <div><strong>Order Date:</strong> {new Date(selectedSalesOrder.orderDate || selectedSalesOrder.createdAt).toLocaleDateString()}</div>
+                  <div><strong>Delivery:</strong> {selectedSalesOrder.deliveryDate ? new Date(selectedSalesOrder.deliveryDate).toLocaleDateString() : '—'}</div>
+                </div>
+                <Separator />
+                <div>
+                  <h4 className="font-semibold text-sm mb-2">Items</h4>
+                  <Table>
+                    <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-right">Qty</TableHead><TableHead className="text-xs text-right">Price</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
+                    <TableBody>
+                      {(selectedSalesOrder.items || []).map((si: any, i: number) => {
+                        const itemTotal = si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0)
+                        return (
+                          <TableRow key={i}>
+                            <TableCell className="text-xs">{si.item?.itemName || '—'}{(si.makingEntries || []).map((me: any, mi: number) => <div key={mi} className="text-muted-foreground text-[10px]">↳ {me.name}: {me.unitPrice.toFixed(2)} × {me.quantity}</div>)}</TableCell>
+                            <TableCell className="text-xs text-right">{si.quantity}</TableCell>
+                            <TableCell className="text-xs text-right">{si.unitPrice.toFixed(2)}</TableCell>
+                            <TableCell className="text-xs text-right font-semibold">{itemTotal.toFixed(2)}</TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+                {selectedSalesOrder.payments && selectedSalesOrder.payments.length > 0 && (
+                  <>
+                    <Separator />
+                    <div>
+                      <h4 className="font-semibold text-sm mb-2">Payments</h4>
+                      <Table>
+                        <TableHeader><TableRow><TableHead className="text-xs">Receipt No</TableHead><TableHead className="text-xs">Date</TableHead><TableHead className="text-xs">Type</TableHead><TableHead className="text-xs">Mode</TableHead><TableHead className="text-xs text-right">Amount</TableHead><TableHead className="text-xs text-center"></TableHead></TableRow></TableHeader>
+                        <TableBody>
+                          {selectedSalesOrder.payments.map((p: any, i: number) => (
+                            <TableRow key={i}>
+                              <TableCell className="text-xs font-mono">{p.receiptNo}</TableCell>
+                              <TableCell className="text-xs">{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
+                              <TableCell className="text-xs">{p.paymentType}</TableCell>
+                              <TableCell className="text-xs">{p.paymentMode}</TableCell>
+                              <TableCell className="text-xs text-right font-semibold">{p.amount.toFixed(2)}</TableCell>
+                              <TableCell className="text-center"><Button variant="ghost" size="sm" onClick={() => printMoneyReceipt(selectedSalesOrder, p)} title="Print Receipt"><FileText className="w-3 h-3" /></Button></TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </div>
+                  </>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <Button variant="outline" size="sm" onClick={() => printSalesInvoice(selectedSalesOrder)}><FileText className="w-4 h-4 mr-2" />Print Invoice</Button>
+                  <Button variant="outline" size="sm" onClick={() => { setEditingSalesOrderId(selectedSalesOrder.id); setShowAddPaymentDialog(true) }}><DollarSign className="w-4 h-4 mr-2" />Add Payment</Button>
+                </div>
+              </div>
+            </>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Add Payment Dialog */}
+      <Dialog open={showAddPaymentDialog} onOpenChange={setShowAddPaymentDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>Add Payment</DialogTitle></DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2"><Label>Amount *</Label><Input type="number" step="0.01" value={addPaymentForm.amount} onChange={e => setAddPaymentForm({...addPaymentForm, amount: e.target.value})} /></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Payment Type</Label><Select value={addPaymentForm.paymentType} onValueChange={v => setAddPaymentForm({...addPaymentForm, paymentType: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
+              <div className="space-y-2"><Label>Payment Mode</Label><Select value={addPaymentForm.paymentMode} onValueChange={v => setAddPaymentForm({...addPaymentForm, paymentMode: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="advance">Advance</SelectItem><SelectItem value="collection">Collection</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="space-y-2"><Label>Payment Date</Label><Input type="date" value={addPaymentForm.paymentDate} onChange={e => setAddPaymentForm({...addPaymentForm, paymentDate: e.target.value})} /></div>
+            {addPaymentForm.paymentType === 'cheque' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Cheque No</Label><Input value={addPaymentForm.chequeNo} onChange={e => setAddPaymentForm({...addPaymentForm, chequeNo: e.target.value})} /></div>
+                <div className="space-y-2"><Label>Bank Name</Label><Input value={addPaymentForm.bankName} onChange={e => setAddPaymentForm({...addPaymentForm, bankName: e.target.value})} /></div>
+              </div>
+            )}
+            <div className="space-y-2"><Label>Notes</Label><Input value={addPaymentForm.notes} onChange={e => setAddPaymentForm({...addPaymentForm, notes: e.target.value})} /></div>
+            <DialogFooter><Button onClick={handleAddPayment}><Save className="w-4 h-4 mr-2" />Add Payment</Button></DialogFooter>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
