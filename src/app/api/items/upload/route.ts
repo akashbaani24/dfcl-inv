@@ -4,6 +4,8 @@ import { getCurrentUser } from '@/lib/auth';
 
 // POST /api/items/upload — bulk upload items from CSV
 // CSV columns: year, lcNo, group, subGroup, itemName, price, uom
+// Auto-detects delimiter (comma or semicolon) — handles Excel exports from any locale
+// Empty cells → "N/A" (except price → 0, uom → "PCS")
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -26,20 +28,42 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please upload a CSV file' }, { status: 400 });
     }
 
-    const text = await file.text();
+    let text = await file.text();
+
+    // Strip UTF-8 BOM if present (Excel often adds this)
+    if (text.charCodeAt(0) === 0xFEFF) {
+      text = text.slice(1);
+    }
+
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
 
     if (lines.length < 2) {
       return NextResponse.json({ error: 'CSV file must have a header row and at least one data row' }, { status: 400 });
     }
 
+    // Auto-detect delimiter: comma or semicolon
+    // Count occurrences in first 3 lines, use whichever appears more
+    let delimiter = ',';
+    const sampleLines = lines.slice(0, Math.min(3, lines.length));
+    let commaCount = 0;
+    let semicolonCount = 0;
+    for (const line of sampleLines) {
+      commaCount += (line.match(/,/g) || []).length;
+      semicolonCount += (line.match(/;/g) || []).length;
+    }
+    if (semicolonCount > commaCount) {
+      delimiter = ';';
+    }
+
     // Parse header
-    const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+    const header = parseCsvLine(lines[0], delimiter).map((h) => h.trim().toLowerCase());
     const requiredCols = ['year', 'lcno', 'group', 'subgroup', 'itemname', 'price', 'uom'];
     const missing = requiredCols.filter((c) => !header.includes(c));
     if (missing.length > 0) {
       return NextResponse.json(
-        { error: `Missing required columns: ${missing.join(', ')}. Required: ${requiredCols.join(', ')}` },
+        {
+          error: `Missing required columns: ${missing.join(', ')}. Required columns: ${requiredCols.join(', ')}. Detected delimiter: "${delimiter}". If you are using Excel, make sure to save as "CSV (Comma delimited) (*.csv)" not "CSV (semicolon delimited)".`,
+        },
         { status: 400 }
       );
     }
@@ -52,22 +76,22 @@ export async function POST(request: NextRequest) {
 
     for (let i = 1; i < lines.length; i++) {
       try {
-        const cols = parseCsvLine(lines[i]);
+        const cols = parseCsvLine(lines[i], delimiter);
         // Pad missing columns with empty strings
         while (cols.length < header.length) cols.push('');
 
-        // Helper: get cell value, empty/undefined → 'N/A' (except for price which becomes 0)
+        // Helper: get cell value, empty/undefined → fallback (default 'N/A')
         const getCell = (col: string): string => {
           const v = cols[idx(col)]?.trim() ?? '';
           return v === '' ? 'N/A' : v;
         };
-        const getCellOrNA = (col: string, fallback = 'N/A'): string => {
+        const getCellOr = (col: string, fallback = 'N/A'): string => {
           const v = cols[idx(col)]?.trim() ?? '';
           return v === '' ? fallback : v;
         };
 
-        const year = getCellOrNA('year', 'N/A');
-        const itemName = getCellOrNA('itemname', 'N/A');
+        const year = getCellOr('year', 'N/A');
+        const itemName = getCellOr('itemname', 'N/A');
 
         // Skip only if BOTH year AND itemName are missing/N/A
         if ((year === 'N/A' || !year) && (itemName === 'N/A' || !itemName)) {
@@ -79,7 +103,9 @@ export async function POST(request: NextRequest) {
         const priceRaw = cols[idx('price')]?.trim() ?? '';
         let price = 0;
         if (priceRaw && priceRaw !== 'N/A') {
-          const parsed = parseFloat(priceRaw);
+          // Handle both "100.50" and "100,50" (European decimal)
+          const normalized = priceRaw.replace(',', '.');
+          const parsed = parseFloat(normalized);
           if (!isNaN(parsed)) price = parsed;
         }
 
@@ -91,7 +117,7 @@ export async function POST(request: NextRequest) {
             subGroup: getCell('subgroup'),
             itemName,
             price,
-            uom: getCellOrNA('uom', 'PCS'),
+            uom: getCellOr('uom', 'PCS'),
             createdBy: currentUser.id,
           },
         });
@@ -109,16 +135,17 @@ export async function POST(request: NextRequest) {
       inserted,
       skipped,
       total: lines.length - 1,
+      delimiter,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
     console.error('Item upload error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed: ' + (error instanceof Error ? error.message : 'unknown error') }, { status: 500 });
   }
 }
 
-// Parse a CSV line — handles basic quoted fields
-function parseCsvLine(line: string): string[] {
+// Parse a CSV line with specified delimiter — handles basic quoted fields
+function parseCsvLine(line: string, delimiter: string = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -132,7 +159,7 @@ function parseCsvLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current);
       current = '';
     } else {
@@ -142,4 +169,3 @@ function parseCsvLine(line: string): string[] {
   result.push(current);
   return result;
 }
-// Thu Jun 18 06:24:45 UTC 2026

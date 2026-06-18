@@ -3,8 +3,9 @@ import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // POST /api/stock/upload — bulk upload stock entries from CSV
-// CSV columns: itemName, year, entityName, quantity
-// (matches by itemName + year → itemId, by entityName → entityId)
+// CSV columns: itemName, entityName, quantity (optional: year)
+// Auto-detects delimiter (comma or semicolon) — handles Excel exports from any locale
+// Empty cells → "N/A" (except quantity → 0)
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -27,19 +28,40 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Please upload a CSV file' }, { status: 400 });
     }
 
-    const text = await file.text();
+    let text = await file.text();
+
+    // Strip UTF-8 BOM if present (Excel often adds this)
+    if (text.charCodeAt(0) === 0xFEFF) {
+      text = text.slice(1);
+    }
+
     const lines = text.split(/\r?\n/).filter((l) => l.trim());
 
     if (lines.length < 2) {
       return NextResponse.json({ error: 'CSV file must have a header row and at least one data row' }, { status: 400 });
     }
 
-    const header = lines[0].split(',').map((h) => h.trim().toLowerCase());
+    // Auto-detect delimiter: comma or semicolon
+    let delimiter = ',';
+    const sampleLines = lines.slice(0, Math.min(3, lines.length));
+    let commaCount = 0;
+    let semicolonCount = 0;
+    for (const line of sampleLines) {
+      commaCount += (line.match(/,/g) || []).length;
+      semicolonCount += (line.match(/;/g) || []).length;
+    }
+    if (semicolonCount > commaCount) {
+      delimiter = ';';
+    }
+
+    const header = parseCsvLine(lines[0], delimiter).map((h) => h.trim().toLowerCase());
     const requiredCols = ['itemname', 'entityname', 'quantity'];
     const missing = requiredCols.filter((c) => !header.includes(c));
     if (missing.length > 0) {
       return NextResponse.json(
-        { error: `Missing required columns: ${missing.join(', ')}. Required: ${requiredCols.join(', ')}` },
+        {
+          error: `Missing required columns: ${missing.join(', ')}. Required columns: ${requiredCols.join(', ')}. Detected delimiter: "${delimiter}". If using Excel, save as "CSV (Comma delimited) (*.csv)".`,
+        },
         { status: 400 }
       );
     }
@@ -60,11 +82,10 @@ export async function POST(request: NextRequest) {
 
     for (let i = 1; i < lines.length; i++) {
       try {
-        const cols = parseCsvLine(lines[i]);
+        const cols = parseCsvLine(lines[i], delimiter);
         // Pad missing columns with empty strings
         while (cols.length < header.length) cols.push('');
 
-        // Helper: get cell value, empty/undefined → fallback (default 'N/A')
         const getCellOr = (col: string, fallback = 'N/A'): string => {
           if (idx(col) < 0) return fallback;
           const v = cols[idx(col)]?.trim() ?? '';
@@ -77,7 +98,9 @@ export async function POST(request: NextRequest) {
         // Parse quantity — empty/"N/A"/invalid → 0
         let quantity = 0;
         if (quantityRaw && quantityRaw !== 'N/A') {
-          const parsed = parseInt(quantityRaw);
+          // Handle both "100" and European formats
+          const normalized = quantityRaw.replace(',', '.').replace(/\.\s*$/, '');
+          const parsed = parseInt(normalized);
           if (!isNaN(parsed)) quantity = parsed;
         }
         const year = idx('year') >= 0 ? getCellOr('year', '') : '';
@@ -122,15 +145,16 @@ export async function POST(request: NextRequest) {
       upserted,
       skipped,
       total: lines.length - 1,
+      delimiter,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {
     console.error('Stock upload error:', error);
-    return NextResponse.json({ error: 'Upload failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Upload failed: ' + (error instanceof Error ? error.message : 'unknown error') }, { status: 500 });
   }
 }
 
-function parseCsvLine(line: string): string[] {
+function parseCsvLine(line: string, delimiter: string = ','): string[] {
   const result: string[] = [];
   let current = '';
   let inQuotes = false;
@@ -144,7 +168,7 @@ function parseCsvLine(line: string): string[] {
       } else {
         inQuotes = !inQuotes;
       }
-    } else if (ch === ',' && !inQuotes) {
+    } else if (ch === delimiter && !inQuotes) {
       result.push(current);
       current = '';
     } else {
