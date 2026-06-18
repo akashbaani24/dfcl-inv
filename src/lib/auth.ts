@@ -109,6 +109,8 @@ export const MASTER_DATA_ITEMS = [
   { key: 'upload', label: 'Upload CSV', adminOnly: false },
   { key: 'entities', label: 'Entity', adminOnly: true },
   { key: 'users', label: 'Users', adminOnly: true },
+  { key: 'groups', label: 'Groups', adminOnly: false },
+  { key: 'subGroups', label: 'Sub Groups', adminOnly: false },
   { key: 'tailors', label: 'Tailors', adminOnly: false },
   { key: 'makingInfo', label: 'Making Information', adminOnly: false },
   { key: 'uom', label: 'UoM', adminOnly: false },

@@ -158,6 +158,7 @@ type ViewType =
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers'
+  | 'groups' | 'subGroups'
   | 'stockDetail' | 'stockEntry' | 'stockUpload'
   | 'settings'
 
@@ -193,6 +194,8 @@ const ALL_MASTER_DATA_ITEMS = [
   { key: 'upload', label: 'Upload CSV' },
   { key: 'entities', label: 'Entity' },
   { key: 'users', label: 'Users' },
+  { key: 'groups', label: 'Groups' },
+  { key: 'subGroups', label: 'Sub Groups' },
   { key: 'tailors', label: 'Tailors' },
   { key: 'makingInfo', label: 'Making Information' },
   { key: 'uom', label: 'UoM' },
@@ -349,6 +352,17 @@ export default function Home() {
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', email: '', address: '', type: 'regular', status: 'active' })
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
   const [showCustomerDialog, setShowCustomerDialog] = useState(false)
+
+  // Group & SubGroup state
+  const [groups, setGroups] = useState<Array<{ id: string; name: string; description: string; status: string; _count?: { subGroups: number } }>>([])
+  const [groupForm, setGroupForm] = useState({ name: '', description: '', status: 'active' })
+  const [editingGroupId, setEditingGroupId] = useState<string | null>(null)
+  const [showGroupDialog, setShowGroupDialog] = useState(false)
+
+  const [subGroups, setSubGroups] = useState<Array<{ id: string; name: string; groupId: string; groupName?: string; description: string; status: string }>>([])
+  const [subGroupForm, setSubGroupForm] = useState({ name: '', groupId: '', description: '', status: 'active' })
+  const [editingSubGroupId, setEditingSubGroupId] = useState<string | null>(null)
+  const [showSubGroupDialog, setShowSubGroupDialog] = useState(false)
 
   // Upload state
   const [uploadFile, setUploadFile] = useState<File | null>(null)
@@ -663,6 +677,8 @@ export default function Home() {
   useEffect(() => { if (currentView === 'uom') fetchUom() }, [currentView])
   useEffect(() => { if (currentView === 'suppliers') fetchSuppliers() }, [currentView])
   useEffect(() => { if (currentView === 'customers') fetchCustomers() }, [currentView])
+  useEffect(() => { if (currentView === 'groups') fetchGroups() }, [currentView])
+  useEffect(() => { if (currentView === 'subGroups') { fetchSubGroups(); fetchGroups() } }, [currentView])
   useEffect(() => { if (currentView === 'itemAdjustment') fetchAdjustments() }, [currentView])
   useEffect(() => { if (currentView === 'transfer') fetchTransfers() }, [currentView])
   useEffect(() => { if (currentView === 'receive') fetchReceives() }, [currentView])
@@ -756,6 +772,34 @@ export default function Home() {
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
   const handleDeleteCustomer = async (id: string) => { if (!confirm('Delete?')) return; try { const res = await authFetch(`/api/customers/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchCustomers() } } catch {} }
+
+  // Group & SubGroup fetch & handlers
+  const fetchGroups = async () => { try { const res = await authFetch('/api/groups'); if (res.ok) { const d = await res.json(); setGroups(d.groups) } } catch {} }
+  const fetchSubGroups = async () => { try { const res = await authFetch('/api/subgroups'); if (res.ok) { const d = await res.json(); setSubGroups(d.subGroups) } } catch {} }
+
+  const handleSaveGroup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = editingGroupId
+        ? await authFetch(`/api/groups/${editingGroupId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(groupForm) })
+        : await authFetch('/api/groups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(groupForm) })
+      if (res.ok) { toast({ title: 'Success', description: editingGroupId ? 'Group updated' : 'Group created' }); setShowGroupDialog(false); setGroupForm({ name: '', description: '', status: 'active' }); setEditingGroupId(null); fetchGroups() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteGroup = async (id: string) => { if (!confirm('Delete this group and all its subgroups?')) return; try { const res = await authFetch(`/api/groups/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchGroups(); fetchSubGroups() } } catch {} }
+
+  const handleSaveSubGroup = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = editingSubGroupId
+        ? await authFetch(`/api/subgroups/${editingSubGroupId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subGroupForm) })
+        : await authFetch('/api/subgroups', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(subGroupForm) })
+      if (res.ok) { toast({ title: 'Success', description: editingSubGroupId ? 'SubGroup updated' : 'SubGroup created' }); setShowSubGroupDialog(false); setSubGroupForm({ name: '', groupId: '', description: '', status: 'active' }); setEditingSubGroupId(null); fetchSubGroups() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteSubGroup = async (id: string) => { if (!confirm('Delete this subgroup?')) return; try { const res = await authFetch(`/api/subgroups/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchSubGroups() } } catch {} }
 
   // Upload handler
   const handleUpload = async (e: React.FormEvent) => {
@@ -1128,6 +1172,8 @@ export default function Home() {
     { key: 'upload' as ViewType, label: 'Upload CSV', icon: Upload, perm: hasMasterDataAccess('upload') && canCreate },
     { key: 'entities' as ViewType, label: 'Entity', icon: Building2, perm: isAdmin && hasMasterDataAccess('entities') },
     { key: 'users' as ViewType, label: 'Users', icon: Users, perm: isAdmin && hasMasterDataAccess('users') },
+    { key: 'groups' as ViewType, label: 'Groups', icon: Database, perm: hasMasterDataAccess('groups') },
+    { key: 'subGroups' as ViewType, label: 'Sub Groups', icon: Database, perm: hasMasterDataAccess('subGroups') },
     { key: 'tailors' as ViewType, label: 'Tailors', icon: Scissors, perm: hasMasterDataAccess('tailors') },
     { key: 'makingInfo' as ViewType, label: 'Making Information', icon: Ruler, perm: hasMasterDataAccess('makingInfo') },
     { key: 'uom' as ViewType, label: 'UoM', icon: Package, perm: hasMasterDataAccess('uom') },
@@ -2276,6 +2322,107 @@ export default function Home() {
     )
   }
 
+  // Groups page
+  const renderGroupsPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Groups</h2>
+          <p className="text-sm text-muted-foreground">Manage item groups (parent categories)</p>
+        </div>
+        <Button onClick={() => { setEditingGroupId(null); setGroupForm({ name: '', description: '', status: 'active' }); setShowGroupDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />Add Group</Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Name</TableHead>
+            <TableHead className="font-semibold">Description</TableHead>
+            <TableHead className="font-semibold text-center">Sub Groups</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {groups.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No groups found. Click "Add Group" to create one.</TableCell></TableRow>
+            : groups.map(g => (
+              <TableRow key={g.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium">{g.name}</TableCell>
+                <TableCell>{g.description || '—'}</TableCell>
+                <TableCell className="text-center">{g._count?.subGroups || 0}</TableCell>
+                <TableCell><Badge variant={g.status === 'active' ? 'default' : 'secondary'}>{g.status}</Badge></TableCell>
+                <TableCell className="text-center">
+                  <Button variant="ghost" size="sm" onClick={() => { setEditingGroupId(g.id); setGroupForm({ name: g.name, description: g.description, status: g.status }); setShowGroupDialog(true) }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteGroup(g.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={showGroupDialog} onOpenChange={setShowGroupDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{editingGroupId ? 'Edit Group' : 'Add Group'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveGroup} className="space-y-4">
+            <div className="space-y-2"><Label>Group Name *</Label><Input value={groupForm.name} onChange={e => setGroupForm({ ...groupForm, name: e.target.value })} required /></div>
+            <div className="space-y-2"><Label>Description</Label><Input value={groupForm.description} onChange={e => setGroupForm({ ...groupForm, description: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Status</Label><Select value={groupForm.status} onValueChange={v => setGroupForm({ ...groupForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingGroupId ? 'Update' : 'Create'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+
+  // SubGroups page
+  const renderSubGroupsPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Sub Groups</h2>
+          <p className="text-sm text-muted-foreground">Manage sub groups under parent groups</p>
+        </div>
+        <Button onClick={() => { setEditingSubGroupId(null); setSubGroupForm({ name: '', groupId: '', description: '', status: 'active' }); setShowSubGroupDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />Add Sub Group</Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Sub Group Name</TableHead>
+            <TableHead className="font-semibold">Parent Group</TableHead>
+            <TableHead className="font-semibold">Description</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {subGroups.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No sub groups found. Click "Add Sub Group" to create one.</TableCell></TableRow>
+            : subGroups.map(sg => (
+              <TableRow key={sg.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium">{sg.name}</TableCell>
+                <TableCell>{sg.groupName || '—'}</TableCell>
+                <TableCell>{sg.description || '—'}</TableCell>
+                <TableCell><Badge variant={sg.status === 'active' ? 'default' : 'secondary'}>{sg.status}</Badge></TableCell>
+                <TableCell className="text-center">
+                  <Button variant="ghost" size="sm" onClick={() => { setEditingSubGroupId(sg.id); setSubGroupForm({ name: sg.name, groupId: sg.groupId, description: sg.description, status: sg.status }); setShowSubGroupDialog(true) }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteSubGroup(sg.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={showSubGroupDialog} onOpenChange={setShowSubGroupDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{editingSubGroupId ? 'Edit Sub Group' : 'Add Sub Group'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveSubGroup} className="space-y-4">
+            <div className="space-y-2"><Label>Parent Group *</Label><Select value={subGroupForm.groupId} onValueChange={v => setSubGroupForm({ ...subGroupForm, groupId: v })} required><SelectTrigger><SelectValue placeholder="Select parent group" /></SelectTrigger><SelectContent>{groups.map(g => <SelectItem key={g.id} value={g.id}>{g.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Sub Group Name *</Label><Input value={subGroupForm.name} onChange={e => setSubGroupForm({ ...subGroupForm, name: e.target.value })} required /></div>
+            <div className="space-y-2"><Label>Description</Label><Input value={subGroupForm.description} onChange={e => setSubGroupForm({ ...subGroupForm, description: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Status</Label><Select value={subGroupForm.status} onValueChange={v => setSubGroupForm({ ...subGroupForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingSubGroupId ? 'Update' : 'Create'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+
   const renderSettingsPage = () => (
     <div className="space-y-6">
       <div className="flex items-center gap-3 mb-6">
@@ -2349,6 +2496,8 @@ export default function Home() {
       case 'uom': return renderMasterDataPage<UoMData>('Unit of Measure (UoM)', uomList, ['name','description'], uomForm, setUomForm, editingUomId, setEditingUomId, showUomDialog, setShowUomDialog, handleSaveUom, handleDeleteUom, { name:{label:'UoM Name*',type:'text',placeholder:'e.g. PCS, KG, LTR'},description:{label:'Description',type:'text'} })
       case 'suppliers': return renderMasterDataPage<SupplierData>('Suppliers', suppliers, ['name','phone','email','address','status'], supplierForm, setSupplierForm, editingSupplierId, setEditingSupplierId, showSupplierDialog, setShowSupplierDialog, handleSaveSupplier, handleDeleteSupplier, { name:{label:'Supplier Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'customers': return renderMasterDataPage<CustomerData>('Customer Database', customers, ['name','phone','email','address','type','status'], customerForm, setCustomerForm, editingCustomerId, setEditingCustomerId, showCustomerDialog, setShowCustomerDialog, handleSaveCustomer, handleDeleteCustomer, { name:{label:'Customer Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},type:{label:'Type',type:'select',options:['regular','wholesale','corporate']},status:{label:'Status',type:'select',options:['active','inactive']} })
+      case 'groups': return renderGroupsPage()
+      case 'subGroups': return renderSubGroupsPage()
       case 'users': return renderUserManagement()
       case 'entities': return renderEntityManagement()
       case 'settings': return renderSettingsPage()
@@ -3116,12 +3265,13 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           <div className="p-4 border-b">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center"><Package className="w-5 h-5 text-primary-foreground" /></div>
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h1 className="font-bold text-sm truncate">Item Management</h1>
                 <button onClick={() => setWorkingEntity(null)} className="flex items-center gap-1 text-xs text-primary hover:underline" title="Switch entity">
                   <Building2 className="w-3 h-3" />{workingEntity.name}
                 </button>
               </div>
+              <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive shrink-0" onClick={handleLogout} title="Sign Out"><LogOut className="w-4 h-4" /></Button>
             </div>
           </div>
           <ScrollArea className="flex-1">
@@ -3141,7 +3291,6 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
               <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
               <Badge variant={user.role === 'admin' ? 'default' : user.role === 'manager' ? 'secondary' : 'outline'} className={`mt-1 text-[10px] ${user.role === 'manager' ? 'bg-blue-100 text-blue-800' : ''}`}>{user.role}</Badge>
             </div>
-            <Button variant="ghost" size="sm" className="w-full justify-start text-destructive hover:text-destructive" onClick={handleLogout}><LogOut className="w-4 h-4 mr-2" />Sign Out</Button>
           </div>
         </aside>
       ) : (
