@@ -61,18 +61,29 @@ export async function POST(request: NextRequest) {
     for (let i = 1; i < lines.length; i++) {
       try {
         const cols = parseCsvLine(lines[i]);
-        if (cols.length < header.length) {
-          skipped++;
-          continue;
+        // Pad missing columns with empty strings
+        while (cols.length < header.length) cols.push('');
+
+        // Helper: get cell value, empty/undefined → fallback (default 'N/A')
+        const getCellOr = (col: string, fallback = 'N/A'): string => {
+          if (idx(col) < 0) return fallback;
+          const v = cols[idx(col)]?.trim() ?? '';
+          return v === '' ? fallback : v;
+        };
+
+        const itemName = getCellOr('itemname', 'N/A');
+        const entityName = getCellOr('entityname', 'N/A');
+        const quantityRaw = idx('quantity') >= 0 ? (cols[idx('quantity')]?.trim() ?? '') : '';
+        // Parse quantity — empty/"N/A"/invalid → 0
+        let quantity = 0;
+        if (quantityRaw && quantityRaw !== 'N/A') {
+          const parsed = parseInt(quantityRaw);
+          if (!isNaN(parsed)) quantity = parsed;
         }
+        const year = idx('year') >= 0 ? getCellOr('year', '') : '';
 
-        const itemName = cols[idx('itemname')]?.trim() || '';
-        const entityName = cols[idx('entityname')]?.trim() || '';
-        const quantityStr = cols[idx('quantity')]?.trim() || '0';
-        const quantity = parseInt(quantityStr);
-        const year = idx('year') >= 0 ? cols[idx('year')]?.trim() : '';
-
-        if (!itemName || !entityName || isNaN(quantity)) {
+        // Skip only if BOTH itemName AND entityName are missing/N/A
+        if ((itemName === 'N/A' || !itemName) && (entityName === 'N/A' || !entityName)) {
           skipped++;
           continue;
         }
@@ -85,12 +96,12 @@ export async function POST(request: NextRequest) {
         }
 
         // Find item by name (and year if provided)
-        const key = year ? `${itemName}|${year}`.toLowerCase() : null;
+        const key = year && year !== 'N/A' ? `${itemName}|${year}`.toLowerCase() : null;
         const item = key ? itemByKey.get(key) : items.find((it) => it.itemName.toLowerCase() === itemName.toLowerCase());
 
         if (!item) {
           skipped++;
-          if (errors.length < 5) errors.push(`Row ${i + 1}: item "${itemName}"${year ? ` (${year})` : ''} not found`);
+          if (errors.length < 5) errors.push(`Row ${i + 1}: item "${itemName}"${year && year !== 'N/A' ? ` (${year})` : ''} not found`);
           continue;
         }
 

@@ -53,30 +53,45 @@ export async function POST(request: NextRequest) {
     for (let i = 1; i < lines.length; i++) {
       try {
         const cols = parseCsvLine(lines[i]);
-        if (cols.length < header.length) {
+        // Pad missing columns with empty strings
+        while (cols.length < header.length) cols.push('');
+
+        // Helper: get cell value, empty/undefined → 'N/A' (except for price which becomes 0)
+        const getCell = (col: string): string => {
+          const v = cols[idx(col)]?.trim() ?? '';
+          return v === '' ? 'N/A' : v;
+        };
+        const getCellOrNA = (col: string, fallback = 'N/A'): string => {
+          const v = cols[idx(col)]?.trim() ?? '';
+          return v === '' ? fallback : v;
+        };
+
+        const year = getCellOrNA('year', 'N/A');
+        const itemName = getCellOrNA('itemname', 'N/A');
+
+        // Skip only if BOTH year AND itemName are missing/N/A
+        if ((year === 'N/A' || !year) && (itemName === 'N/A' || !itemName)) {
           skipped++;
           continue;
         }
 
-        const year = cols[idx('year')]?.trim() || '';
-        const itemName = cols[idx('itemname')]?.trim() || '';
-        const priceStr = cols[idx('price')]?.trim() || '0';
-        const price = parseFloat(priceStr);
-
-        if (!year || !itemName) {
-          skipped++;
-          continue;
+        // Parse price — empty → 0, "N/A" → 0, invalid → 0
+        const priceRaw = cols[idx('price')]?.trim() ?? '';
+        let price = 0;
+        if (priceRaw && priceRaw !== 'N/A') {
+          const parsed = parseFloat(priceRaw);
+          if (!isNaN(parsed)) price = parsed;
         }
 
         await db.item.create({
           data: {
             year,
-            lcNo: cols[idx('lcno')]?.trim() || '',
-            group: cols[idx('group')]?.trim() || '',
-            subGroup: cols[idx('subgroup')]?.trim() || '',
+            lcNo: getCell('lcno'),
+            group: getCell('group'),
+            subGroup: getCell('subgroup'),
             itemName,
-            price: isNaN(price) ? 0 : price,
-            uom: cols[idx('uom')]?.trim() || 'PCS',
+            price,
+            uom: getCellOrNA('uom', 'PCS'),
             createdBy: currentUser.id,
           },
         });

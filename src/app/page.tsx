@@ -33,6 +33,7 @@ import {
   Save,
   X,
   FileUp,
+  Download,
   Shield,
   Key,
   Building2,
@@ -739,6 +740,41 @@ export default function Home() {
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Upload failed', variant: 'destructive' }) }
     finally { setUploading(false) }
+  }
+
+  // Download items CSV template
+  const downloadItemsTemplate = () => {
+    const csv = 'year,lcNo,group,subGroup,itemName,price,uom\n' +
+                '2024,LC-2024-0001,Electronics,Mobile,Samsung Galaxy S23,75000.00,PCS\n' +
+                '2024,LC-2024-0002,Electronics,Laptop,Dell Inspiron 15,55000.00,PCS\n' +
+                '2024,LC-2024-0003,Hardware,Hinge,Concealed Hinge,80.50,KG\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'items-upload-format.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast({ title: 'Downloaded', description: 'items-upload-format.csv' })
+  }
+
+  // Download stock CSV template
+  const downloadStockTemplate = () => {
+    const csv = 'itemName,entityName,quantity\n' +
+                'Samsung Galaxy S23,Head Office,100\n' +
+                'Dell Inspiron 15,Head Office,50\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'stock-upload-format.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast({ title: 'Downloaded', description: 'stock-upload-format.csv' })
   }
 
   // Entity handlers
@@ -2452,9 +2488,13 @@ export default function Home() {
             <p className="text-sm font-medium mb-2">CSV Format Example:</p>
             <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`year,lcNo,group,subGroup,itemName,price,uom\n2024,LC-2024-0001,Electronics,Mobile,Samsung Galaxy S23,75000.00,PCS\n2024,LC-2024-0002,Electronics,Laptop,Dell Inspiron 15,55000.00,PCS`}</pre>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <Button type="submit" disabled={!uploadFile || uploading}><Upload className="w-4 h-4 mr-2" />{uploading ? 'Uploading...' : 'Upload CSV'}</Button>
-            <Button type="button" variant="outline" onClick={() => { setCurrentView('items'); setUploadFile(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+            <Button type="button" variant="outline" onClick={downloadItemsTemplate}><Download className="w-4 h-4 mr-2" />Download Format</Button>
+            <Button type="button" variant="ghost" onClick={() => { setCurrentView('items'); setUploadFile(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+            <strong>💡 Tip:</strong> Click "Download Format" to get a CSV template. Empty cells will be automatically filled with "N/A". Required columns: <code>year</code> and <code>itemName</code>.
           </div>
         </form>
       </CardContent>
@@ -2721,13 +2761,19 @@ LC-2024-0001,2024,Dhaka Warehouse,150
 LC-2024-0002,2024,Chittagong Store,75`}</pre>
             <p className="text-xs text-muted-foreground mt-2">Supported headers: itemName/item_name/item, entityName/entity_name/entity/warehouse/store, entityId/entity_id, quantity/qty/stock, lcNo/lc_no/lc, year/yr</p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex gap-3 flex-wrap">
             <Button type="submit" disabled={!stockUploadFile || stockUploading}>
               <Upload className="w-4 h-4 mr-2" />{stockUploading ? 'Uploading...' : 'Upload Stock CSV'}
             </Button>
-            <Button type="button" variant="outline" onClick={() => { setCurrentView('items'); setStockUploadFile(null) }}>
+            <Button type="button" variant="outline" onClick={downloadStockTemplate}>
+              <Download className="w-4 h-4 mr-2" />Download Format
+            </Button>
+            <Button type="button" variant="ghost" onClick={() => { setCurrentView('items'); setStockUploadFile(null) }}>
               <X className="w-4 h-4 mr-2" />Cancel
             </Button>
+          </div>
+          <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
+            <strong>💡 Tip:</strong> Click "Download Format" to get a CSV template. Empty cells will be automatically filled with "N/A". Required columns: <code>itemName</code>, <code>entityName</code>, and <code>quantity</code>.
           </div>
         </form>
       </CardContent>
