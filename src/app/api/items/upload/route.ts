@@ -189,9 +189,12 @@ export async function POST(request: NextRequest) {
     if (tursoUrl && tursoToken && rowsToInsert.length > 0) {
       const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
 
-      // SQLite parameter limit is 999. With 10 params per row, max ~99 rows per statement.
-      // Use 90 rows per multi-row INSERT to stay safely under the limit.
+      // Build multi-row INSERT statements (90 rows each to stay under SQLite's 999 param limit)
+      // Then send ALL statements in ONE HTTP request via libsql.batch()
+      // 2000 rows = 23 statements × 1 HTTP request = ~3-5 seconds total
       const ROWS_PER_STATEMENT = 90
+      const stmts: Array<{ sql: string; args: (string | number)[] }> = []
+
       for (let i = 0; i < rowsToInsert.length; i += ROWS_PER_STATEMENT) {
         const batch = rowsToInsert.slice(i, i + ROWS_PER_STATEMENT)
         const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime(\'now\'), datetime(\'now\'))').join(', ')
@@ -199,16 +202,27 @@ export async function POST(request: NextRequest) {
         for (const row of batch) {
           args.push(generateId(), row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy)
         }
+        stmts.push({
+          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES ${placeholders}`,
+          args,
+        })
+      }
 
-        const sql = `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES ${placeholders}`
-
+      // Send ALL statements in ONE HTTP request
+      try {
+        const results = await libsql.batch(stmts, 'write')
+        for (const r of results) {
+          inserted += r.rows_affected || 0
+        }
+      } catch (e) {
+        console.error('Batch insert failed:', String(e).slice(0, 300))
+        // Fallback: try Prisma createMany
         try {
-          const result = await libsql.execute({ sql, args })
-          inserted += result.rows_affected || 0
-        } catch (e) {
-          console.error('Multi-row insert failed:', String(e).slice(0, 200))
-          // Fallback: try Prisma one by one
-          for (const row of batch) {
+          const result = await db.item.createMany({ data: rowsToInsert, skipDuplicates: true })
+          inserted += result.count
+        } catch (e2) {
+          // Last resort: one by one
+          for (const row of rowsToInsert) {
             try {
               await db.item.create({ data: row })
               inserted++
