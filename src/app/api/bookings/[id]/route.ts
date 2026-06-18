@@ -9,25 +9,43 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
     const body = await request.json();
-    const { itemId, customerId, bookingNo, quantity, amount, deliveryDate, status, notes } = body;
+    const { customerId, bookingDate, tillDate, status, reason, notes, items } = body;
 
     const data: Record<string, unknown> = {};
-    if (itemId !== undefined) data.itemId = itemId || null;
     if (customerId !== undefined) data.customerId = customerId || null;
-    if (bookingNo !== undefined) data.bookingNo = bookingNo;
-    if (quantity !== undefined) data.quantity = parseInt(quantity);
-    if (amount !== undefined) data.amount = parseFloat(amount);
-    if (deliveryDate !== undefined) data.deliveryDate = deliveryDate ? new Date(deliveryDate) : null;
+    if (bookingDate !== undefined) data.bookingDate = bookingDate ? new Date(bookingDate) : new Date();
+    if (tillDate !== undefined) data.tillDate = tillDate ? new Date(tillDate) : null;
     if (status !== undefined) data.status = status;
-    if (notes !== undefined) data.notes = notes;
+    if (reason !== undefined) data.reason = reason || null;
+    if (notes !== undefined) data.notes = notes || null;
+
+    // If items provided, replace all booking items
+    if (items && Array.isArray(items)) {
+      await db.bookingItem.deleteMany({ where: { bookingId: id } });
+      if (items.length > 0) {
+        await db.bookingItem.createMany({
+          data: items.map((item: { itemId: string; fromEntityId: string; quantity: number }) => ({
+            bookingId: id,
+            itemId: item.itemId,
+            fromEntityId: item.fromEntityId,
+            quantity: parseInt(String(item.quantity)) || 1,
+          })),
+        });
+      }
+    }
 
     const booking = await db.booking.update({
       where: { id },
       data,
       include: {
-        item: { select: { itemName: true } },
         entity: { select: { name: true } },
         customer: { select: { name: true } },
+        items: {
+          include: {
+            item: { select: { itemName: true } },
+            fromEntity: { select: { name: true } },
+          },
+        },
       },
     });
 

@@ -9,7 +9,6 @@ export async function GET(request: NextRequest) {
 
     const searchParams = request.nextUrl.searchParams;
     const entityId = searchParams.get('entityId') || '';
-    const status = searchParams.get('status') || '';
 
     const userEntityIds = (currentUser.role === 'admin' || currentUser.role === 'manager')
       ? null : currentUser.entityAccess.map(ea => ea.entityId);
@@ -21,15 +20,19 @@ export async function GET(request: NextRequest) {
     const where: Record<string, unknown> = {};
     if (entityId) where.entityId = entityId;
     else if (userEntityIds) where.entityId = { in: userEntityIds };
-    if (status) where.status = status;
 
     const bookings = await db.booking.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        item: { select: { itemName: true } },
         entity: { select: { name: true } },
         customer: { select: { name: true } },
+        items: {
+          include: {
+            item: { select: { itemName: true } },
+            fromEntity: { select: { name: true } },
+          },
+        },
       },
     });
 
@@ -46,30 +49,47 @@ export async function POST(request: NextRequest) {
     if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const body = await request.json();
-    const { entityId, itemId, customerId, bookingNo, quantity, amount, deliveryDate, status, notes } = body;
+    const { entityId, customerId, bookingDate, tillDate, status, reason, notes, items } = body;
 
     if (!entityId) return NextResponse.json({ error: 'Entity is required' }, { status: 400 });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'At least one item is required' }, { status: 400 });
+    }
 
-    // Generate booking number if not provided
-    const autoBookingNo = bookingNo || `BK-${Date.now().toString().slice(-8)}`;
+    // Auto-generate booking number: BK-YYYYMMDD-XXXX
+    const now = new Date();
+    const dateStr = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+    const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
+    const bookingNo = `BK-${dateStr}-${randomStr}`;
 
     const booking = await db.booking.create({
       data: {
+        bookingNo,
         entityId,
-        itemId: itemId || null,
         customerId: customerId || null,
-        bookingNo: autoBookingNo,
-        quantity: parseInt(quantity) || 1,
-        amount: parseFloat(amount) || 0,
-        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+        bookingDate: bookingDate ? new Date(bookingDate) : new Date(),
+        tillDate: tillDate ? new Date(tillDate) : null,
         status: status || 'pending',
+        reason: reason || null,
         notes: notes || null,
         createdBy: currentUser.id,
+        items: {
+          create: items.map((item: { itemId: string; fromEntityId: string; quantity: number }) => ({
+            itemId: item.itemId,
+            fromEntityId: item.fromEntityId,
+            quantity: parseInt(String(item.quantity)) || 1,
+          })),
+        },
       },
       include: {
-        item: { select: { itemName: true } },
         entity: { select: { name: true } },
         customer: { select: { name: true } },
+        items: {
+          include: {
+            item: { select: { itemName: true } },
+            fromEntity: { select: { name: true } },
+          },
+        },
       },
     });
 

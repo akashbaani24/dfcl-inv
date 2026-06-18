@@ -105,7 +105,8 @@ model Entity {
   salesOrders     SalesOrder[]
   salesReturns    SalesReturn[]
   incentives      Incentive[]
-  bookings       Booking[]
+  bookings        Booking[]
+  bookingFromItems BookingItem[] @relation("BookingFromEntity")
 }
 
 model Item {
@@ -130,7 +131,7 @@ model Item {
   receives     Receive[]
   salesOrders  SalesOrder[]
   salesReturns SalesReturn[]
-  bookings     Booking[]
+  bookingItems BookingItem[]
   incentives   Incentive[]
 
   @@index([itemName])
@@ -353,26 +354,40 @@ model Incentive {
 }
 
 model Booking {
-  id           String    @id @default(cuid())
-  entityId     String
-  itemId       String?
+  id           String        @id @default(cuid())
+  bookingNo    String        @unique
+  entityId     String        // "For Entity" — who is making the booking
   customerId   String?
-  bookingNo    String    @default("")
-  quantity     Int       @default(1)
-  amount       Float     @default(0)
-  bookingDate  DateTime  @default(now())
-  deliveryDate DateTime?
-  status       String    @default("pending") // "pending", "confirmed", "processing", "delivered", "cancelled"
+  bookingDate  DateTime      @default(now())
+  tillDate     DateTime?
+  status       String        @default("pending")
+  reason       String?
   notes        String?
   createdBy    String?
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
 
-  entity   Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  item     Item?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  entity   Entity    @relation(fields: [entityId], references: [id], onDelete: Cascade)
   customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    BookingItem[]
 
   @@index([entityId])
   @@index([status])
   @@index([bookingDate])
+}
+
+// Each booking can have multiple items, each with its own "From Entity"
+model BookingItem {
+  id          String  @id @default(cuid())
+  bookingId   String
+  itemId      String
+  fromEntityId String  // "From Entity" — which entity the item is booked from
+  quantity    Int     @default(1)
+
+  booking     Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  item        Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  fromEntity  Entity  @relation("BookingFromEntity", fields: [fromEntityId], references: [id], onDelete: Cascade)
+
+  @@index([bookingId])
+  @@index([fromEntityId])
 }

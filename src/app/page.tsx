@@ -276,10 +276,16 @@ export default function Home() {
   const [showIncentiveDialog, setShowIncentiveDialog] = useState(false)
 
   // Booking state
-  const [bookings, setBookings] = useState<Array<{ id: string; entityId: string; entityName?: string; itemId?: string; itemName?: string; customerId?: string; customerName?: string; bookingNo: string; quantity: number; amount: number; bookingDate: string; deliveryDate?: string; status: string; notes?: string; createdAt: string }>>([])
-  const [bookingForm, setBookingForm] = useState({ itemId: '', customerId: '', bookingNo: '', quantity: '', amount: '', deliveryDate: '', status: 'pending', notes: '' })
+  const [bookings, setBookings] = useState<Array<any>>([])
+  const [bookingForm, setBookingForm] = useState({
+    customerId: '', bookingDate: new Date().toISOString().split('T')[0],
+    tillDate: '', status: 'pending', reason: '', notes: '',
+    items: [] as Array<{ itemId: string; fromEntityId: string; quantity: string }>,
+  })
   const [showBookingDialog, setShowBookingDialog] = useState(false)
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null)
+  const [bookingItemSearch, setBookingItemSearch] = useState('')
+  const [bookingItemResults, setBookingItemResults] = useState<ItemData[]>([])
 
   // Item search for transaction forms
   const [txItemSearch, setTxItemSearch] = useState('')
@@ -607,19 +613,65 @@ export default function Home() {
   const fetchSalesReturns = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-returns?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesReturns(d.salesReturns.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
   const fetchIncentives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/incentives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setIncentives(d.incentives.map((i: any) => ({ ...i, itemName: i.item?.itemName || '', entityName: i.entity?.name || '', tailorName: i.tailor?.name || '' }))) } } catch {} }
 
-  const fetchBookings = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/bookings?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setBookings(d.bookings.map((b: any) => ({ ...b, entityName: b.entity?.name || '', itemName: b.item?.itemName || '', customerName: b.customer?.name || '' }))) } } catch {} }
+  const fetchBookings = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/bookings?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setBookings(d.bookings) } } catch {} }
 
   const handleSaveBooking = async (e: React.FormEvent) => {
     e.preventDefault()
+    if (bookingForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
     try {
-      const payload = { ...bookingForm, entityId: workingEntity?.id }
+      const payload = {
+        entityId: workingEntity?.id,
+        customerId: bookingForm.customerId,
+        bookingDate: bookingForm.bookingDate,
+        tillDate: bookingForm.tillDate,
+        status: bookingForm.status,
+        reason: bookingForm.reason,
+        notes: bookingForm.notes,
+        items: bookingForm.items.map(i => ({ itemId: i.itemId, fromEntityId: i.fromEntityId, quantity: parseInt(i.quantity) || 1 })),
+      }
       const res = editingBookingId
         ? await authFetch(`/api/bookings/${editingBookingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         : await authFetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (res.ok) { toast({ title: 'Success', description: editingBookingId ? 'Booking updated' : 'Booking created' }); setShowBookingDialog(false); setBookingForm({ itemId: '', customerId: '', bookingNo: '', quantity: '', amount: '', deliveryDate: '', status: 'pending', notes: '' }); setEditingBookingId(null); fetchBookings() }
+      if (res.ok) { toast({ title: 'Success', description: editingBookingId ? 'Booking updated' : 'Booking created' }); setShowBookingDialog(false); resetBookingForm(); fetchBookings() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
+
+  const resetBookingForm = () => {
+    setBookingForm({ customerId: '', bookingDate: new Date().toISOString().split('T')[0], tillDate: '', status: 'pending', reason: '', notes: '', items: [] })
+    setEditingBookingId(null)
+    setBookingItemSearch('')
+    setBookingItemResults([])
+  }
+
+  const handleBookingItemSearch = async () => {
+    if (!bookingItemSearch.trim()) return
+    try {
+      const params = new URLSearchParams({ page: '1', pageSize: '10', search: bookingItemSearch })
+      const res = await authFetch(`/api/items?${params}`)
+      if (res.ok) { const data = await res.json(); setBookingItemResults(data.items) }
+    } catch {}
+  }
+
+  const addBookingItem = (item: ItemData) => {
+    if (!item.id) return
+    setBookingForm(f => ({ ...f, items: [...f.items, { itemId: item.id!, fromEntityId: '', quantity: '1' }] }))
+    setBookingItemSearch('')
+    setBookingItemResults([])
+  }
+
+  const removeBookingItem = (index: number) => {
+    setBookingForm(f => ({ ...f, items: f.items.filter((_, i) => i !== index) }))
+  }
+
+  const updateBookingItem = (index: number, field: 'fromEntityId' | 'quantity', value: string) => {
+    setBookingForm(f => {
+      const items = [...f.items]
+      items[index] = { ...items[index], [field]: value }
+      return { ...f, items }
+    })
+  }
+
   const handleDeleteBooking = async (id: string) => { if (!confirm('Delete this booking?')) return; try { const res = await authFetch(`/api/bookings/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchBookings() } } catch {} }
 
   // Transaction item search
@@ -1672,33 +1724,51 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Booking - {workingEntity?.name}</h2>
-        <Button onClick={() => { setEditingBookingId(null); setBookingForm({ itemId: '', customerId: '', bookingNo: '', quantity: '', amount: '', deliveryDate: '', status: 'pending', notes: '' }); setShowBookingDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
+        <Button onClick={() => { resetBookingForm(); setShowBookingDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
             <TableHead className="font-semibold">Booking No</TableHead>
-            <TableHead className="font-semibold">Item</TableHead>
+            <TableHead className="font-semibold">Items</TableHead>
             <TableHead className="font-semibold">Customer</TableHead>
-            <TableHead className="font-semibold text-right">Qty</TableHead>
-            <TableHead className="font-semibold text-right">Amount</TableHead>
-            <TableHead className="font-semibold">Delivery Date</TableHead>
+            <TableHead className="font-semibold">Booking Date</TableHead>
+            <TableHead className="font-semibold">Till Date</TableHead>
+            <TableHead className="font-semibold">Reason</TableHead>
             <TableHead className="font-semibold">Status</TableHead>
             <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {bookings.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings yet</TableCell></TableRow>
-            : bookings.map(b => (
+            : bookings.map((b: any) => (
               <TableRow key={b.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{b.bookingNo}</TableCell>
-                <TableCell>{b.itemName || '—'}</TableCell>
-                <TableCell>{b.customerName || '—'}</TableCell>
-                <TableCell className="text-right">{b.quantity}</TableCell>
-                <TableCell className="text-right">{b.amount?.toFixed(2)}</TableCell>
-                <TableCell>{b.deliveryDate ? new Date(b.deliveryDate).toLocaleDateString() : '—'}</TableCell>
+                <TableCell>
+                  {b.items?.map((bi: any, i: number) => (
+                    <div key={i} className="text-xs">
+                      {bi.item?.itemName || '—'} <span className="text-muted-foreground">({bi.fromEntity?.name || '?'})</span> ×{bi.quantity}
+                    </div>
+                  ))}
+                </TableCell>
+                <TableCell>{b.customer?.name || '—'}</TableCell>
+                <TableCell className="text-xs">{new Date(b.bookingDate).toLocaleDateString()}</TableCell>
+                <TableCell className="text-xs">{b.tillDate ? new Date(b.tillDate).toLocaleDateString() : '—'}</TableCell>
+                <TableCell className="text-xs">{b.reason || '—'}</TableCell>
                 <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
                 <TableCell className="text-center">
-                  <Button variant="ghost" size="sm" onClick={() => { setEditingBookingId(b.id); setBookingForm({ itemId: b.itemId || '', customerId: b.customerId || '', bookingNo: b.bookingNo, quantity: String(b.quantity), amount: String(b.amount), deliveryDate: b.deliveryDate ? new Date(b.deliveryDate).toISOString().split('T')[0] : '', status: b.status, notes: b.notes || '' }); setShowBookingDialog(true) }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => {
+                    setEditingBookingId(b.id)
+                    setBookingForm({
+                      customerId: b.customerId || '',
+                      bookingDate: new Date(b.bookingDate).toISOString().split('T')[0],
+                      tillDate: b.tillDate ? new Date(b.tillDate).toISOString().split('T')[0] : '',
+                      status: b.status,
+                      reason: b.reason || '',
+                      notes: b.notes || '',
+                      items: (b.items || []).map((bi: any) => ({ itemId: bi.itemId, fromEntityId: bi.fromEntityId, quantity: String(bi.quantity) })),
+                    })
+                    setShowBookingDialog(true)
+                  }} title="Edit"><Edit className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="sm" onClick={() => handleDeleteBooking(b.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
                 </TableCell>
               </TableRow>
@@ -1707,19 +1777,81 @@ export default function Home() {
         </Table>
       </div>
       <Dialog open={showBookingDialog} onOpenChange={setShowBookingDialog}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingBookingId ? 'Edit Booking' : 'New Booking'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveBooking} className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Booking No</Label><Input placeholder="Auto-generated if empty" value={bookingForm.bookingNo} onChange={e => setBookingForm({ ...bookingForm, bookingNo: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Quantity</Label><Input type="number" value={bookingForm.quantity} onChange={e => setBookingForm({ ...bookingForm, quantity: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Customer</Label><Select value={bookingForm.customerId} onValueChange={v => setBookingForm({ ...bookingForm, customerId: v })}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Amount</Label><Input type="number" step="0.01" value={bookingForm.amount} onChange={e => setBookingForm({ ...bookingForm, amount: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Delivery Date</Label><Input type="date" value={bookingForm.deliveryDate} onChange={e => setBookingForm({ ...bookingForm, deliveryDate: e.target.value })} /></div>
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Customer</Label>
+                <Select value={bookingForm.customerId} onValueChange={v => setBookingForm({ ...bookingForm, customerId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                  <SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Booking Date</Label><Input type="date" value={bookingForm.bookingDate} onChange={e => setBookingForm({ ...bookingForm, bookingDate: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Till Date</Label><Input type="date" value={bookingForm.tillDate} onChange={e => setBookingForm({ ...bookingForm, tillDate: e.target.value })} /></div>
+              <div className="space-y-2"><Label>Reason</Label><Input placeholder="Booking reason" value={bookingForm.reason} onChange={e => setBookingForm({ ...bookingForm, reason: e.target.value })} /></div>
               <div className="space-y-2"><Label>Status</Label><Select value={bookingForm.status} onValueChange={v => setBookingForm({ ...bookingForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
             </div>
+
+            <Separator />
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Items (For Entity: {workingEntity?.name})</Label>
+              {/* Item search */}
+              <div className="flex gap-2">
+                <Input placeholder="Search item to add..." value={bookingItemSearch} onChange={e => setBookingItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleBookingItemSearch())} className="flex-1" />
+                <Button type="button" variant="outline" onClick={handleBookingItemSearch}><Search className="w-4 h-4" /></Button>
+              </div>
+              {bookingItemResults.length > 0 && (
+                <div className="border rounded-lg max-h-40 overflow-y-auto">
+                  {bookingItemResults.map(item => (
+                    <button key={item.id} type="button" onClick={() => addBookingItem(item)} className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0">
+                      {item.itemName} {item.year ? `(${item.year})` : ''}
+                    </button>
+                  ))}
+                </div>
+              )}
+              {/* Added items list */}
+              {bookingForm.items.length > 0 && (
+                <div className="border rounded-lg overflow-hidden">
+                  <Table>
+                    <TableHeader><TableRow className="bg-muted/50">
+                      <TableHead className="font-semibold text-xs">Item</TableHead>
+                      <TableHead className="font-semibold text-xs">From Entity</TableHead>
+                      <TableHead className="font-semibold text-xs text-right">Qty</TableHead>
+                      <TableHead className="font-semibold text-xs text-center">×</TableHead>
+                    </TableRow></TableHeader>
+                    <TableBody>
+                      {bookingForm.items.map((bi, i) => {
+                        const item = bookingItemResults.find(r => r.id === bi.itemId) || { itemName: bi.itemId }
+                        return (
+                          <TableRow key={i}>
+                            <TableCell className="text-xs">
+                              {/* Try to find item name from search results or just show ID */}
+                              {(() => { const r = bookingItemResults.find(x => x.id === bi.itemId); return r?.itemName || bi.itemId.slice(0, 8) })()}
+                            </TableCell>
+                            <TableCell>
+                              <Select value={bi.fromEntityId} onValueChange={v => updateBookingItem(i, 'fromEntityId', v)}>
+                                <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select entity" /></SelectTrigger>
+                                <SelectContent>{entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
+                              </Select>
+                            </TableCell>
+                            <TableCell className="w-20"><Input type="number" value={bi.quantity} onChange={e => updateBookingItem(i, 'quantity', e.target.value)} className="h-8 text-xs text-right" /></TableCell>
+                            <TableCell className="text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeBookingItem(i)} className="text-destructive"><X className="w-3 h-3" /></Button></TableCell>
+                          </TableRow>
+                        )
+                      })}
+                    </TableBody>
+                  </Table>
+                </div>
+              )}
+            </div>
+
             <div className="space-y-2"><Label>Notes</Label><Input value={bookingForm.notes} onChange={e => setBookingForm({ ...bookingForm, notes: e.target.value })} /></div>
-            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingBookingId ? 'Update' : 'Create'}</Button></DialogFooter>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => { setShowBookingDialog(false); resetBookingForm() }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+              <Button type="submit"><Save className="w-4 h-4 mr-2" />{editingBookingId ? 'Update' : 'Create Booking'}</Button>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
