@@ -172,13 +172,12 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // BATCH INSERT: Use libsql's native batch API (much faster than Prisma createMany)
-    // libsql batch sends ALL inserts in a single HTTP round-trip to Turso
-    // 1000 rows = 1 HTTP request (vs 10 requests with Prisma createMany)
+    // BATCH INSERT: Use multi-row INSERT for maximum speed
+    // Single INSERT with multiple VALUES is 10-50x faster than individual INSERTs
     const tursoUrl = process.env.TURSO_DATABASE_URL
     const tursoToken = process.env.TURSO_AUTH_TOKEN
 
-    // Generate cuid-like ID in JavaScript (avoids SQL randomblob issues)
+    // Generate cuid-like ID in JavaScript
     function generateId(): string {
       const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
       const timestamp = Date.now().toString(36)
@@ -188,38 +187,33 @@ export async function POST(request: NextRequest) {
     }
 
     if (tursoUrl && tursoToken && rowsToInsert.length > 0) {
-      // Use direct libsql client for maximum speed
       const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
 
-      // Build all INSERT statements — generate IDs in JS (not SQL)
-      const BATCH_SIZE = 500
-      for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
-        const batch = rowsToInsert.slice(i, i + BATCH_SIZE)
-        const stmts = batch.map(row => ({
-          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime('now'), datetime('now'))`,
-          args: [generateId(), row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy]
-        }))
+      // SQLite parameter limit is 999. With 10 params per row, max ~99 rows per statement.
+      // Use 90 rows per multi-row INSERT to stay safely under the limit.
+      const ROWS_PER_STATEMENT = 90
+      for (let i = 0; i < rowsToInsert.length; i += ROWS_PER_STATEMENT) {
+        const batch = rowsToInsert.slice(i, i + ROWS_PER_STATEMENT)
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime(\'now\'), datetime(\'now\'))').join(', ')
+        const args: (string | number)[] = []
+        for (const row of batch) {
+          args.push(generateId(), row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy)
+        }
+
+        const sql = `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES ${placeholders}`
 
         try {
-          const results = await libsql.batch(stmts, 'write')
-          for (const r of results) {
-            if (r.rows_affected > 0) inserted++
-          }
+          const result = await libsql.execute({ sql, args })
+          inserted += result.rows_affected || 0
         } catch (e) {
-          // If libsql batch fails, try Prisma as fallback
-          console.error('libsql batch failed, falling back to Prisma:', String(e).slice(0, 200))
-          try {
-            const result = await db.item.createMany({ data: batch, skipDuplicates: true })
-            inserted += result.count
-          } catch (e2) {
-            // Last resort: insert one by one
-            for (const row of batch) {
-              try {
-                await db.item.create({ data: row })
-                inserted++
-              } catch {
-                skipped++
-              }
+          console.error('Multi-row insert failed:', String(e).slice(0, 200))
+          // Fallback: try Prisma one by one
+          for (const row of batch) {
+            try {
+              await db.item.create({ data: row })
+              inserted++
+            } catch {
+              skipped++
             }
           }
         }
