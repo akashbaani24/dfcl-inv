@@ -679,6 +679,7 @@ export default function Home() {
   useEffect(() => { if (currentView === 'customers') fetchCustomers() }, [currentView])
   useEffect(() => { if (currentView === 'groups') fetchGroups() }, [currentView])
   useEffect(() => { if (currentView === 'subGroups') { fetchSubGroups(); fetchGroups() } }, [currentView])
+  useEffect(() => { if (currentView === 'newItem' || currentView === 'editItem') { fetchGroups(); fetchSubGroups() } }, [currentView])
   useEffect(() => { if (currentView === 'itemAdjustment') fetchAdjustments() }, [currentView])
   useEffect(() => { if (currentView === 'transfer') fetchTransfers() }, [currentView])
   useEffect(() => { if (currentView === 'receive') fetchReceives() }, [currentView])
@@ -2703,8 +2704,26 @@ export default function Home() {
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="space-y-2"><Label>Year *</Label><Input placeholder="e.g. 2024" value={itemForm.year} onChange={e => setItemForm({ ...itemForm, year: e.target.value })} required /></div>
             <div className="space-y-2"><Label>LC No</Label><Input placeholder="e.g. LC-2024-0001" value={itemForm.lcNo} onChange={e => setItemForm({ ...itemForm, lcNo: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Group</Label><Input placeholder="e.g. Electronics" value={itemForm.group} onChange={e => setItemForm({ ...itemForm, group: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Sub Group</Label><Input placeholder="e.g. Mobile" value={itemForm.subGroup} onChange={e => setItemForm({ ...itemForm, subGroup: e.target.value })} /></div>
+            <div className="space-y-2">
+              <Label>Group</Label>
+              <Select value={itemForm.group} onValueChange={v => setItemForm({ ...itemForm, group: v, subGroup: '' })}>
+                <SelectTrigger><SelectValue placeholder="Select group (or type below)" /></SelectTrigger>
+                <SelectContent>
+                  {groups.map(g => <SelectItem key={g.id} value={g.name}>{g.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Input placeholder="Or type a new group name" value={itemForm.group} onChange={e => setItemForm({ ...itemForm, group: e.target.value, subGroup: '' })} className="text-xs" />
+            </div>
+            <div className="space-y-2">
+              <Label>Sub Group</Label>
+              <Select value={itemForm.subGroup} onValueChange={v => setItemForm({ ...itemForm, subGroup: v })} disabled={!itemForm.group}>
+                <SelectTrigger><SelectValue placeholder={itemForm.group ? "Select sub group (or type below)" : "Select a group first"} /></SelectTrigger>
+                <SelectContent>
+                  {subGroups.filter(sg => sg.groupName === itemForm.group || sg.groupId === groups.find(g => g.name === itemForm.group)?.id).map(sg => <SelectItem key={sg.id} value={sg.name}>{sg.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+              <Input placeholder="Or type a new sub group name" value={itemForm.subGroup} onChange={e => setItemForm({ ...itemForm, subGroup: e.target.value })} className="text-xs" disabled={!itemForm.group} />
+            </div>
             <div className="space-y-2 sm:col-span-2"><Label>Item Name *</Label><Input placeholder="e.g. Samsung Galaxy S23" value={itemForm.itemName} onChange={e => setItemForm({ ...itemForm, itemName: e.target.value })} required /></div>
             <div className="space-y-2"><Label>Price</Label><Input type="number" step="0.01" placeholder="0.00" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e.target.value })} /></div>
             <div className="space-y-2"><Label>UoM</Label><Select value={itemForm.uom} onValueChange={v => setItemForm({ ...itemForm, uom: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['PCS','KG','LTR','MTR','BOX','SET','DOZ','PACK'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
