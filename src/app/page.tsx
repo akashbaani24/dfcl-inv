@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect, useCallback } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -906,99 +906,190 @@ export default function Home() {
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
 
-  // Print sales invoice
+  // Print sales invoice — Bright Solutions style
   const printSalesInvoice = (s: any) => {
-    const win = window.open('', '_blank', 'width=800,height=600')
+    const win = window.open('', '_blank', 'width=820,height=720')
     if (!win) return
     const entityName = s.entity?.name || workingEntity?.name || ''
     const entityDesc = s.entity?.description || ''
+    // Generate initials for hexagonal logo (max 2 chars)
+    const initials = entityName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
     const custName = s.customer?.name || '—'
     const custPhone = s.customer?.phone || ''
     const custAddr = s.customer?.address || ''
+    const orderDateStr = s.orderDate ? new Date(s.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date(s.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+    const deliveryDateStr = s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+    const printedOn = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+
+    // Build items table — each item row + nested making rows in same column style
     const itemsHtml = (s.items || []).map((si: any, i: number) => {
-      const makingRows = (si.makingEntries || []).map((me: any) =>
-        `<tr><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666;text-align:center">—</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666">↳ Making: ${me.name} (${me.quantity} × ${me.unitPrice.toFixed(2)})</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666;text-align:right">—</td><td style="padding:4px 8px;border:1px solid #ddd;font-size:11px;color:#666;text-align:right">${(me.quantity * me.unitPrice).toFixed(2)}</td></tr>`
-      ).join('')
-      const itemTotal = si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0)
-      return `<tr><td style="padding:8px;border:1px solid #ddd;text-align:center">${i+1}</td><td style="padding:8px;border:1px solid #ddd">${si.item?.itemName || '—'}<br><span style="font-size:11px;color:#666">Qty: ${si.quantity} × ${si.unitPrice.toFixed(2)}</span></td><td style="padding:8px;border:1px solid #ddd;text-align:right">${si.unitPrice.toFixed(2)}</td><td style="padding:8px;border:1px solid #ddd;text-align:right;font-weight:bold">${itemTotal.toFixed(2)}</td></tr>${makingRows}`
+      const makingRows = (si.makingEntries || []).map((me: any) => {
+        const meTotal = (me.quantity || 0) * (me.unitPrice || 0)
+        return `<tr class="making-row">
+          <td style="text-align:center;color:#666">↳</td>
+          <td><span class="making-label">Making:</span> ${me.name || '—'} <span class="qty-price">(${me.quantity} × ${(me.unitPrice || 0).toFixed(2)})</span></td>
+          <td class="num">${(me.unitPrice || 0).toFixed(2)}</td>
+          <td class="num">${meTotal.toFixed(2)}</td>
+        </tr>`
+      }).join('')
+      const itemBaseTotal = (si.quantity || 0) * (si.unitPrice || 0)
+      const itemTotal = itemBaseTotal + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0)
+      return `<tr class="item-row">
+        <td class="num">${i + 1}</td>
+        <td><strong>${si.item?.itemName || '—'}</strong><br><span class="qty-price">Quantity: ${si.quantity} × Unit Price: ${(si.unitPrice || 0).toFixed(2)}</span></td>
+        <td class="num">${(si.unitPrice || 0).toFixed(2)}</td>
+        <td class="num bold">${itemTotal.toFixed(2)}</td>
+      </tr>${makingRows}`
     }).join('')
-    const subTotal = (s.items || []).reduce((sum: number, si: any) => sum + si.quantity*si.unitPrice, 0)
-    const makingTotal = (s.items || []).reduce((sum: number, si: any) => sum + (si.makingEntries||[]).reduce((m:number,me:any)=>m+me.quantity*me.unitPrice,0), 0)
+
+    const subTotal = (s.items || []).reduce((sum: number, si: any) => sum + (si.quantity || 0) * (si.unitPrice || 0), 0)
+    const makingTotal = (s.items || []).reduce((sum: number, si: any) => sum + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0), 0)
     const grandTotal = subTotal + makingTotal
     const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
     const due = grandTotal - totalPaid
-    const paymentsHtml = (s.payments || []).map((p: any) =>
-      `<tr><td style="padding:5px 8px;border:1px solid #ddd">${p.receiptNo}</td><td style="padding:5px 8px;border:1px solid #ddd">${new Date(p.paymentDate).toLocaleDateString()}</td><td style="padding:5px 8px;border:1px solid #ddd">${p.paymentType}</td><td style="padding:5px 8px;border:1px solid #ddd">${p.paymentMode}</td><td style="padding:5px 8px;border:1px solid #ddd;text-align:right">${p.amount.toFixed(2)}</td></tr>`
-    ).join('')
-    win.document.write(`<html><head><title>Invoice ${s.salesNo||''}</title><style>
+
+    const paymentsHtml = (s.payments || []).map((p: any) => {
+      const pdStr = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+      let methodStr = p.paymentType || ''
+      if (p.paymentType === 'cheque') methodStr = `Cheque${p.chequeNo ? ` (#${p.chequeNo})` : ''}${p.bankName ? ` - ${p.bankName}` : ''}`
+      else if (p.paymentType === 'cash') methodStr = 'Cash'
+      else if (p.paymentType === 'card') methodStr = 'Card'
+      else if (p.paymentType === 'mobile_banking') methodStr = 'Mobile Banking'
+      return `<tr>
+        <td>${pdStr}</td>
+        <td>${methodStr}</td>
+        <td class="num">${(p.amount || 0).toFixed(2)}</td>
+      </tr>`
+    }).join('')
+
+    win.document.write(`<html><head><title>Invoice ${s.salesNo || ''}</title><style>
       *{margin:0;padding:0;box-sizing:border-box}
-      body{font-family:Arial,sans-serif;padding:30px 40px;color:#222}
-      .header{display:flex;justify-content:space-between;margin-bottom:25px}
-      .header-left{font-size:13px;line-height:1.6}
-      .header-left h2{font-size:18px;margin-bottom:3px}
-      .header-right{text-align:right;font-size:13px;line-height:1.8}
-      .header-right h2{font-size:18px;margin-bottom:5px}
-      .invoice-title{text-align:center;font-size:20px;font-weight:bold;margin:15px 0;padding:8px;border-top:2px solid #222;border-bottom:2px solid #222}
-      table{width:100%;border-collapse:collapse;margin:10px 0}
-      th{background:#f5f5f5;padding:8px;border:1px solid #ddd;font-size:12px;text-align:left}
-      td{padding:6px 8px;border:1px solid #ddd;font-size:12px}
-      .totals{width:300px;margin-left:auto;margin-top:10px}
-      .totals table{width:100%}
-      .totals td{padding:5px 10px;border:1px solid #ddd;font-size:13px}
-      .totals .grand{font-weight:bold;font-size:15px;background:#f5f5f5}
-      .pay-section{margin-top:15px}
-      .pay-section h3{font-size:14px;margin-bottom:5px}
-      .sig{margin-top:50px;display:flex;justify-content:space-between}
-      .sig div{border-top:1px solid #222;padding-top:5px;width:200px;text-align:center;font-size:12px}
+      body{font-family:'Segoe UI',Arial,sans-serif;padding:25px 35px;color:#1f2937;background:#fff;font-size:13px;line-height:1.5}
+      .top-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;padding-bottom:18px;border-bottom:3px solid #1e3a8a}
+      .biz{display:flex;gap:14px;align-items:flex-start}
+      .logo{width:62px;height:62px;background:#1e3a8a;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;letter-spacing:1px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);flex-shrink:0}
+      .biz-info h1{font-size:20px;color:#1e3a8a;letter-spacing:0.5px;margin-bottom:2px;font-weight:700}
+      .biz-info .subtitle{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
+      .biz-info .addr{font-size:11.5px;color:#475569;line-height:1.5}
+      .doc-meta{text-align:right;flex-shrink:0}
+      .doc-meta .doc-title{font-size:24px;font-weight:800;color:#1e3a8a;letter-spacing:2px;margin-bottom:8px}
+      .doc-meta .meta-row{font-size:11.5px;color:#374151;line-height:1.7}
+      .doc-meta .meta-row strong{color:#1e293b;min-width:90px;display:inline-block;text-align:left}
+      .doc-meta .sales-no{font-size:13px;font-weight:700;color:#dc2626;font-family:monospace}
+      .section{margin-top:18px}
+      .section-title{font-size:10.5px;font-weight:700;color:#1e3a8a;letter-spacing:1.5px;text-transform:uppercase;background:#eff6ff;padding:6px 10px;border-left:3px solid #1e3a8a;margin-bottom:8px}
+      .cust-box{padding:8px 12px;font-size:12.5px;line-height:1.7;color:#1f2937}
+      .cust-box .cust-name{font-size:14px;font-weight:700;color:#1e3a8a;margin-bottom:2px}
+      table{width:100%;border-collapse:collapse}
+      th{background:#1e3a8a;color:#fff;padding:9px 10px;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;text-align:left;font-weight:600}
+      th.num,td.num{text-align:right}
+      td{padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px}
+      tr.item-row td{background:#fff}
+      tr.making-row td{background:#f8fafc;color:#64748b;font-size:11px;padding:5px 10px 5px 28px}
+      .making-label{font-style:italic;color:#475569}
+      .qty-price{color:#64748b;font-size:10.5px}
+      td.bold{font-weight:700;color:#1e293b}
+      .summary-section{display:flex;justify-content:flex-end;margin-top:14px}
+      .summary{width:300px;border:1.5px solid #1e3a8a}
+      .summary table{width:100%}
+      .summary td{border:none;padding:7px 12px;font-size:12.5px;border-bottom:1px solid #e5e7eb}
+      .summary tr:last-child td{border-bottom:none}
+      .summary .label{color:#475569}
+      .summary .grand td{background:#1e3a8a;color:#fff;font-weight:700;font-size:14px;padding:9px 12px}
+      .summary .due td{background:#fef2f2;color:#dc2626;font-weight:700;font-size:14px;padding:9px 12px;border-top:2px solid #dc2626}
+      .pay-table{margin-top:0}
+      .pay-table th{background:#475569}
+      .footer{margin-top:30px;padding-top:14px;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;font-size:10.5px;color:#64748b}
+      .sign-row{margin-top:35px;display:flex;justify-content:space-between;padding:0 10px}
+      .sign-row div{border-top:1.5px solid #1e293b;padding-top:5px;width:180px;text-align:center;font-size:11px;color:#475569;font-weight:600}
+      .thank-you{text-align:center;margin-top:20px;font-size:11px;color:#1e3a8a;font-weight:600;letter-spacing:1px}
+      @media print{body{padding:15px 20px}}
     </style></head><body>
-      <div class="header">
-        <div class="header-left">
-          <h2>${entityName}</h2>
-          ${entityDesc ? entityDesc : ''}
+      <div class="top-bar">
+        <div class="biz">
+          <div class="logo">${initials}</div>
+          <div class="biz-info">
+            <h1>${entityName}</h1>
+            <div class="subtitle">Inventory & Sales</div>
+            <div class="addr">${entityDesc || '&nbsp;'}</div>
+          </div>
         </div>
-        <div class="header-right">
-          <h2>SALES INVOICE</h2>
-          <strong>Invoice No:</strong> ${s.salesNo || ''}<br>
-          <strong>Order Date:</strong> ${new Date(s.orderDate || s.createdAt).toLocaleDateString()}<br>
-          <strong>Delivery Date:</strong> ${s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString() : '—'}<br>
-          ${s.notes ? `<strong>Sales Note:</strong> ${s.notes}` : ''}
+        <div class="doc-meta">
+          <div class="doc-title">INVOICE</div>
+          <div class="meta-row sales-no">${s.salesNo || ''}</div>
+          <div class="meta-row"><strong>Order Date:</strong> ${orderDateStr}</div>
+          <div class="meta-row"><strong>Delivery Date:</strong> ${deliveryDateStr}</div>
+          ${s.notes ? `<div class="meta-row"><strong>Sales Note:</strong> ${s.notes}</div>` : ''}
         </div>
       </div>
-      <div style="margin-bottom:15px;font-size:13px;line-height:1.6;border:1px solid #ddd;padding:10px 15px;border-radius:4px">
-        <strong>Customer:</strong> ${custName}<br>
-        ${custPhone ? `<strong>Phone:</strong> ${custPhone}<br>` : ''}
-        ${custAddr ? `<strong>Address:</strong> ${custAddr}` : ''}
+
+      <div class="section">
+        <div class="section-title">Customer Information</div>
+        <div class="cust-box">
+          <div class="cust-name">${custName}</div>
+          ${custPhone ? `<div><strong>Phone:</strong> ${custPhone}</div>` : ''}
+          ${custAddr ? `<div><strong>Address:</strong> ${custAddr}</div>` : ''}
+        </div>
       </div>
-      <table>
-        <thead><tr><th style="width:40px;text-align:center">SL</th><th>Item Description</th><th style="width:80px;text-align:right">Unit Price</th><th style="width:90px;text-align:right">Total</th></tr></thead>
-        <tbody>${itemsHtml}</tbody>
-      </table>
-      <div class="totals">
+
+      <div class="section">
         <table>
-          <tr><td>Sub Total</td><td style="text-align:right">${subTotal.toFixed(2)}</td></tr>
-          <tr><td>Making Charges</td><td style="text-align:right">${makingTotal.toFixed(2)}</td></tr>
-          <tr><td>Total Amount</td><td style="text-align:right">${grandTotal.toFixed(2)}</td></tr>
-          <tr class="grand"><td>Grand Total</td><td style="text-align:right">${grandTotal.toFixed(2)}</td></tr>
+          <thead><tr>
+            <th style="width:40px;text-align:center">SL</th>
+            <th>Item Description</th>
+            <th style="width:110px;text-align:right">Unit Price (BDT)</th>
+            <th style="width:120px;text-align:right">Total (BDT)</th>
+          </tr></thead>
+          <tbody>
+            ${itemsHtml || `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:20px">No items</td></tr>`}
+          </tbody>
         </table>
       </div>
-      ${paymentsHtml ? `
-      <div class="pay-section">
-        <h3>Payment Information</h3>
-        <table>
-          <thead><tr><th>Receipt No</th><th>Date</th><th>Method</th><th>Mode</th><th style="text-align:right">Amount</th></tr></thead>
-          <tbody>${paymentsHtml}</tbody>
-        </table>
-        <div class="totals">
+
+      <div class="summary-section">
+        <div class="summary">
           <table>
-            <tr><td>Total Paid</td><td style="text-align:right">${totalPaid.toFixed(2)}</td></tr>
-            <tr class="grand"><td>Due Amount</td><td style="text-align:right">${due.toFixed(2)}</td></tr>
+            <tr><td class="label">Sub Total</td><td class="num">${subTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Making Charges</td><td class="num">${makingTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Total Amount</td><td class="num">${grandTotal.toFixed(2)}</td></tr>
+            <tr class="grand"><td>GRAND TOTAL</td><td class="num">${grandTotal.toFixed(2)}</td></tr>
           </table>
         </div>
-      </div>` : `<div class="totals"><table><tr class="grand"><td>Due Amount</td><td style="text-align:right">${due.toFixed(2)}</td></tr></table></div>`}
-      <div class="sig">
+      </div>
+
+      ${(s.payments && s.payments.length > 0) ? `
+      <div class="section">
+        <div class="section-title">Payment Information</div>
+        <table class="pay-table">
+          <thead><tr>
+            <th style="width:140px">Payment Date</th>
+            <th>Payment Method</th>
+            <th style="width:120px;text-align:right">Amount (BDT)</th>
+          </tr></thead>
+          <tbody>${paymentsHtml}</tbody>
+        </table>
+        <div class="summary-section">
+          <div class="summary">
+            <table>
+              <tr><td class="label">Total Paid</td><td class="num">${totalPaid.toFixed(2)}</td></tr>
+              <tr class="due"><td>DUE AMOUNT</td><td class="num">${due.toFixed(2)}</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>` : `<div class="summary-section"><div class="summary"><table><tr class="due"><td>DUE AMOUNT</td><td class="num">${due.toFixed(2)}</td></tr></table></div></div>`}
+
+      <div class="sign-row">
         <div>Authorized Signature</div>
         <div>Customer Signature</div>
       </div>
+
+      <div class="thank-you">Thank you for your business!</div>
+
+      <div class="footer">
+        <div>Prepared By: ${user?.displayName || 'System'}</div>
+        <div>Printed On: ${printedOn}</div>
+      </div>
+
       <script>window.onload=()=>window.print()</script>
     </body></html>`)
     win.document.close()
@@ -2119,67 +2210,173 @@ export default function Home() {
 
       {/* Sales Detail Dialog */}
       <Dialog open={showSalesDetailDialog} onOpenChange={setShowSalesDetailDialog}>
-        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
-          {selectedSalesOrder && (
-            <>
-              <DialogHeader><DialogTitle>Sales Order: {selectedSalesOrder.salesNo}</DialogTitle></DialogHeader>
-              <div className="space-y-3">
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><strong>Customer:</strong> {selectedSalesOrder.customer?.name || '—'}</div>
-                  <div><strong>Status:</strong> {statusBadge(selectedSalesOrder.status)}</div>
-                  <div><strong>Order Date:</strong> {new Date(selectedSalesOrder.orderDate || selectedSalesOrder.createdAt).toLocaleDateString()}</div>
-                  <div><strong>Delivery:</strong> {selectedSalesOrder.deliveryDate ? new Date(selectedSalesOrder.deliveryDate).toLocaleDateString() : '—'}</div>
+        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto p-0">
+          {selectedSalesOrder && (() => {
+            const so = selectedSalesOrder
+            const eName = so.entity?.name || workingEntity?.name || ''
+            const eDesc = so.entity?.description || ''
+            const initials = eName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
+            const subTotal = (so.items || []).reduce((sum: number, si: any) => sum + (si.quantity || 0) * (si.unitPrice || 0), 0)
+            const makingTotal = (so.items || []).reduce((sum: number, si: any) => sum + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0), 0)
+            const grandTotal = subTotal + makingTotal
+            const totalPaid = (so.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
+            const due = grandTotal - totalPaid
+            const orderDateStr = so.orderDate ? new Date(so.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date(so.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
+            const deliveryDateStr = so.deliveryDate ? new Date(so.deliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+            return (
+              <>
+              {/* Header bar — Bright Solutions style */}
+              <div className="flex justify-between items-start gap-6 p-5 border-b-[3px] border-primary">
+                <div className="flex gap-3 items-start">
+                  <div className="w-14 h-14 bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold tracking-wide shrink-0" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>{initials}</div>
+                  <div>
+                    <h1 className="text-lg font-bold text-primary leading-tight">{eName}</h1>
+                    <div className="text-[10px] uppercase tracking-[2px] text-muted-foreground mb-1">Inventory &amp; Sales</div>
+                    <div className="text-xs text-muted-foreground">{eDesc || ''}</div>
+                  </div>
                 </div>
-                <Separator />
-                <div>
-                  <h4 className="font-semibold text-sm mb-2">Items</h4>
-                  <Table>
-                    <TableHeader><TableRow><TableHead className="text-xs">Item</TableHead><TableHead className="text-xs text-right">Qty</TableHead><TableHead className="text-xs text-right">Price</TableHead><TableHead className="text-xs text-right">Total</TableHead></TableRow></TableHeader>
-                    <TableBody>
-                      {(selectedSalesOrder.items || []).map((si: any, i: number) => {
-                        const itemTotal = si.quantity * si.unitPrice + (si.makingEntries || []).reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0)
-                        return (
-                          <TableRow key={i}>
-                            <TableCell className="text-xs">{si.item?.itemName || '—'}{(si.makingEntries || []).map((me: any, mi: number) => <div key={mi} className="text-muted-foreground text-[10px]">↳ {me.name}: {me.unitPrice.toFixed(2)} × {me.quantity}</div>)}</TableCell>
-                            <TableCell className="text-xs text-right">{si.quantity}</TableCell>
-                            <TableCell className="text-xs text-right">{si.unitPrice.toFixed(2)}</TableCell>
-                            <TableCell className="text-xs text-right font-semibold">{itemTotal.toFixed(2)}</TableCell>
-                          </TableRow>
-                        )
-                      })}
-                    </TableBody>
-                  </Table>
-                </div>
-                {selectedSalesOrder.payments && selectedSalesOrder.payments.length > 0 && (
-                  <>
-                    <Separator />
-                    <div>
-                      <h4 className="font-semibold text-sm mb-2">Payments</h4>
-                      <Table>
-                        <TableHeader><TableRow><TableHead className="text-xs">Receipt No</TableHead><TableHead className="text-xs">Date</TableHead><TableHead className="text-xs">Type</TableHead><TableHead className="text-xs">Mode</TableHead><TableHead className="text-xs text-right">Amount</TableHead><TableHead className="text-xs text-center"></TableHead></TableRow></TableHeader>
-                        <TableBody>
-                          {selectedSalesOrder.payments.map((p: any, i: number) => (
-                            <TableRow key={i}>
-                              <TableCell className="text-xs font-mono">{p.receiptNo}</TableCell>
-                              <TableCell className="text-xs">{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
-                              <TableCell className="text-xs">{p.paymentType}</TableCell>
-                              <TableCell className="text-xs">{p.paymentMode}</TableCell>
-                              <TableCell className="text-xs text-right font-semibold">{p.amount.toFixed(2)}</TableCell>
-                              <TableCell className="text-center"><Button variant="ghost" size="sm" onClick={() => printMoneyReceipt(selectedSalesOrder, p)} title="Print Receipt"><FileText className="w-3 h-3" /></Button></TableCell>
-                            </TableRow>
-                          ))}
-                        </TableBody>
-                      </Table>
-                    </div>
-                  </>
-                )}
-                <div className="flex gap-2 pt-2">
-                  <Button variant="outline" size="sm" onClick={() => printSalesInvoice(selectedSalesOrder)}><FileText className="w-4 h-4 mr-2" />Print Invoice</Button>
-                  <Button variant="outline" size="sm" onClick={() => { setEditingSalesOrderId(selectedSalesOrder.id); setShowAddPaymentDialog(true) }}><DollarSign className="w-4 h-4 mr-2" />Add Payment</Button>
+                <div className="text-right">
+                  <div className="text-xl font-extrabold text-primary tracking-[2px]">SALES ORDER</div>
+                  <div className="text-[13px] font-bold text-red-600 font-mono mt-1">{so.salesNo || ''}</div>
+                  <div className="text-[11px] mt-1"><span className="font-semibold">Order Date:</span> {orderDateStr}</div>
+                  <div className="text-[11px]"><span className="font-semibold">Delivery Date:</span> {deliveryDateStr}</div>
+                  {so.notes && <div className="text-[11px]"><span className="font-semibold">Sales Note:</span> {so.notes}</div>}
                 </div>
               </div>
-            </>
-          )}
+
+              <div className="p-5 space-y-4">
+                {/* Status badge */}
+                <div className="flex items-center gap-3 text-sm">
+                  <span className="text-muted-foreground">Status:</span>
+                  {statusBadge(so.status)}
+                </div>
+
+                {/* Customer Information */}
+                <div>
+                  <div className="text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-1.5 border-l-[3px] border-primary mb-2">Customer Information</div>
+                  <div className="px-3 py-2 text-sm">
+                    <div className="text-base font-bold text-primary mb-1">{so.customer?.name || '—'}</div>
+                    {so.customer?.phone && <div><strong className="text-xs">Phone:</strong> {so.customer.phone}</div>}
+                    {so.customer?.address && <div><strong className="text-xs">Address:</strong> {so.customer.address}</div>}
+                  </div>
+                </div>
+
+                {/* Items Table */}
+                <div>
+                  <div className="text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-1.5 border-l-[3px] border-primary mb-2">Items</div>
+                  <div className="border rounded-md overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-primary text-primary-foreground">
+                        <tr>
+                          <th className="px-2 py-2 text-center w-10 text-[11px] uppercase tracking-wide">SL</th>
+                          <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item Description</th>
+                          <th className="px-2 py-2 text-right w-28 text-[11px] uppercase tracking-wide">Unit Price</th>
+                          <th className="px-2 py-2 text-right w-28 text-[11px] uppercase tracking-wide">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(so.items || []).map((si: any, i: number) => {
+                          const itemBaseTotal = (si.quantity || 0) * (si.unitPrice || 0)
+                          const itemTotal = itemBaseTotal + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0)
+                          return (
+                            <React.Fragment key={i}>
+                              <tr className="border-t">
+                                <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
+                                <td className="px-2 py-2"><strong>{si.item?.itemName || '—'}</strong><br /><span className="text-[10.5px] text-muted-foreground">Quantity: {si.quantity} × Unit Price: {(si.unitPrice || 0).toFixed(2)}</span></td>
+                                <td className="px-2 py-2 text-right">{(si.unitPrice || 0).toFixed(2)}</td>
+                                <td className="px-2 py-2 text-right font-bold">{itemTotal.toFixed(2)}</td>
+                              </tr>
+                              {(si.makingEntries || []).map((me: any, mi: number) => {
+                                const meTotal = (me.quantity || 0) * (me.unitPrice || 0)
+                                return (
+                                  <tr key={`m-${i}-${mi}`} className="border-t bg-muted/20">
+                                    <td className="px-2 py-1.5 text-center text-muted-foreground">↳</td>
+                                    <td className="px-2 py-1.5 text-muted-foreground"><em className="text-[11px]">Making:</em> {me.name || '—'} <span className="text-[10.5px] text-muted-foreground">({me.quantity} × {(me.unitPrice || 0).toFixed(2)})</span></td>
+                                    <td className="px-2 py-1.5 text-right text-muted-foreground">{(me.unitPrice || 0).toFixed(2)}</td>
+                                    <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">{meTotal.toFixed(2)}</td>
+                                  </tr>
+                                )
+                              })}
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Summary */}
+                <div className="flex justify-end">
+                  <div className="w-[280px] border border-primary rounded-md overflow-hidden">
+                    <table className="w-full text-sm">
+                      <tbody>
+                        <tr><td className="px-3 py-1.5 text-muted-foreground">Sub Total</td><td className="px-3 py-1.5 text-right font-mono">{subTotal.toFixed(2)}</td></tr>
+                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Making Charges</td><td className="px-3 py-1.5 text-right font-mono">{makingTotal.toFixed(2)}</td></tr>
+                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Total Amount</td><td className="px-3 py-1.5 text-right font-mono">{grandTotal.toFixed(2)}</td></tr>
+                        <tr className="bg-primary text-primary-foreground"><td className="px-3 py-2 font-bold">GRAND TOTAL</td><td className="px-3 py-2 text-right font-mono font-bold">{grandTotal.toFixed(2)}</td></tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Payments */}
+                {so.payments && so.payments.length > 0 && (
+                  <div>
+                    <div className="text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-1.5 border-l-[3px] border-primary mb-2">Payment Information</div>
+                    <div className="border rounded-md overflow-x-auto">
+                      <table className="w-full text-sm">
+                        <thead className="bg-slate-600 text-white">
+                          <tr>
+                            <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Receipt No</th>
+                            <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Payment Date</th>
+                            <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Method</th>
+                            <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Amount</th>
+                            <th className="px-2 py-2 w-12"></th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {so.payments.map((p: any, i: number) => {
+                            let methodStr = p.paymentType || ''
+                            if (p.paymentType === 'cheque') methodStr = `Cheque${p.chequeNo ? ` (#${p.chequeNo})` : ''}`
+                            else if (p.paymentType === 'cash') methodStr = 'Cash'
+                            else if (p.paymentType === 'card') methodStr = 'Card'
+                            else if (p.paymentType === 'mobile_banking') methodStr = 'Mobile Banking'
+                            return (
+                              <tr key={i} className="border-t">
+                                <td className="px-2 py-2 font-mono text-xs">{p.receiptNo}</td>
+                                <td className="px-2 py-2 text-xs">{new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                <td className="px-2 py-2 text-xs">{methodStr} <span className="text-[10px] text-muted-foreground">({p.paymentMode})</span></td>
+                                <td className="px-2 py-2 text-right font-semibold">{(p.amount || 0).toFixed(2)}</td>
+                                <td className="px-2 py-2 text-center"><Button variant="ghost" size="sm" onClick={() => printMoneyReceipt(so, p)} title="Print Receipt"><FileText className="w-3 h-3" /></Button></td>
+                              </tr>
+                            )
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                    <div className="flex justify-end mt-2">
+                      <div className="w-[280px] border border-red-300 rounded-md overflow-hidden">
+                        <table className="w-full text-sm">
+                          <tbody>
+                            <tr><td className="px-3 py-1.5 text-muted-foreground">Total Paid</td><td className="px-3 py-1.5 text-right font-mono">{totalPaid.toFixed(2)}</td></tr>
+                            <tr className="bg-red-50 text-red-700 border-t-2 border-red-300"><td className="px-3 py-2 font-bold">DUE AMOUNT</td><td className="px-3 py-2 text-right font-mono font-bold">{due.toFixed(2)}</td></tr>
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Action buttons */}
+                <div className="flex flex-wrap gap-2 pt-3 border-t">
+                  <Button variant="default" size="sm" onClick={() => printSalesInvoice(so)}><FileText className="w-4 h-4 mr-2" />Print Invoice</Button>
+                  <Button variant="outline" size="sm" onClick={() => { setEditingSalesOrderId(so.id); setShowAddPaymentDialog(true) }}><DollarSign className="w-4 h-4 mr-2" />Add Payment</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setShowSalesDetailDialog(false)}><X className="w-4 h-4 mr-2" />Close</Button>
+                </div>
+              </div>
+              </>
+            )
+          })()}
         </DialogContent>
       </Dialog>
 
@@ -2209,141 +2406,234 @@ export default function Home() {
   )
 
   // New Sales Order — full page (not dialog)
-  const renderNewSalesOrderPage = () => (
-    <div className="space-y-4 max-w-4xl mx-auto">
+  const renderNewSalesOrderPage = () => {
+    // Live calculations
+    const subTotal = salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0)
+    const makingTotal = salesOrderForm.items.reduce((s, item) => s + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0)
+    const grandTotal = subTotal + makingTotal
+    const totalPaid = salesOrderForm.payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
+    const due = grandTotal - totalPaid
+    const entityName = workingEntity?.name || ''
+    const initials = entityName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
+
+    return (
+    <div className="space-y-4 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold">New Sales Order</h2>
         <Button variant="outline" onClick={() => { resetSalesOrderForm(); setCurrentView('salesOrder') }}><X className="w-4 h-4 mr-2" />Back to List</Button>
       </div>
-      <Card>
-        <CardContent className="pt-6">
-          <form onSubmit={handleSaveSalesOrder} className="space-y-6">
-            {/* Customer: Existing vs New */}
-            <div className="space-y-3">
-              <Label className="text-sm font-bold">Customer</Label>
-              <div className="flex gap-2">
-                <Button type="button" size="sm" variant={salesCustomerMode === 'existing' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('existing')}>Existing</Button>
-                <Button type="button" size="sm" variant={salesCustomerMode === 'new' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('new')}>New Customer</Button>
-              </div>
-              {salesCustomerMode === 'existing' ? (
-                <div className="space-y-2">
-                  <Input placeholder="Search by name or phone..." value={salesCustomerSearch} onChange={e => setSalesCustomerSearch(e.target.value)} className="text-sm" />
-                  <Select value={salesOrderForm.customerId} onValueChange={v => setSalesOrderForm({...salesOrderForm, customerId: v})}>
-                    <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                    <SelectContent>{customers.filter(c => { if (!salesCustomerSearch) return true; const s = salesCustomerSearch.toLowerCase(); return c.name.toLowerCase().includes(s) || (c.phone||'').includes(salesCustomerSearch) }).map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</SelectItem>)}</SelectContent>
-                  </Select>
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 border rounded-lg p-3 bg-muted/30">
-                  <div className="space-y-1"><Label className="text-xs">Name *</Label><Input placeholder="Customer name" value={salesOrderForm.newCustomerName} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerName: e.target.value})} required /></div>
-                  <div className="space-y-1"><Label className="text-xs">Phone</Label><Input placeholder="Phone" value={salesOrderForm.newCustomerPhone} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerPhone: e.target.value})} /></div>
-                  <div className="space-y-1"><Label className="text-xs">Email</Label><Input placeholder="Email" value={salesOrderForm.newCustomerEmail} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerEmail: e.target.value})} /></div>
-                  <div className="space-y-1"><Label className="text-xs">Address</Label><Input placeholder="Address" value={salesOrderForm.newCustomerAddress} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerAddress: e.target.value})} /></div>
-                </div>
-              )}
-            </div>
 
-            <div className="grid grid-cols-3 gap-4">
-              <div className="space-y-2"><Label>Order Date</Label><Input type="date" value={salesOrderForm.orderDate} onChange={e => setSalesOrderForm({...salesOrderForm, orderDate: e.target.value})} /></div>
-              <div className="space-y-2"><Label>Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm({...salesOrderForm, deliveryDate: e.target.value})} /></div>
-              <div className="space-y-2"><Label>Status</Label><Select value={salesOrderForm.status} onValueChange={v => setSalesOrderForm({...salesOrderForm, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
+      <form onSubmit={handleSaveSalesOrder} className="space-y-5">
+        {/* Header bar — Bright Solutions style */}
+        <div className="flex justify-between items-start gap-6 pb-4 border-b-[3px] border-primary bg-card rounded-t-lg p-5">
+          <div className="flex gap-3 items-start">
+            <div className="w-14 h-14 bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold tracking-wide shrink-0" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>{initials}</div>
+            <div>
+              <h1 className="text-lg font-bold text-primary leading-tight">{entityName}</h1>
+              <div className="text-[10px] uppercase tracking-[2px] text-muted-foreground mb-1">Inventory &amp; Sales</div>
+              <div className="text-xs text-muted-foreground">{workingEntity?.description || ''}</div>
             </div>
+          </div>
+          <div className="text-right">
+            <div className="text-xl font-extrabold text-primary tracking-[2px]">NEW SALES</div>
+            <div className="text-xs text-muted-foreground mt-1">Sales ID auto-generated on save</div>
+            <div className="text-[11px] mt-1"><span className="font-semibold">Order Date:</span> {new Date(salesOrderForm.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+          </div>
+        </div>
 
-            <Separator />
-            {/* Items */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-bold">Items</Label>
-                <span className="text-xs text-muted-foreground">Sales ID auto-generated on save</span>
-              </div>
-              <div className="flex gap-2">
-                <Input placeholder="Search item to add..." value={salesItemSearch} onChange={e => setSalesItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSalesItemSearch())} className="flex-1" />
-                <Button type="button" variant="outline" onClick={handleSalesItemSearch}><Search className="w-4 h-4" /></Button>
-              </div>
-              {salesItemResults.length > 0 && (
-                <div className="border rounded-lg max-h-40 overflow-y-auto bg-background shadow-lg" style={{ zIndex: 1000, position: 'relative' }}>
-                  {salesItemResults.map((item, idx) => (
-                    <div key={item.id || idx} onClick={() => addSalesItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
-                      {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
-                    </div>
-                  ))}
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-5">
+          {/* Left column: customer + items + payments */}
+          <div className="lg:col-span-2 space-y-5">
+            {/* Customer Section */}
+            <div className="bg-card rounded-lg border">
+              <div className="text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-2 border-l-[3px] border-primary rounded-t-lg">Customer Information</div>
+              <div className="p-4 space-y-3">
+                <div className="flex gap-2">
+                  <Button type="button" size="sm" variant={salesCustomerMode === 'existing' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('existing')}>Existing</Button>
+                  <Button type="button" size="sm" variant={salesCustomerMode === 'new' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('new')}>New Customer</Button>
                 </div>
-              )}
-              {salesOrderForm.items.map((item, i) => {
-                const itemTotal = (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0) + item.makingEntries.reduce((s, me) => s + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0)
-                return (
-                <div key={i} className="border rounded-lg p-4 space-y-3 bg-card">
-                  <div className="flex items-center justify-between">
-                    <span className="font-medium">{item.itemName}</span>
-                    <div className="flex items-center gap-2">
-                      <span className="text-sm font-semibold text-primary">{itemTotal.toFixed(2)}</span>
-                      <Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive"><X className="w-4 h-4" /></Button>
-                    </div>
+                {salesCustomerMode === 'existing' ? (
+                  <div className="space-y-2">
+                    <Input placeholder="Search by name or phone..." value={salesCustomerSearch} onChange={e => setSalesCustomerSearch(e.target.value)} className="text-sm" />
+                    <Select value={salesOrderForm.customerId} onValueChange={v => setSalesOrderForm({...salesOrderForm, customerId: v})}>
+                      <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                      <SelectContent>{customers.filter(c => { if (!salesCustomerSearch) return true; const s = salesCustomerSearch.toLowerCase(); return c.name.toLowerCase().includes(s) || (c.phone||'').includes(salesCustomerSearch) }).map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</SelectItem>)}</SelectContent>
+                    </Select>
                   </div>
-                  <div className="grid grid-cols-2 gap-3">
-                    <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input type="number" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-9" /></div>
-                    <div className="space-y-1"><Label className="text-xs">Unit Price</Label><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-9" /></div>
+                ) : (
+                  <div className="grid grid-cols-2 gap-3 p-3 rounded-md bg-muted/30 border">
+                    <div className="space-y-1"><Label className="text-xs">Name *</Label><Input placeholder="Customer name" value={salesOrderForm.newCustomerName} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerName: e.target.value})} required /></div>
+                    <div className="space-y-1"><Label className="text-xs">Phone</Label><Input placeholder="Phone" value={salesOrderForm.newCustomerPhone} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerPhone: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Email</Label><Input placeholder="Email" value={salesOrderForm.newCustomerEmail} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerEmail: e.target.value})} /></div>
+                    <div className="space-y-1"><Label className="text-xs">Address</Label><Input placeholder="Address" value={salesOrderForm.newCustomerAddress} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerAddress: e.target.value})} /></div>
                   </div>
-                  {item.makingEntries.length > 0 && (
-                    <div className="space-y-2 pl-3 border-l-2 border-muted">
-                      {item.makingEntries.map((me, mi) => (
-                        <div key={mi} className="flex gap-2 items-end">
-                          <div className="flex-1"><Label className="text-xs">Making Name</Label><Input placeholder="e.g. Stitching" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-8 text-sm" /></div>
-                          <div className="w-16"><Label className="text-xs">Qty</Label><Input type="number" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-8 text-sm" /></div>
-                          <div className="w-24"><Label className="text-xs">Unit Price</Label><Input type="number" step="0.01" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-8 text-sm" /></div>
-                          <Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-8"><X className="w-3 h-3" /></Button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                  <Button type="button" variant="ghost" size="sm" onClick={() => addMakingEntry(i)} className="text-xs">+ Add Making</Button>
-                </div>
-                )
-              })}
-              {salesOrderForm.items.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No items added yet. Search and add items above.</p>}
+                )}
+              </div>
             </div>
 
-            {/* Order Total */}
-            {salesOrderForm.items.length > 0 && (
-              <div className="flex justify-end">
-                <div className="text-right space-y-1 border rounded-lg p-4 bg-muted/30 min-w-[200px]">
-                  <p className="text-sm">Order Total: <span className="font-bold text-lg">{salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0) + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0).toFixed(2)}</span></p>
-                  {salesOrderForm.payments.length > 0 && <p className="text-sm">Paid: {salesOrderForm.payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toFixed(2)}</p>}
-                  {salesOrderForm.payments.length > 0 && <p className="text-sm font-bold">Due: {(salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0) + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0) - salesOrderForm.payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)).toFixed(2)}</p>}
-                </div>
-              </div>
-            )}
+            {/* Order Meta */}
+            <div className="bg-card rounded-lg border p-4 grid grid-cols-3 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Order Date</Label><Input type="date" value={salesOrderForm.orderDate} onChange={e => setSalesOrderForm({...salesOrderForm, orderDate: e.target.value})} className="h-9" /></div>
+              <div className="space-y-1"><Label className="text-xs">Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm({...salesOrderForm, deliveryDate: e.target.value})} className="h-9" /></div>
+              <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={salesOrderForm.status} onValueChange={v => setSalesOrderForm({...salesOrderForm, status: v})}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
+            </div>
 
-            <Separator />
+            {/* Items — Table Style with inline qty + unit price */}
+            <div className="bg-card rounded-lg border">
+              <div className="flex items-center justify-between text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-2 border-l-[3px] border-primary rounded-t-lg">
+                <span>Items</span>
+                <span className="text-muted-foreground normal-case tracking-normal text-[11px]">Add items via search below</span>
+              </div>
+              <div className="p-3 space-y-3">
+                <div className="flex gap-2">
+                  <Input placeholder="Search item to add..." value={salesItemSearch} onChange={e => setSalesItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSalesItemSearch())} className="flex-1" />
+                  <Button type="button" variant="outline" onClick={handleSalesItemSearch}><Search className="w-4 h-4" /></Button>
+                </div>
+                {salesItemResults.length > 0 && (
+                  <div className="border rounded-md max-h-40 overflow-y-auto bg-background shadow-lg relative z-[1000]">
+                    {salesItemResults.map((item, idx) => (
+                      <div key={item.id || idx} onClick={() => addSalesItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
+                        {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {/* Items table */}
+                {salesOrderForm.items.length > 0 ? (
+                  <div className="border rounded-md overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead className="bg-primary text-primary-foreground">
+                        <tr>
+                          <th className="px-2 py-2 text-center w-10 text-[11px] uppercase tracking-wide">SL</th>
+                          <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item Description</th>
+                          <th className="px-2 py-2 text-right w-24 text-[11px] uppercase tracking-wide">Qty</th>
+                          <th className="px-2 py-2 text-right w-28 text-[11px] uppercase tracking-wide">Unit Price</th>
+                          <th className="px-2 py-2 text-right w-28 text-[11px] uppercase tracking-wide">Total</th>
+                          <th className="px-2 py-2 w-10"></th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {salesOrderForm.items.map((item, i) => {
+                          const itemBaseTotal = (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+                          const itemMakingTotal = item.makingEntries.reduce((s, me) => s + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0)
+                          const itemTotal = itemBaseTotal + itemMakingTotal
+                          return (
+                            <React.Fragment key={i}>
+                            <tr className="border-t hover:bg-muted/20">
+                              <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
+                              <td className="px-2 py-2 font-medium">{item.itemName}</td>
+                              <td className="px-2 py-2 text-right"><Input type="number" min="1" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-right text-sm w-full min-w-[70px]" /></td>
+                              <td className="px-2 py-2 text-right"><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
+                              <td className="px-2 py-2 text-right font-bold">{itemBaseTotal.toFixed(2)}</td>
+                              <td className="px-2 py-2 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button></td>
+                            </tr>
+                            {/* Making entries — same column style */}
+                            {item.makingEntries.map((me, mi) => {
+                              const meTotal = (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0)
+                              return (
+                                <tr key={`m-${i}-${mi}`} className="border-t bg-muted/20">
+                                  <td className="px-2 py-1.5 text-center text-muted-foreground">↳</td>
+                                  <td className="px-2 py-1.5">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] italic text-muted-foreground">Making:</span>
+                                      <Input placeholder="e.g. Stitching" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs flex-1 min-w-[120px]" />
+                                    </div>
+                                  </td>
+                                  <td className="px-2 py-1.5 text-right"><Input type="number" min="1" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-right text-xs w-full min-w-[70px]" /></td>
+                                  <td className="px-2 py-1.5 text-right"><Input type="number" step="0.01" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-right text-xs w-full min-w-[90px]" /></td>
+                                  <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">{meTotal.toFixed(2)}</td>
+                                  <td className="px-2 py-1.5 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-6 w-6 p-0"><X className="w-3 h-3" /></Button></td>
+                                </tr>
+                              )
+                            })}
+                            <tr className="border-t bg-muted/10">
+                              <td colSpan={6} className="px-2 py-1.5">
+                                <Button type="button" variant="ghost" size="sm" onClick={() => addMakingEntry(i)} className="text-xs h-7 text-primary hover:text-primary">+ Add Making Charge</Button>
+                              </td>
+                            </tr>
+                            <tr className="border-t bg-muted/5">
+                              <td colSpan={4} className="px-2 py-1.5 text-right text-[11px] text-muted-foreground font-medium">Item Total (incl. making):</td>
+                              <td className="px-2 py-1.5 text-right font-bold text-primary">{itemTotal.toFixed(2)}</td>
+                              <td></td>
+                            </tr>
+                            </React.Fragment>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                ) : <p className="text-sm text-muted-foreground text-center py-6 border rounded-md border-dashed">No items added yet. Search and add items above.</p>}
+              </div>
+            </div>
+
             {/* Payments */}
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Label className="text-sm font-bold">Payments (Optional)</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addPayment}><Plus className="w-3 h-3 mr-1" />Add Payment</Button>
+            <div className="bg-card rounded-lg border">
+              <div className="flex items-center justify-between text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-2 border-l-[3px] border-primary rounded-t-lg">
+                <span>Payments (Optional)</span>
+                <Button type="button" variant="outline" size="sm" onClick={addPayment} className="h-7 normal-case tracking-normal text-xs"><Plus className="w-3 h-3 mr-1" />Add Payment</Button>
               </div>
-              {salesOrderForm.payments.map((p, i) => (
-                <div key={i} className="border rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-2">
-                  <div className="space-y-1"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" value={p.amount} onChange={e => updatePayment(i, 'amount', e.target.value)} className="h-8 text-sm" /></div>
-                  <div className="space-y-1"><Label className="text-xs">Type</Label><Select value={p.paymentType} onValueChange={v => updatePayment(i, 'paymentType', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-1"><Label className="text-xs">Mode</Label><Select value={p.paymentMode} onValueChange={v => updatePayment(i, 'paymentMode', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="advance">Advance</SelectItem><SelectItem value="collection">Collection</SelectItem></SelectContent></Select></div>
-                  <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={p.paymentDate} onChange={e => updatePayment(i, 'paymentDate', e.target.value)} className="h-8 text-sm" /></div>
-                  {p.paymentType === 'cheque' && (<><div className="space-y-1"><Label className="text-xs">Cheque No</Label><Input value={p.chequeNo} onChange={e => updatePayment(i, 'chequeNo', e.target.value)} className="h-8 text-sm" /></div><div className="space-y-1"><Label className="text-xs">Bank</Label><Input value={p.bankName} onChange={e => updatePayment(i, 'bankName', e.target.value)} className="h-8 text-sm" /></div></>)}
-                  <div className="flex items-end"><Button type="button" variant="ghost" size="sm" onClick={() => removePayment(i)} className="text-destructive"><X className="w-3 h-3" /></Button></div>
+              <div className="p-3 space-y-3">
+                {salesOrderForm.payments.map((p, i) => (
+                  <div key={i} className="border rounded-md p-3 grid grid-cols-2 md:grid-cols-4 gap-2 bg-muted/10">
+                    <div className="space-y-1"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" value={p.amount} onChange={e => updatePayment(i, 'amount', e.target.value)} className="h-8 text-sm" /></div>
+                    <div className="space-y-1"><Label className="text-xs">Type</Label><Select value={p.paymentType} onValueChange={v => updatePayment(i, 'paymentType', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs">Mode</Label><Select value={p.paymentMode} onValueChange={v => updatePayment(i, 'paymentMode', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="advance">Advance</SelectItem><SelectItem value="collection">Collection</SelectItem></SelectContent></Select></div>
+                    <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={p.paymentDate} onChange={e => updatePayment(i, 'paymentDate', e.target.value)} className="h-8 text-sm" /></div>
+                    {p.paymentType === 'cheque' && (<><div className="space-y-1"><Label className="text-xs">Cheque No</Label><Input value={p.chequeNo} onChange={e => updatePayment(i, 'chequeNo', e.target.value)} className="h-8 text-sm" /></div><div className="space-y-1"><Label className="text-xs">Bank</Label><Input value={p.bankName} onChange={e => updatePayment(i, 'bankName', e.target.value)} className="h-8 text-sm" /></div></>)}
+                    <div className="flex items-end"><Button type="button" variant="ghost" size="sm" onClick={() => removePayment(i)} className="text-destructive"><X className="w-3 h-3" /></Button></div>
+                  </div>
+                ))}
+                {salesOrderForm.payments.length === 0 && <p className="text-xs text-muted-foreground text-center py-3 border border-dashed rounded-md">No payments added. Receipt number auto-generated on save.</p>}
+              </div>
+            </div>
+
+            <div className="space-y-2 bg-card rounded-lg border p-4">
+              <Label className="text-xs">Sales Note</Label>
+              <Input value={salesOrderForm.notes} onChange={e => setSalesOrderForm({...salesOrderForm, notes: e.target.value})} placeholder="Any special instruction or note for this sale..." />
+            </div>
+          </div>
+
+          {/* Right column: Sticky Order Summary */}
+          <div className="lg:col-span-1">
+            <div className="sticky top-4 space-y-4">
+              <div className="bg-card rounded-lg border border-primary overflow-hidden">
+                <div className="text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-2 border-l-[3px] border-primary">Order Summary</div>
+                <div className="p-4 space-y-2 text-sm">
+                  <div className="flex justify-between text-muted-foreground"><span>Sub Total</span><span className="font-mono">{subTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Making Charges</span><span className="font-mono">{makingTotal.toFixed(2)}</span></div>
+                  <Separator className="my-2" />
+                  <div className="flex justify-between text-base"><span className="font-semibold">Total Amount</span><span className="font-mono">{grandTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between bg-primary text-primary-foreground px-3 py-2 rounded-md text-base font-bold mt-2"><span>GRAND TOTAL</span><span className="font-mono">{grandTotal.toFixed(2)}</span></div>
+                  {totalPaid > 0 && (
+                    <>
+                      <div className="flex justify-between text-muted-foreground mt-2"><span>Total Paid</span><span className="font-mono">{totalPaid.toFixed(2)}</span></div>
+                      <div className={`flex justify-between px-3 py-2 rounded-md text-base font-bold ${due > 0 ? 'bg-red-50 text-red-700 border border-red-300' : 'bg-green-50 text-green-700 border border-green-300'}`}>
+                        <span>{due > 0 ? 'DUE' : 'CHANGE'}</span>
+                        <span className="font-mono">{Math.abs(due).toFixed(2)}</span>
+                      </div>
+                    </>
+                  )}
                 </div>
-              ))}
-            </div>
+              </div>
 
-            <div className="space-y-2"><Label>Notes</Label><Input value={salesOrderForm.notes} onChange={e => setSalesOrderForm({...salesOrderForm, notes: e.target.value})} /></div>
+              <div className="bg-card rounded-lg border p-3 text-[11px] text-muted-foreground space-y-1">
+                <div className="flex justify-between"><span>Items:</span><span className="font-medium text-foreground">{salesOrderForm.items.length}</span></div>
+                <div className="flex justify-between"><span>Making entries:</span><span className="font-medium text-foreground">{salesOrderForm.items.reduce((s, i) => s + i.makingEntries.length, 0)}</span></div>
+                <div className="flex justify-between"><span>Payments:</span><span className="font-medium text-foreground">{salesOrderForm.payments.length}</span></div>
+              </div>
 
-            <div className="flex gap-3 pt-4">
-              <Button type="submit" size="lg"><Save className="w-4 h-4 mr-2" />Create Sales Order</Button>
-              <Button type="button" variant="outline" size="lg" onClick={() => { resetSalesOrderForm(); setCurrentView('salesOrder') }}>Cancel</Button>
+              <div className="space-y-2">
+                <Button type="submit" size="lg" className="w-full"><Save className="w-4 h-4 mr-2" />Create Sales Order</Button>
+                <Button type="button" variant="outline" size="lg" className="w-full" onClick={() => { resetSalesOrderForm(); setCurrentView('salesOrder') }}>Cancel</Button>
+              </div>
             </div>
-          </form>
-        </CardContent>
-      </Card>
+          </div>
+        </div>
+      </form>
     </div>
-  )
+    )
+  }
 
   const renderSalesReturnPage = () => (
     <div className="space-y-4">
@@ -4392,20 +4682,22 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
               </div>
             </SheetContent>
           </Sheet>
-          {/* Icon-only buttons */}
-          <Button variant={currentView === 'itemPrice' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('itemPrice')} title="Item Price"><TrendingUp className="w-4 h-4" /></Button>
-          <Button variant={['myEntityStock','allEntityStock'].includes(currentView) ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('myEntityStock')} title="Stock View"><BarChart3 className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'itemAdjustment' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('itemAdjustment')} title="Adjustment"><Settings2 className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'transfer' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('transfer')} title="Transfer"><ArrowRightLeft className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'receive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('receive')} title="Receive"><ArrowDownToLine className="w-4 h-4" /></Button>
-          <Button variant={['salesOrder','salesReturn'].includes(currentView) ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('salesOrder')} title="Sales"><ShoppingCart className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'booking' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('booking')} title="Booking"><Receipt className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'bookingReasons' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('bookingReasons')} title="Booking Reasons"><FileText className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'incentive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('incentive')} title="Incentive"><DollarSign className="w-4 h-4" /></Button>
-          <Button variant={currentView === 'reports' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('reports')} title="Reports"><FileText className="w-4 h-4" /></Button>
-          {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && <Button variant={isMasterDataActive ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => { const firstVisible = visibleMasterDataItems[0]; if (firstVisible) setCurrentView(firstVisible.key); }} title="Master Data"><Database className="w-4 h-4" /></Button>}
-          {isAdmin && <Button variant={currentView === 'settings' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('settings')} title="Settings"><Settings2 className="w-4 h-4" /></Button>}
-          <div className="mt-auto">
+          {/* Icon-only buttons — scrollable */}
+          <div className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col items-center w-full py-2">
+            <Button variant={currentView === 'itemPrice' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('itemPrice')} title="Item Price"><TrendingUp className="w-4 h-4" /></Button>
+            <Button variant={['myEntityStock','allEntityStock'].includes(currentView) ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('myEntityStock')} title="Stock View"><BarChart3 className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'itemAdjustment' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('itemAdjustment')} title="Adjustment"><Settings2 className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'transfer' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('transfer')} title="Transfer"><ArrowRightLeft className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'receive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('receive')} title="Receive"><ArrowDownToLine className="w-4 h-4" /></Button>
+            <Button variant={['salesOrder','salesReturn'].includes(currentView) ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('salesOrder')} title="Sales"><ShoppingCart className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'booking' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('booking')} title="Booking"><Receipt className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'bookingReasons' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('bookingReasons')} title="Booking Reasons"><FileText className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'incentive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('incentive')} title="Incentive"><DollarSign className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'reports' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('reports')} title="Reports"><FileText className="w-4 h-4" /></Button>
+            {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && <Button variant={isMasterDataActive ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => { const firstVisible = visibleMasterDataItems[0]; if (firstVisible) setCurrentView(firstVisible.key); }} title="Master Data"><Database className="w-4 h-4" /></Button>}
+            {isAdmin && <Button variant={currentView === 'settings' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('settings')} title="Settings"><Settings2 className="w-4 h-4" /></Button>}
+          </div>
+          <div className="shrink-0 pt-2 border-t w-full flex justify-center">
             <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive" onClick={handleLogout} title="Sign Out"><LogOut className="w-4 h-4" /></Button>
           </div>
         </aside>
