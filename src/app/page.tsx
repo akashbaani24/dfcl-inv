@@ -266,6 +266,7 @@ export default function Home() {
   const [masterDataOpen, setMasterDataOpen] = useState(true)
   const [stockViewOpen, setStockViewOpen] = useState(false)
   const [salesOpen, setSalesOpen] = useState(false)
+  const [purchaseOpen, setPurchaseOpen] = useState(false)
 
   // Working entity (selected after login)
   const [workingEntity, setWorkingEntity] = useState<{ id: string; name: string } | null>(null)
@@ -1738,6 +1739,7 @@ export default function Home() {
   const isMasterDataActive = visibleMasterDataItems.some(item => item.key === currentView)
   const isStockViewActive = ['myEntityStock', 'allEntityStock'].includes(currentView)
   const isSalesActive = ['salesOrder', 'salesReturn'].includes(currentView)
+  const isPurchaseActive = ['purchase', 'newPurchase', 'purchaseApproval', 'purchaseDetail'].includes(currentView)
 
   // Helper: render Master Data section
   const renderMasterDataSection = (onNavigate?: () => void) => (
@@ -1768,9 +1770,33 @@ export default function Home() {
     <div className="space-y-0.5">
       {functionItems.map(item => {
         if (item.isParent && item.children) {
-          const isOpen = item.key === 'stockView' ? stockViewOpen : salesOpen
-          const isActive = item.key === 'stockView' ? isStockViewActive : isSalesActive
-          const toggleOpen = item.key === 'stockView' ? () => setStockViewOpen(!stockViewOpen) : () => setSalesOpen(!salesOpen)
+          // Each parent menu has its own open state and active check
+          let isOpen: boolean
+          let isActive: boolean
+          let toggleOpen: () => void
+          if (item.key === 'stockView') {
+            isOpen = stockViewOpen
+            isActive = isStockViewActive
+            toggleOpen = () => setStockViewOpen(!stockViewOpen)
+          } else if (item.key === 'purchase') {
+            isOpen = purchaseOpen
+            isActive = isPurchaseActive
+            toggleOpen = () => setPurchaseOpen(!purchaseOpen)
+          } else {
+            // sales (and any future parent)
+            isOpen = salesOpen
+            isActive = isSalesActive
+            toggleOpen = () => setSalesOpen(!salesOpen)
+          }
+          // Auto-open if active (so user sees which parent they're under)
+          if (isActive && !isOpen) {
+            // schedule open without causing render loop
+            setTimeout(() => {
+              if (item.key === 'stockView') setStockViewOpen(true)
+              else if (item.key === 'purchase') setPurchaseOpen(true)
+              else setSalesOpen(true)
+            }, 0)
+          }
           return (
             <div key={item.key}>
               <button onClick={toggleOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
@@ -3166,6 +3192,7 @@ export default function Home() {
 
   // New Purchase entry page
   const renderNewPurchasePage = () => {
+    try {
     const grandTotal = purchaseForm.items.reduce((s, it) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0)
     return (
       <div className="space-y-4 max-w-6xl mx-auto">
@@ -3209,7 +3236,7 @@ export default function Home() {
                     <SelectTrigger><SelectValue placeholder="Select supplier (optional)" /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="">— None —</SelectItem>
-                      {suppliers.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}{s.phone ? ` (${s.phone})` : ''}</SelectItem>)}
+                      {(suppliers || []).filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}{s.phone ? ` (${s.phone})` : ''}</SelectItem>)}
                     </SelectContent>
                   </Select>
                   <p className="text-[11px] text-muted-foreground">Add new suppliers via Master Data → Suppliers</p>
@@ -3302,6 +3329,16 @@ export default function Home() {
         </Card>
       </div>
     )
+    } catch (err) {
+      console.error('renderNewPurchasePage error:', err)
+      return (
+        <div className="p-4 border border-red-300 bg-red-50 rounded-md text-red-900 text-sm">
+          <p className="font-semibold">Error rendering New Purchase page:</p>
+          <pre className="text-xs mt-2 whitespace-pre-wrap">{String(err)}</pre>
+          <pre className="text-xs mt-2 whitespace-pre-wrap">{(err as any)?.stack}</pre>
+        </div>
+      )
+    }
   }
 
   // Purchase Approval page — list of pending purchases with approve/cancel buttons
