@@ -472,6 +472,16 @@ export default function Home() {
     setCurrentView('editItem')
   }
 
+  // Centralized navigation handler — resets form state when switching to newItem
+  // so that previously-edited item data doesn't bleed into the New Item form
+  const handleNavigate = (view: ViewType) => {
+    if (view === 'newItem') {
+      setEditingItemId(null)
+      setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS' })
+    }
+    setCurrentView(view)
+  }
+
   // Stock handlers
   const handleViewStock = async (item: ItemData) => {
     if (!item.id) return
@@ -1140,7 +1150,7 @@ export default function Home() {
       {masterDataOpen && (
         <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
           {visibleMasterDataItems.map(item => (
-            <button key={item.key} onClick={() => { setCurrentView(item.key); onNavigate?.() }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+            <button key={item.key} onClick={() => { handleNavigate(item.key); onNavigate?.() }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
               <item.icon className="w-3.5 h-3.5 shrink-0" />{item.label}
             </button>
           ))}
