@@ -175,6 +175,12 @@ const ALL_COLUMNS = [
   { key: 'stockQty', label: 'Stock' },
 ]
 
+// ⚠️ IMPORTANT: Every menu item in `functionItems` MUST also be in `ALL_MENU_ITEMS` here
+// AND in `MENU_ITEMS` in src/lib/auth.ts. Otherwise regular users can't be granted access.
+// When adding a new menu item, add it to ALL 3 places:
+//   1. ALL_MENU_ITEMS (below) — for User Management permission UI
+//   2. MENU_ITEMS in auth.ts — for backend permission system
+//   3. functionItems array — for sidebar rendering
 const ALL_MENU_ITEMS = [
   { key: 'itemPrice', label: 'Item Price', group: 'Function' },
   { key: 'myEntityStock', label: 'My Entity Stock', group: 'Stock View' },
@@ -185,11 +191,13 @@ const ALL_MENU_ITEMS = [
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
+  { key: 'bookingReasons', label: 'Booking Reasons', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ]
 
-// Master Data sub-pages that can be granted/revoked per user
+// ⚠️ IMPORTANT: Every master data item must also be in MASTER_DATA_ITEMS in src/lib/auth.ts
+// AND in the masterDataItems array. When adding a new master data page, add to ALL 3 places.
 const ALL_MASTER_DATA_ITEMS = [
   { key: 'items', label: 'Item Information' },
   { key: 'newItem', label: 'New Item' },

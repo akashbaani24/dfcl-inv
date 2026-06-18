@@ -104,7 +104,8 @@ export const ITEM_COLUMNS = [
 
 export type ItemColumnKey = typeof ITEM_COLUMNS[number]['key'];
 
-// Menu items that can be controlled per user
+// ⚠️ IMPORTANT: Every menu item must also be in ALL_MENU_ITEMS in src/app/page.tsx
+// AND in the functionItems array. When adding a new menu, add to ALL 3 places.
 export const MENU_ITEMS = [
   { key: 'itemPrice', label: 'Item Price', group: 'Function' },
   { key: 'myEntityStock', label: 'My Entity Stock', group: 'Stock View' },
@@ -115,13 +116,15 @@ export const MENU_ITEMS = [
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
+  { key: 'bookingReasons', label: 'Booking Reasons', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ] as const;
 
 export type MenuItemKey = typeof MENU_ITEMS[number]['key'];
 
-// Master Data tab sub-pages that can be controlled per user
+// ⚠️ IMPORTANT: Every master data item must also be in ALL_MASTER_DATA_ITEMS in src/app/page.tsx
+// AND in the masterDataItems array. When adding a new master data page, add to ALL 3 places.
 export const MASTER_DATA_ITEMS = [
   { key: 'items', label: 'Item Information', adminOnly: false },
   { key: 'newItem', label: 'New Item', adminOnly: false },
