@@ -61,3 +61,4 @@ deploy.yml
 # uploads (user-generated)
 /upload/
 /uploaded/
+tsconfig.tsbuildinfo
