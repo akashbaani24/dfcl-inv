@@ -75,21 +75,43 @@ export async function POST(request: NextRequest) {
     let duplicate = 0;
     const errors: string[] = [];
 
-    // Cache existing (itemName + year) combos from DB for fast duplicate check
-    // This is much faster than querying the DB for each row
+    // Cache existing itemNames from DB for fast duplicate check
+    // RULE: Only itemName is checked for duplicates — year, lcNo, group, subGroup, price, uom
+    // can all be duplicates without issue.
     const existingItems = await db.item.findMany({
-      select: { itemName: true, year: true },
+      select: { itemName: true },
     });
-    const existingKeys = new Set(
-      existingItems.map(i => `${i.itemName.toLowerCase()}|${i.year.toLowerCase()}`)
+    const existingNames = new Set(
+      existingItems.map(i => i.itemName.toLowerCase())
     );
     // Also track duplicates within this same upload
     const seenInThisUpload = new Set<string>();
 
+    // Parse all rows first, then batch-insert to avoid Vercel's 10s timeout
+    const rowsToInsert: Array<{
+      year: string;
+      lcNo: string;
+      group: string;
+      subGroup: string;
+      itemName: string;
+      price: number;
+      uom: string;
+      createdBy: string;
+    }> = [];
+
+    const startTime = Date.now();
+    const MAX_PROCESSING_MS = 8000; // 8 second budget — leave 2s for batch insert
+
     for (let i = 1; i < lines.length; i++) {
+      // Time budget check — stop processing if we're near Vercel's timeout
+      if (Date.now() - startTime > MAX_PROCESSING_MS) {
+        errors.push(`Stopped processing at row ${i + 1} to avoid server timeout. ${lines.length - i} rows not processed. Please split your CSV into smaller files (max ~5000 rows per file).`);
+        skipped += lines.length - i;
+        break;
+      }
+
       try {
         const cols = parseCsvLine(lines[i], delimiter);
-        // Pad missing columns with empty strings
         while (cols.length < header.length) cols.push('');
 
         const getCell = (col: string): string => {
@@ -101,27 +123,28 @@ export async function POST(request: NextRequest) {
           return v === '' ? fallback : v;
         };
 
-        const year = getCellOr('year', 'N/A');
         const itemName = getCellOr('itemname', 'N/A');
 
-        // Skip only if BOTH year AND itemName are missing/N/A
-        if ((year === 'N/A' || !year) && (itemName === 'N/A' || !itemName)) {
+        // Skip only if itemName is completely missing (N/A and empty)
+        // No other column is mandatory
+        if (itemName === 'N/A' || !itemName) {
           skipped++;
           continue;
         }
 
-        // Duplicate check: same itemName + year combo
-        const key = `${itemName.toLowerCase()}|${year.toLowerCase()}`;
-        if (existingKeys.has(key) || seenInThisUpload.has(key)) {
+        // DUPLICATE CHECK: only by itemName (case-insensitive)
+        const key = itemName.toLowerCase();
+        if (existingNames.has(key) || seenInThisUpload.has(key)) {
           duplicate++;
-          if (errors.length < 5) {
-            errors.push(`Row ${i + 1}: duplicate item "${itemName}" (year ${year}) — skipped`);
+          if (errors.length < 10) {
+            errors.push(`Row ${i + 1}: duplicate item "${itemName}" — skipped`);
           }
           continue;
         }
         seenInThisUpload.add(key);
 
-        // Parse price — empty → 0, "N/A" → 0, invalid → 0
+        // Other columns can be empty/N/A — no required fields
+        const year = getCellOr('year', 'N/A');
         const priceRaw = cols[idx('price')]?.trim() ?? '';
         let price = 0;
         if (priceRaw && priceRaw !== 'N/A') {
@@ -130,23 +153,43 @@ export async function POST(request: NextRequest) {
           if (!isNaN(parsed)) price = parsed;
         }
 
-        await db.item.create({
-          data: {
-            year,
-            lcNo: getCell('lcno'),
-            group: getCell('group'),
-            subGroup: getCell('subgroup'),
-            itemName,
-            price,
-            uom: getCellOr('uom', 'PCS'),
-            createdBy: currentUser.id,
-          },
+        rowsToInsert.push({
+          year,
+          lcNo: getCell('lcno'),
+          group: getCell('group'),
+          subGroup: getCell('subgroup'),
+          itemName,
+          price,
+          uom: getCellOr('uom', 'PCS'),
+          createdBy: currentUser.id,
         });
-        inserted++;
       } catch (e) {
         skipped++;
-        if (errors.length < 5) {
+        if (errors.length < 10) {
           errors.push(`Row ${i + 1}: ${String(e).slice(0, 100)}`);
+        }
+      }
+    }
+
+    // Batch insert in chunks of 100 for speed (much faster than 1-by-1)
+    const BATCH_SIZE = 100;
+    for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+      const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
+      try {
+        const result = await db.item.createMany({
+          data: batch,
+          skipDuplicates: true,
+        });
+        inserted += result.count;
+      } catch (e) {
+        // If batch fails, try one-by-one to recover good rows
+        for (const row of batch) {
+          try {
+            await db.item.create({ data: row });
+            inserted++;
+          } catch {
+            skipped++;
+          }
         }
       }
     }

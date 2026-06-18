@@ -143,28 +143,28 @@ export async function POST(request: NextRequest) {
 
     const { year, lcNo, group, subGroup, itemName, price, uom } = await request.json();
 
-    if (!itemName || !year) {
-      return NextResponse.json({ error: 'Item name and year are required' }, { status: 400 });
+    if (!itemName) {
+      return NextResponse.json({ error: 'Item name is required' }, { status: 400 });
     }
 
-    // Duplicate check: same itemName + year combo is not allowed
+    // Duplicate check: only itemName — other columns (year, lcNo, etc.) can duplicate
     const existing = await db.item.findFirst({
-      where: { itemName, year },
+      where: { itemName: { equals: itemName } },
       select: { id: true },
     });
     if (existing) {
       return NextResponse.json(
-        { error: `Item "${itemName}" with year "${year}" already exists. Duplicate items are not allowed.` },
+        { error: `Item "${itemName}" already exists. Duplicate item names are not allowed.` },
         { status: 409 }
       );
     }
 
     const item = await db.item.create({
       data: {
-        year,
-        lcNo: lcNo || '',
-        group: group || '',
-        subGroup: subGroup || '',
+        year: year || 'N/A',
+        lcNo: lcNo || 'N/A',
+        group: group || 'N/A',
+        subGroup: subGroup || 'N/A',
         itemName,
         price: parseFloat(price) || 0,
         uom: uom || 'PCS',

@@ -120,7 +120,7 @@ model Item {
   @@index([group])
   @@index([subGroup])
   @@index([createdAt])
-  @@unique([itemName, year])
+  @@unique([itemName])
 }
 
 model Stock {

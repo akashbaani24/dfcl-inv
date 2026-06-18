@@ -4,6 +4,18 @@
   "buildCommand": "PRISMA_DATABASE_URL=file:db.sqlite prisma generate && next build",
   "installCommand": "bun install",
   "functions": {
+    "src/app/api/items/upload/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/stock/upload/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/items/export/route.ts": {
+      "maxDuration": 60
+    },
+    "src/app/api/reports/route.ts": {
+      "maxDuration": 30
+    },
     "src/app/api/**/route.ts": {
       "maxDuration": 30
     }
