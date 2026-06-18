@@ -5,19 +5,19 @@
   "installCommand": "bun install",
   "functions": {
     "src/app/api/items/upload/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 900
     },
     "src/app/api/stock/upload/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 900
     },
     "src/app/api/items/export/route.ts": {
-      "maxDuration": 60
+      "maxDuration": 900
     },
     "src/app/api/reports/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     },
     "src/app/api/**/route.ts": {
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "github": {

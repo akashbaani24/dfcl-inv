@@ -100,7 +100,7 @@ export async function POST(request: NextRequest) {
     }> = [];
 
     const startTime = Date.now();
-    const MAX_PROCESSING_MS = 8000; // 8 second budget — leave 2s for batch insert
+    const MAX_PROCESSING_MS = 14 * 60 * 1000; // 14 minutes — Vercel maxDuration is 15min (900s), leave 1min buffer for batch insert
 
     for (let i = 1; i < lines.length; i++) {
       // Time budget check — stop processing if we're near Vercel's timeout

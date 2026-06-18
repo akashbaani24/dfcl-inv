@@ -80,7 +80,16 @@ export async function POST(request: NextRequest) {
     let skipped = 0;
     const errors: string[] = [];
 
+    const startTime = Date.now();
+    const MAX_PROCESSING_MS = 14 * 60 * 1000; // 14 minutes (Vercel maxDuration = 15min)
+
     for (let i = 1; i < lines.length; i++) {
+      // Time budget check
+      if (Date.now() - startTime > MAX_PROCESSING_MS) {
+        errors.push(`Stopped at row ${i + 1} to avoid timeout. ${lines.length - i} rows not processed. Split CSV into smaller files.`);
+        skipped += lines.length - i;
+        break;
+      }
       try {
         const cols = parseCsvLine(lines[i], delimiter);
         // Pad missing columns with empty strings
