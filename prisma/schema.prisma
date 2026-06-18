@@ -107,6 +107,7 @@ model Entity {
   incentives      Incentive[]
   bookings        Booking[]
   bookingFromItems BookingItem[] @relation("BookingFromEntity")
+  salesOrderItems SalesOrderItem[] @relation("SalesOrderEntity")
 }
 
 model Item {
@@ -129,7 +130,7 @@ model Item {
   adjustments  ItemAdjustment[]
   transfers    Transfer[]
   receives     Receive[]
-  salesOrders  SalesOrder[]
+  salesOrderItems SalesOrderItem[]
   salesReturns SalesReturn[]
   bookingItems BookingItem[]
   incentives   Incentive[]
@@ -295,24 +296,75 @@ model Receive {
 }
 
 model SalesOrder {
-  id            String    @id @default(cuid())
-  itemId        String
+  id            String         @id @default(cuid())
+  salesNo       String         @unique
   entityId      String
   customerId    String
-  quantity      Int
-  price         Float
-  makingCharge  Float     @default(0)
+  orderDate     DateTime       @default(now())
   deliveryDate  DateTime?
-  status        String    @default("pending") // "pending", "processing", "making", "ready", "delivered", "cancelled"
+  status        String         @default("pending")
   notes         String?
   createdBy     String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
 
-  item       Item         @relation(fields: [itemId], references: [id], onDelete: Cascade)
-  entity     Entity       @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  customer   Customer     @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  entity     Entity          @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  items      SalesOrderItem[]
+  payments   SalesPayment[]
   returns    SalesReturn[]
+}
+
+// Multiple items per sales order with unit price
+model SalesOrderItem {
+  id           String  @id @default(cuid())
+  salesOrderId String
+  itemId       String
+  entityId     String
+  quantity     Int     @default(1)
+  unitPrice    Float   @default(0)
+
+  makingEntries SalesMakingEntry[]
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  item       Item       @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity     Entity     @relation("SalesOrderEntity", fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([salesOrderId])
+}
+
+// Multiple making entries per sales item with making unit price
+model SalesMakingEntry {
+  id              String  @id @default(cuid())
+  salesOrderItemId String
+  makingInfoId    String?
+  name            String  // making process name
+  unitPrice       Float   @default(0)
+  quantity        Int     @default(1)
+
+  salesOrderItem SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
+
+  @@index([salesOrderItemId])
+}
+
+// Multiple payments per sales order
+model SalesPayment {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  receiptNo    String   @unique
+  amount       Float
+  paymentType  String   // "cash", "card", "mobile_banking", "cheque"
+  paymentMode  String   // "advance" or "collection"
+  paymentDate  DateTime @default(now())
+  chequeNo     String?
+  bankName     String?
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+
+  @@index([salesOrderId])
 }
 
 model SalesReturn {

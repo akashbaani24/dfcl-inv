@@ -423,23 +423,44 @@ export default function Home() {
   }
 
   // Read ?view= URL param on load — allows opening specific pages in new tabs
+  // Also auto-selects entity if ?entityId= is provided
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && user) {
       const params = new URLSearchParams(window.location.search)
       const viewParam = params.get('view') as ViewType | null
+      const entityParam = params.get('entityId')
+
       if (viewParam) {
-        // Wait for user to be loaded, then navigate
+        // If entity not yet selected, try to auto-select
+        if (!workingEntity) {
+          if (entityParam) {
+            // Use specified entity
+            fetchEntities().then(() => {
+              const entity = entities.find(e => e.id === entityParam)
+              if (entity) {
+                setWorkingEntity({ id: entity.id, name: entity.name })
+              }
+            })
+          } else if (entities.length > 0) {
+            // Auto-select first available entity
+            const available = isManagerOrAdmin ? entities : entities.filter(e => user.entityAccess.some(ea => ea.entityId === e.id))
+            if (available.length > 0) {
+              setWorkingEntity({ id: available[0].id, name: available[0].name })
+            }
+          }
+        }
+
+        // Wait for entity to be set, then navigate
         const timer = setInterval(() => {
-          if (user && workingEntity) {
+          if (workingEntity) {
             setCurrentView(viewParam)
             clearInterval(timer)
           }
         }, 200)
-        // Stop checking after 10 seconds
         setTimeout(() => clearInterval(timer), 10000)
       }
     }
-  }, [user, workingEntity])
+  }, [user, workingEntity, entities])
 
   useEffect(() => {
     if (user) { fetchItems() }
@@ -1359,6 +1380,7 @@ export default function Home() {
             <button key={item.key}
               onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(item.key) } else { handleNavigate(item.key); onNavigate?.() } }}
               onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
+              onContextMenu={(e) => handleContextMenu(e, item.key)}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
               <item.icon className="w-3.5 h-3.5 shrink-0" />{item.label}
             </button>
@@ -1369,14 +1391,35 @@ export default function Home() {
   )
 
   // Open a menu in a new browser tab (Ctrl+click or middle-click)
+  // Includes entityId so new tab auto-selects the right entity
   const openInNewTab = (view: ViewType) => {
-    window.open(`/?view=${view}`, '_blank')
+    const entityId = workingEntity?.id || ''
+    window.open(`/?view=${view}&entityId=${entityId}`, '_blank')
   }
 
   // Check if click should open in new tab (Ctrl/Cmd+click or middle-click)
   const isNewTabClick = (e: React.MouseEvent): boolean => {
     return e.ctrlKey || e.metaKey || e.button === 1
   }
+
+  // Right-click context menu state
+  const [contextMenu, setContextMenu] = useState<{ x: number; y: number; view: ViewType } | null>(null)
+
+  // Handle right-click on menu items
+  const handleContextMenu = (e: React.MouseEvent, view: ViewType) => {
+    e.preventDefault()
+    setContextMenu({ x: e.clientX, y: e.clientY, view })
+  }
+
+  // Close context menu on any click
+  useEffect(() => {
+    if (contextMenu) {
+      const close = () => setContextMenu(null)
+      window.addEventListener('click', close)
+      window.addEventListener('scroll', close)
+      return () => { window.removeEventListener('click', close); window.removeEventListener('scroll', close) }
+    }
+  }, [contextMenu])
 
   // Helper: render function menu section
   const renderFunctionMenu = (onNavigate?: () => void) => (
@@ -1410,6 +1453,7 @@ export default function Home() {
           <button key={item.key}
             onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(item.key) } else { setCurrentView(item.key); onNavigate?.() } }}
             onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
+            onContextMenu={(e) => handleContextMenu(e, item.key)}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
             <item.icon className="w-4 h-4 shrink-0" />{item.label}
           </button>
@@ -3852,6 +3896,28 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           </div>
         </div>
       </main>
+
+      {/* Right-click context menu */}
+      {contextMenu && (
+        <div
+          className="fixed z-[9999] bg-card border rounded-lg shadow-lg py-1 min-w-[180px]"
+          style={{ left: contextMenu.x, top: contextMenu.y }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <button
+            className="w-full text-left px-3 py-2 text-sm hover:bg-primary hover:text-primary-foreground transition-colors flex items-center gap-2"
+            onClick={() => { openInNewTab(contextMenu.view); setContextMenu(null) }}
+          >
+            <Plus className="w-4 h-4" /> Open in new tab
+          </button>
+          <button
+            className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center gap-2"
+            onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?view=${contextMenu.view}&entityId=${workingEntity?.id || ''}`); setContextMenu(null); toast({ title: 'Copied', description: 'Link copied to clipboard' }) }}
+          >
+            <FileText className="w-4 h-4" /> Copy link
+          </button>
+        </div>
+      )}
     </div>
   )
 }

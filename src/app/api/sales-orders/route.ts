@@ -2,42 +2,30 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// GET all sales orders
 export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-    }
+    if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const searchParams = request.nextUrl.searchParams;
     const entityId = searchParams.get('entityId') || '';
 
-    // Get user's accessible entities - admin and manager see all
-    const userEntityIds =
-      currentUser.role === 'admin' || currentUser.role === 'manager'
-        ? null
-        : currentUser.entityAccess.map((ea) => ea.entityId);
-
-    if (userEntityIds && userEntityIds.length === 0) {
-      return NextResponse.json({ salesOrders: [] });
-    }
+    const userEntityIds = (currentUser.role === 'admin' || currentUser.role === 'manager')
+      ? null : currentUser.entityAccess.map(ea => ea.entityId);
+    if (userEntityIds && userEntityIds.length === 0) return NextResponse.json({ salesOrders: [] });
 
     const where: Record<string, unknown> = {};
-    if (entityId) {
-      where.entityId = entityId;
-    } else if (userEntityIds) {
-      where.entityId = { in: userEntityIds };
-    }
+    if (entityId) where.entityId = entityId;
+    else if (userEntityIds) where.entityId = { in: userEntityIds };
 
     const salesOrders = await db.salesOrder.findMany({
       where,
       orderBy: { createdAt: 'desc' },
       include: {
-        item: true,
-        entity: true,
-        customer: true,
-        returns: true,
+        entity: { select: { name: true } },
+        customer: { select: { name: true, phone: true } },
+        items: { include: { item: { select: { itemName: true } }, makingEntries: true } },
+        payments: true,
       },
     });
 
@@ -48,70 +36,92 @@ export async function GET(request: NextRequest) {
   }
 }
 
-// POST create new sales order
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
-    if (!currentUser) {
-      return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+    if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+    const body = await request.json();
+    const { entityId, customerId, orderDate, deliveryDate, status, notes, items, payments } = body;
+
+    if (!entityId) return NextResponse.json({ error: 'Entity is required' }, { status: 400 });
+    if (!customerId) return NextResponse.json({ error: 'Customer is required' }, { status: 400 });
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'At least one item is required' }, { status: 400 });
     }
 
-    if (!currentUser.canModifyItem && currentUser.role !== 'admin' && currentUser.role !== 'manager') {
-      return NextResponse.json({ error: 'You do not have permission to modify items' }, { status: 403 });
-    }
+    // Auto-generate sales number: SO-YYYYMMDD-XXXX
+    const now = new Date();
+    const dateStr = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
+    const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
+    const salesNo = `SO-${dateStr}-${randomStr}`;
 
-    const {
-      itemId,
-      entityId,
-      customerId,
-      quantity,
-      price,
-      makingCharge,
-      deliveryDate,
-      status,
-      notes,
-    } = await request.json();
-
-    if (!itemId || !entityId || !customerId || !quantity || price === undefined) {
-      return NextResponse.json(
-        { error: 'Item, entity, customer, quantity, and price are required' },
-        { status: 400 }
-      );
-    }
-
-    const qty = parseInt(quantity);
-
+    // Create sales order with items and making entries
     const salesOrder = await db.salesOrder.create({
       data: {
-        itemId,
+        salesNo,
         entityId,
         customerId,
-        quantity: qty,
-        price: parseFloat(price),
-        makingCharge: makingCharge !== undefined ? parseFloat(makingCharge) : 0,
+        orderDate: orderDate ? new Date(orderDate) : new Date(),
         deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
         status: status || 'pending',
         notes: notes || null,
         createdBy: currentUser.id,
+        items: {
+          create: items.map((item: any) => ({
+            itemId: item.itemId,
+            entityId,
+            quantity: parseInt(item.quantity) || 1,
+            unitPrice: parseFloat(item.unitPrice) || 0,
+            makingEntries: {
+              create: (item.makingEntries || []).map((me: any) => ({
+                name: me.name || '',
+                makingInfoId: me.makingInfoId || null,
+                unitPrice: parseFloat(me.unitPrice) || 0,
+                quantity: parseInt(me.quantity) || 1,
+              })),
+            },
+          })),
+        },
+        payments: payments && Array.isArray(payments) ? {
+          create: payments.map((p: any) => {
+            const pNow = new Date();
+            const pDateStr = pNow.getFullYear().toString() + String(pNow.getMonth() + 1).padStart(2, '0') + String(pNow.getDate()).padStart(2, '0');
+            const pRandom = Math.floor(1000 + Math.random() * 9000).toString();
+            return {
+              receiptNo: `MR-${pDateStr}-${pRandom}`,
+              amount: parseFloat(p.amount) || 0,
+              paymentType: p.paymentType || 'cash',
+              paymentMode: p.paymentMode || 'advance',
+              paymentDate: p.paymentDate ? new Date(p.paymentDate) : new Date(),
+              chequeNo: p.chequeNo || null,
+              bankName: p.bankName || null,
+              notes: p.notes || null,
+              createdBy: currentUser.id,
+            };
+          }),
+        } : undefined,
       },
       include: {
-        item: true,
-        entity: true,
-        customer: true,
-        returns: true,
+        entity: { select: { name: true } },
+        customer: { select: { name: true, phone: true } },
+        items: { include: { item: { select: { itemName: true } }, makingEntries: true } },
+        payments: true,
       },
     });
 
-    // Reduce stock for that entity
-    const existingStock = await db.stock.findUnique({
-      where: { itemId_entityId: { itemId, entityId } },
-    });
-    const newQuantity = (existingStock?.quantity || 0) - qty;
-    await db.stock.upsert({
-      where: { itemId_entityId: { itemId, entityId } },
-      update: { quantity: newQuantity },
-      create: { itemId, entityId, quantity: newQuantity },
-    });
+    // Reduce stock for each item
+    for (const item of items) {
+      const existingStock = await db.stock.findUnique({
+        where: { itemId_entityId: { itemId: item.itemId, entityId } },
+      });
+      const newQty = (existingStock?.quantity || 0) - (parseInt(item.quantity) || 1);
+      await db.stock.upsert({
+        where: { itemId_entityId: { itemId: item.itemId, entityId } },
+        update: { quantity: newQty },
+        create: { itemId: item.itemId, entityId, quantity: newQty },
+      });
+    }
 
     return NextResponse.json({ salesOrder });
   } catch (error) {
