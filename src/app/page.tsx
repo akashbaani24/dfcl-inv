@@ -443,23 +443,37 @@ export default function Home() {
   }
 
   // Read ?view= URL param on load — allows opening specific pages in new tabs
+  // Auto-selects entity from ?entityId= or first available entity
   useEffect(() => {
-    if (typeof window !== 'undefined') {
+    if (typeof window !== 'undefined' && user) {
       const params = new URLSearchParams(window.location.search)
       const viewParam = params.get('view') as ViewType | null
-      if (viewParam) {
-        // Wait for user to be loaded, then navigate
-        const timer = setInterval(() => {
-          if (user && workingEntity) {
-            setCurrentView(viewParam)
-            clearInterval(timer)
+      const entityParam = params.get('entityId')
+
+      if (viewParam && !workingEntity) {
+        // Need to auto-select entity first
+        if (entities.length === 0) {
+          fetchEntities()
+        }
+        // Try to select entity from URL param or first available
+        if (entities.length > 0) {
+          let target = entityParam ? entities.find(e => e.id === entityParam) : null
+          if (!target) {
+            const available = (user.role === 'admin' || user.role === 'manager') ? entities : entities.filter(e => user.entityAccess?.some(ea => ea.entityId === e.id))
+            target = available[0]
           }
-        }, 200)
-        // Stop checking after 10 seconds
-        setTimeout(() => clearInterval(timer), 10000)
+          if (target) {
+            setWorkingEntity({ id: target.id, name: target.name })
+          }
+        }
+      }
+
+      // Once entity is set, navigate to the view
+      if (viewParam && workingEntity) {
+        setCurrentView(viewParam)
       }
     }
-  }, [user, workingEntity])
+  }, [user, workingEntity, entities])
 
   useEffect(() => {
     if (user) { fetchItems() }
@@ -1378,6 +1392,7 @@ export default function Home() {
           {visibleMasterDataItems.map(item => (
             <button key={item.key}
               onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(item.key) } else { handleNavigate(item.key); onNavigate?.() } }}
+              onContextMenu={(e) => handleContextMenu(e, item.key)}
               onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
               <item.icon className="w-3.5 h-3.5 shrink-0" />{item.label}
@@ -1408,6 +1423,7 @@ export default function Home() {
                   {item.children.map(child => (
                     <button key={child.key}
                       onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(child.key) } else { setCurrentView(child.key); onNavigate?.() } }}
+                      onContextMenu={(e) => handleContextMenu(e, child.key)}
                       onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(child.key) } }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === child.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
                       <child.icon className="w-3.5 h-3.5 shrink-0" />{child.label}
@@ -1421,6 +1437,7 @@ export default function Home() {
         return (
           <button key={item.key}
             onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(item.key) } else { setCurrentView(item.key); onNavigate?.() } }}
+            onContextMenu={(e) => handleContextMenu(e, item.key)}
             onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
             <item.icon className="w-4 h-4 shrink-0" />{item.label}
