@@ -48,16 +48,16 @@ node_modules/.prisma/
 .wrangler/
 
 # uploads (user-generated)
-upload/
-uploaded/
 tool-results/
 
 # build artifacts and zips
 download/
 skills/
-upload/
-uploaded/
 deploy.yml
 
 # GitHub Actions workflow file (add manually via GitHub web UI
 # because token doesn't have 'workflow' scope)
+
+# uploads (user-generated)
+/upload/
+/uploaded/
