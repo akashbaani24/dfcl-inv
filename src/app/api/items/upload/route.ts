@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { createClient } from '@libsql/client';
 
 // POST /api/items/upload — bulk upload items from CSV
 // CSV columns: year, lcNo, group, subGroup, itemName, price, uom
@@ -171,24 +172,58 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Batch insert in chunks of 100 for speed (much faster than 1-by-1)
-    const BATCH_SIZE = 100;
-    for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
-      const batch = rowsToInsert.slice(i, i + BATCH_SIZE);
-      try {
-        const result = await db.item.createMany({
-          data: batch,
-          skipDuplicates: true,
-        });
-        inserted += result.count;
-      } catch (e) {
-        // If batch fails, try one-by-one to recover good rows
-        for (const row of batch) {
+    // BATCH INSERT: Use libsql's native batch API (much faster than Prisma createMany)
+    // libsql batch sends ALL inserts in a single HTTP round-trip to Turso
+    // 1000 rows = 1 HTTP request (vs 10 requests with Prisma createMany)
+    const tursoUrl = process.env.TURSO_DATABASE_URL
+    const tursoToken = process.env.TURSO_AUTH_TOKEN
+
+    if (tursoUrl && tursoToken && rowsToInsert.length > 0) {
+      // Use direct libsql client for maximum speed
+      const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
+
+      // Build all INSERT statements
+      const BATCH_SIZE = 500 // libsql can handle 500 per batch comfortably
+      for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+        const batch = rowsToInsert.slice(i, i + BATCH_SIZE)
+        const stmts = batch.map(row => ({
+          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES (lower(hex(randomblob(8)) || '-' || hex(randomblob(4)) || '-1' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))), ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime('now'), datetime('now'))`,
+          args: [row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy]
+        }))
+
+        try {
+          const results = await libsql.batch(stmts, 'write')
+          for (const r of results) {
+            if (r.rows_affected > 0) inserted++
+          }
+        } catch (e) {
+          // If batch fails, try Prisma as fallback (slower but reliable)
+          console.error('libsql batch failed, falling back to Prisma:', String(e).slice(0, 200))
           try {
-            await db.item.create({ data: row });
-            inserted++;
-          } catch {
-            skipped++;
+            const result = await db.item.createMany({ data: batch, skipDuplicates: true })
+            inserted += result.count
+          } catch (e2) {
+            skipped += batch.length
+            if (errors.length < 10) errors.push(`Batch starting at row ${i + 1} failed: ${String(e2).slice(0, 80)}`)
+          }
+        }
+      }
+    } else {
+      // Fallback: use Prisma (when not on Vercel/Turso — e.g. local dev)
+      const BATCH_SIZE = 100
+      for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
+        const batch = rowsToInsert.slice(i, i + BATCH_SIZE)
+        try {
+          const result = await db.item.createMany({ data: batch, skipDuplicates: true })
+          inserted += result.count
+        } catch (e) {
+          for (const row of batch) {
+            try {
+              await db.item.create({ data: row })
+              inserted++
+            } catch {
+              skipped++
+            }
           }
         }
       }
