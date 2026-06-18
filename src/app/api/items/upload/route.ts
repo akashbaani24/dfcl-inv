@@ -178,17 +178,26 @@ export async function POST(request: NextRequest) {
     const tursoUrl = process.env.TURSO_DATABASE_URL
     const tursoToken = process.env.TURSO_AUTH_TOKEN
 
+    // Generate cuid-like ID in JavaScript (avoids SQL randomblob issues)
+    function generateId(): string {
+      const chars = 'abcdefghijklmnopqrstuvwxyz0123456789'
+      const timestamp = Date.now().toString(36)
+      let random = ''
+      for (let i = 0; i < 20; i++) random += chars[Math.floor(Math.random() * chars.length)]
+      return `c${timestamp}${random}`.slice(0, 24)
+    }
+
     if (tursoUrl && tursoToken && rowsToInsert.length > 0) {
       // Use direct libsql client for maximum speed
       const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
 
-      // Build all INSERT statements
-      const BATCH_SIZE = 500 // libsql can handle 500 per batch comfortably
+      // Build all INSERT statements — generate IDs in JS (not SQL)
+      const BATCH_SIZE = 500
       for (let i = 0; i < rowsToInsert.length; i += BATCH_SIZE) {
         const batch = rowsToInsert.slice(i, i + BATCH_SIZE)
         const stmts = batch.map(row => ({
-          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES (lower(hex(randomblob(8)) || '-' || hex(randomblob(4)) || '-1' || substr(hex(randomblob(2)), 2) || '-' || substr('89ab', abs(random()) % 4 + 1, 1) || substr(hex(randomblob(2)), 2) || '-' || hex(randomblob(6))), ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime('now'), datetime('now'))`,
-          args: [row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy]
+          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES (?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime('now'), datetime('now'))`,
+          args: [generateId(), row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy]
         }))
 
         try {
@@ -197,14 +206,21 @@ export async function POST(request: NextRequest) {
             if (r.rows_affected > 0) inserted++
           }
         } catch (e) {
-          // If batch fails, try Prisma as fallback (slower but reliable)
+          // If libsql batch fails, try Prisma as fallback
           console.error('libsql batch failed, falling back to Prisma:', String(e).slice(0, 200))
           try {
             const result = await db.item.createMany({ data: batch, skipDuplicates: true })
             inserted += result.count
           } catch (e2) {
-            skipped += batch.length
-            if (errors.length < 10) errors.push(`Batch starting at row ${i + 1} failed: ${String(e2).slice(0, 80)}`)
+            // Last resort: insert one by one
+            for (const row of batch) {
+              try {
+                await db.item.create({ data: row })
+                inserted++
+              } catch {
+                skipped++
+              }
+            }
           }
         }
       }
