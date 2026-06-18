@@ -287,9 +287,9 @@ export default function Home() {
   // Booking state
   const [bookings, setBookings] = useState<Array<any>>([])
   const [bookingForm, setBookingForm] = useState({
-    customerId: '', bookingDate: new Date().toISOString().split('T')[0],
+    forEntityId: '', customerId: '', bookingDate: new Date().toISOString().split('T')[0],
     tillDate: '', status: 'pending', reason: '', notes: '',
-    items: [] as Array<{ itemId: string; fromEntityId: string; quantity: string }>,
+    items: [] as Array<{ itemId: string; itemName: string; fromEntityId: string; quantity: string }>,
     // New customer fields
     newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
   })
@@ -421,6 +421,25 @@ export default function Home() {
       else { localStorage.removeItem('auth_token') }
     } catch { /* not authenticated */ } finally { setIsLoading(false) }
   }
+
+  // Read ?view= URL param on load — allows opening specific pages in new tabs
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const viewParam = params.get('view') as ViewType | null
+      if (viewParam) {
+        // Wait for user to be loaded, then navigate
+        const timer = setInterval(() => {
+          if (user && workingEntity) {
+            setCurrentView(viewParam)
+            clearInterval(timer)
+          }
+        }, 200)
+        // Stop checking after 10 seconds
+        setTimeout(() => clearInterval(timer), 10000)
+      }
+    }
+  }, [user, workingEntity])
 
   useEffect(() => {
     if (user) { fetchItems() }
@@ -637,6 +656,7 @@ export default function Home() {
   const handleSaveBooking = async (e: React.FormEvent) => {
     e.preventDefault()
     if (bookingForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
+    if (!bookingForm.forEntityId) { toast({ title: 'Error', description: 'Please select For Entity', variant: 'destructive' }); return }
     try {
       let customerId = bookingForm.customerId
 
@@ -650,7 +670,7 @@ export default function Home() {
       }
 
       const payload = {
-        entityId: workingEntity?.id,
+        entityId: bookingForm.forEntityId,
         customerId,
         bookingDate: bookingForm.bookingDate,
         tillDate: bookingForm.tillDate,
@@ -673,7 +693,7 @@ export default function Home() {
   }
 
   const resetBookingForm = () => {
-    setBookingForm({ customerId: '', bookingDate: new Date().toISOString().split('T')[0], tillDate: '', status: 'pending', reason: '', notes: '', items: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
+    setBookingForm({ forEntityId: '', customerId: '', bookingDate: new Date().toISOString().split('T')[0], tillDate: '', status: 'pending', reason: '', notes: '', items: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
     setEditingBookingId(null)
     setBookingItemSearch('')
     setBookingItemResults([])
@@ -692,7 +712,8 @@ export default function Home() {
 
   const addBookingItem = (item: ItemData) => {
     if (!item.id) return
-    setBookingForm(f => ({ ...f, items: [...f.items, { itemId: item.id!, fromEntityId: '', quantity: '1' }] }))
+    const itemName = item.itemName || item.id
+    setBookingForm(f => ({ ...f, items: [...f.items, { itemId: item.id!, itemName, fromEntityId: '', quantity: '1' }] }))
     setBookingItemSearch('')
     setBookingItemResults([])
   }
@@ -1335,7 +1356,10 @@ export default function Home() {
       {masterDataOpen && (
         <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
           {visibleMasterDataItems.map(item => (
-            <button key={item.key} onClick={() => { handleNavigate(item.key); onNavigate?.() }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+            <button key={item.key}
+              onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(item.key) } else { handleNavigate(item.key); onNavigate?.() } }}
+              onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
+              className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
               <item.icon className="w-3.5 h-3.5 shrink-0" />{item.label}
             </button>
           ))}
@@ -1343,6 +1367,16 @@ export default function Home() {
       )}
     </>
   )
+
+  // Open a menu in a new browser tab (Ctrl+click or middle-click)
+  const openInNewTab = (view: ViewType) => {
+    window.open(`/?view=${view}`, '_blank')
+  }
+
+  // Check if click should open in new tab (Ctrl/Cmd+click or middle-click)
+  const isNewTabClick = (e: React.MouseEvent): boolean => {
+    return e.ctrlKey || e.metaKey || e.button === 1
+  }
 
   // Helper: render function menu section
   const renderFunctionMenu = (onNavigate?: () => void) => (
@@ -1360,7 +1394,10 @@ export default function Home() {
               {isOpen && (
                 <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
                   {item.children.map(child => (
-                    <button key={child.key} onClick={() => { setCurrentView(child.key); onNavigate?.() }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === child.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                    <button key={child.key}
+                      onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(child.key) } else { setCurrentView(child.key); onNavigate?.() } }}
+                      onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(child.key) } }}
+                      className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === child.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
                       <child.icon className="w-3.5 h-3.5 shrink-0" />{child.label}
                     </button>
                   ))}
@@ -1370,7 +1407,10 @@ export default function Home() {
           )
         }
         return (
-          <button key={item.key} onClick={() => { setCurrentView(item.key); onNavigate?.() }} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+          <button key={item.key}
+            onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(item.key) } else { setCurrentView(item.key); onNavigate?.() } }}
+            onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
             <item.icon className="w-4 h-4 shrink-0" />{item.label}
           </button>
         )
@@ -1895,6 +1935,14 @@ export default function Home() {
             </div>
 
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+              {/* For Entity — user must select, no default */}
+              <div className="space-y-2">
+                <Label>For Entity *</Label>
+                <Select value={bookingForm.forEntityId} onValueChange={v => setBookingForm({ ...bookingForm, forEntityId: v })}>
+                  <SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger>
+                  <SelectContent>{entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
               <div className="space-y-2"><Label>Booking Date</Label><Input type="date" value={bookingForm.bookingDate} onChange={e => setBookingForm({ ...bookingForm, bookingDate: e.target.value })} /></div>
               <div className="space-y-2"><Label>Till Date</Label><Input type="date" value={bookingForm.tillDate} onChange={e => setBookingForm({ ...bookingForm, tillDate: e.target.value })} /></div>
               <div className="space-y-2"><Label>Status</Label><Select value={bookingForm.status} onValueChange={v => setBookingForm({ ...bookingForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
@@ -1912,17 +1960,17 @@ export default function Home() {
 
             <Separator />
             <div className="space-y-2">
-              <Label className="text-sm font-semibold">Items (For Entity: {workingEntity?.name})</Label>
+              <Label className="text-sm font-semibold">Items</Label>
               <div className="flex gap-2">
                 <Input placeholder="Search item to add..." value={bookingItemSearch} onChange={e => setBookingItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleBookingItemSearch())} className="flex-1" />
                 <Button type="button" variant="outline" onClick={handleBookingItemSearch}><Search className="w-4 h-4" /></Button>
               </div>
               {bookingItemResults.length > 0 && (
-                <div className="border rounded-lg max-h-40 overflow-y-auto">
-                  {bookingItemResults.map(item => (
-                    <button key={item.id} type="button" onClick={() => addBookingItem(item)} className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0">
-                      {item.itemName} {item.year ? `(${item.year})` : ''}
-                    </button>
+                <div className="border rounded-lg max-h-40 overflow-y-auto bg-background shadow-lg" style={{ zIndex: 1000, position: 'relative' }}>
+                  {bookingItemResults.map((item, idx) => (
+                    <div key={item.id || idx} onClick={() => addBookingItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
+                      {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
+                    </div>
                   ))}
                 </div>
               )}
@@ -1937,10 +1985,7 @@ export default function Home() {
                     </TableRow></TableHeader>
                     <TableBody>
                       {bookingForm.items.map((bi, i) => {
-                        // Find item name from search results or from the booking's existing items
-                        const itemName = bookingItemResults.find(x => x.id === bi.itemId)?.itemName
-                          || (editingBookingId && bookings.find((b: any) => b.id === editingBookingId)?.items?.find((bi2: any) => bi2.itemId === bi.itemId)?.item?.itemName)
-                          || bi.itemId.slice(0, 8)
+                        const itemName = bi.itemName || (editingBookingId && bookings.find((b: any) => b.id === editingBookingId)?.items?.find((bi2: any) => bi2.itemId === bi.itemId)?.item?.itemName) || bi.itemId.slice(0, 8)
                         return (
                           <TableRow key={i}>
                             <TableCell className="text-xs">{itemName}</TableCell>
