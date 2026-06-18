@@ -114,6 +114,7 @@ export const MENU_ITEMS = [
   { key: 'receive', label: 'Receive', group: 'Function' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
+  { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ] as const;

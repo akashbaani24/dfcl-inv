@@ -105,6 +105,7 @@ model Entity {
   salesOrders     SalesOrder[]
   salesReturns    SalesReturn[]
   incentives      Incentive[]
+  bookings       Booking[]
 }
 
 model Item {
@@ -129,6 +130,7 @@ model Item {
   receives     Receive[]
   salesOrders  SalesOrder[]
   salesReturns SalesReturn[]
+  bookings     Booking[]
   incentives   Incentive[]
 
   @@index([itemName])
@@ -237,6 +239,7 @@ model Customer {
 
   salesOrders  SalesOrder[]
   salesReturns SalesReturn[]
+  bookings     Booking[]
 }
 
 // ---- Transaction Models (Entity-level) ----
@@ -347,4 +350,29 @@ model Incentive {
   item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
   tailor  Tailor? @relation(fields: [tailorId], references: [id], onDelete: SetNull)
+}
+
+model Booking {
+  id           String    @id @default(cuid())
+  entityId     String
+  itemId       String?
+  customerId   String?
+  bookingNo    String    @default("")
+  quantity     Int       @default(1)
+  amount       Float     @default(0)
+  bookingDate  DateTime  @default(now())
+  deliveryDate DateTime?
+  status       String    @default("pending") // "pending", "confirmed", "processing", "delivered", "cancelled"
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  entity   Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  item     Item?    @relation(fields: [itemId], references: [id], onDelete: SetNull)
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([entityId])
+  @@index([status])
+  @@index([bookingDate])
 }
