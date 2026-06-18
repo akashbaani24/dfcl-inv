@@ -72,7 +72,19 @@ export async function POST(request: NextRequest) {
 
     let inserted = 0;
     let skipped = 0;
+    let duplicate = 0;
     const errors: string[] = [];
+
+    // Cache existing (itemName + year) combos from DB for fast duplicate check
+    // This is much faster than querying the DB for each row
+    const existingItems = await db.item.findMany({
+      select: { itemName: true, year: true },
+    });
+    const existingKeys = new Set(
+      existingItems.map(i => `${i.itemName.toLowerCase()}|${i.year.toLowerCase()}`)
+    );
+    // Also track duplicates within this same upload
+    const seenInThisUpload = new Set<string>();
 
     for (let i = 1; i < lines.length; i++) {
       try {
@@ -80,7 +92,6 @@ export async function POST(request: NextRequest) {
         // Pad missing columns with empty strings
         while (cols.length < header.length) cols.push('');
 
-        // Helper: get cell value, empty/undefined → fallback (default 'N/A')
         const getCell = (col: string): string => {
           const v = cols[idx(col)]?.trim() ?? '';
           return v === '' ? 'N/A' : v;
@@ -99,11 +110,21 @@ export async function POST(request: NextRequest) {
           continue;
         }
 
+        // Duplicate check: same itemName + year combo
+        const key = `${itemName.toLowerCase()}|${year.toLowerCase()}`;
+        if (existingKeys.has(key) || seenInThisUpload.has(key)) {
+          duplicate++;
+          if (errors.length < 5) {
+            errors.push(`Row ${i + 1}: duplicate item "${itemName}" (year ${year}) — skipped`);
+          }
+          continue;
+        }
+        seenInThisUpload.add(key);
+
         // Parse price — empty → 0, "N/A" → 0, invalid → 0
         const priceRaw = cols[idx('price')]?.trim() ?? '';
         let price = 0;
         if (priceRaw && priceRaw !== 'N/A') {
-          // Handle both "100.50" and "100,50" (European decimal)
           const normalized = priceRaw.replace(',', '.');
           const parsed = parseFloat(normalized);
           if (!isNaN(parsed)) price = parsed;
@@ -134,6 +155,7 @@ export async function POST(request: NextRequest) {
       success: true,
       inserted,
       skipped,
+      duplicate,
       total: lines.length - 1,
       delimiter,
       errors: errors.length > 0 ? errors : undefined,

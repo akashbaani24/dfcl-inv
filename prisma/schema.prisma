@@ -113,6 +113,14 @@ model Item {
   salesOrders  SalesOrder[]
   salesReturns SalesReturn[]
   incentives   Incentive[]
+
+  @@index([itemName])
+  @@index([year])
+  @@index([lcNo])
+  @@index([group])
+  @@index([subGroup])
+  @@index([createdAt])
+  @@unique([itemName, year])
 }
 
 model Stock {

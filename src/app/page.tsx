@@ -736,7 +736,13 @@ export default function Home() {
       const formData = new FormData(); formData.append('file', uploadFile)
       const res = await authFetch('/api/items/upload', { method: 'POST', body: formData })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: `Uploaded ${data.inserted} items${data.skipped > 0 ? `, skipped ${data.skipped}` : ''}` }); setUploadFile(null); setCurrentView('items'); fetchItems() }
+      if (res.ok) {
+        const parts = [`Uploaded ${data.inserted} items`]
+        if (data.duplicate > 0) parts.push(`${data.duplicate} duplicates skipped`)
+        if (data.skipped > 0) parts.push(`${data.skipped} skipped`)
+        toast({ title: 'Success', description: parts.join(', ') })
+        setUploadFile(null); setCurrentView('items'); fetchItems()
+      }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Upload failed', variant: 'destructive' }) }
     finally { setUploading(false) }
