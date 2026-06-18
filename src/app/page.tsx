@@ -153,7 +153,7 @@ type ViewType =
   | 'entitySelect'
   | 'itemPrice' | 'myEntityStock' | 'allEntityStock'
   | 'itemAdjustment' | 'transfer' | 'receive'
-  | 'salesOrder' | 'salesReturn'
+  | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
   | 'booking' | 'incentive' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
@@ -330,7 +330,7 @@ export default function Home() {
   const [items, setItems] = useState<ItemData[]>([])
   const [totalItems, setTotalItems] = useState(0)
   const [currentPage, setCurrentPage] = useState(1)
-  const [pageSize, setPageSize] = useState(50)
+  const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
   const [visibleColumns, setVisibleColumns] = useState<string[]>([])
@@ -1635,12 +1635,23 @@ export default function Home() {
         </Table>
       </div>
       {/* Pagination */}
-      {totalPages > 1 && (
-        <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-center gap-2">
           <p className="text-sm text-muted-foreground">Showing {((currentPage-1)*pageSize)+1}-{Math.min(currentPage*pageSize, totalItems)} of {totalItems}</p>
-          <div className="flex gap-1">{generatePageNumbers(currentPage, totalPages).map((p, i) => typeof p === 'string' ? <span key={i} className="px-2 py-1 text-sm">...</span> : <Button key={i} variant={p === currentPage ? 'default' : 'outline'} size="sm" onClick={() => setCurrentPage(p)}>{p}</Button>)}</div>
+          <Select value={pageSize.toString()} onValueChange={v => { setPageSize(v === 'all' ? 99999 : parseInt(v)); setCurrentPage(1) }}>
+            <SelectTrigger className="w-[80px] h-8 text-xs"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="20">20</SelectItem>
+              <SelectItem value="50">50</SelectItem>
+              <SelectItem value="100">100</SelectItem>
+              <SelectItem value="all">All</SelectItem>
+            </SelectContent>
+          </Select>
         </div>
-      )}
+        {totalPages > 1 && (
+          <div className="flex gap-1">{generatePageNumbers(currentPage, totalPages).map((p, i) => typeof p === 'string' ? <span key={i} className="px-2 py-1 text-sm">...</span> : <Button key={i} variant={p === currentPage ? 'default' : 'outline'} size="sm" onClick={() => setCurrentPage(p)}>{p}</Button>)}</div>
+        )}
+      </div>
     </div>
   )
 
@@ -1865,7 +1876,9 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Sales Order - {workingEntity?.name}</h2>
-        <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); setShowSalesOrderDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
+        <div className="flex gap-2">
+          <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); setCurrentView('newSalesOrder') }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
+        </div>
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -2110,6 +2123,143 @@ export default function Home() {
           </div>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+
+  // New Sales Order — full page (not dialog)
+  const renderNewSalesOrderPage = () => (
+    <div className="space-y-4 max-w-4xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">New Sales Order</h2>
+        <Button variant="outline" onClick={() => { resetSalesOrderForm(); setCurrentView('salesOrder') }}><X className="w-4 h-4 mr-2" />Back to List</Button>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveSalesOrder} className="space-y-6">
+            {/* Customer: Existing vs New */}
+            <div className="space-y-3">
+              <Label className="text-sm font-bold">Customer</Label>
+              <div className="flex gap-2">
+                <Button type="button" size="sm" variant={salesCustomerMode === 'existing' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('existing')}>Existing</Button>
+                <Button type="button" size="sm" variant={salesCustomerMode === 'new' ? 'default' : 'outline'} onClick={() => setSalesCustomerMode('new')}>New Customer</Button>
+              </div>
+              {salesCustomerMode === 'existing' ? (
+                <div className="space-y-2">
+                  <Input placeholder="Search by name or phone..." value={salesCustomerSearch} onChange={e => setSalesCustomerSearch(e.target.value)} className="text-sm" />
+                  <Select value={salesOrderForm.customerId} onValueChange={v => setSalesOrderForm({...salesOrderForm, customerId: v})}>
+                    <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                    <SelectContent>{customers.filter(c => { if (!salesCustomerSearch) return true; const s = salesCustomerSearch.toLowerCase(); return c.name.toLowerCase().includes(s) || (c.phone||'').includes(salesCustomerSearch) }).map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</SelectItem>)}</SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 border rounded-lg p-3 bg-muted/30">
+                  <div className="space-y-1"><Label className="text-xs">Name *</Label><Input placeholder="Customer name" value={salesOrderForm.newCustomerName} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerName: e.target.value})} required /></div>
+                  <div className="space-y-1"><Label className="text-xs">Phone</Label><Input placeholder="Phone" value={salesOrderForm.newCustomerPhone} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerPhone: e.target.value})} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Email</Label><Input placeholder="Email" value={salesOrderForm.newCustomerEmail} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerEmail: e.target.value})} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Address</Label><Input placeholder="Address" value={salesOrderForm.newCustomerAddress} onChange={e => setSalesOrderForm({...salesOrderForm, newCustomerAddress: e.target.value})} /></div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2"><Label>Order Date</Label><Input type="date" value={salesOrderForm.orderDate} onChange={e => setSalesOrderForm({...salesOrderForm, orderDate: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm({...salesOrderForm, deliveryDate: e.target.value})} /></div>
+              <div className="space-y-2"><Label>Status</Label><Select value={salesOrderForm.status} onValueChange={v => setSalesOrderForm({...salesOrderForm, status: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
+            </div>
+
+            <Separator />
+            {/* Items */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-bold">Items</Label>
+                <span className="text-xs text-muted-foreground">Sales ID auto-generated on save</span>
+              </div>
+              <div className="flex gap-2">
+                <Input placeholder="Search item to add..." value={salesItemSearch} onChange={e => setSalesItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleSalesItemSearch())} className="flex-1" />
+                <Button type="button" variant="outline" onClick={handleSalesItemSearch}><Search className="w-4 h-4" /></Button>
+              </div>
+              {salesItemResults.length > 0 && (
+                <div className="border rounded-lg max-h-40 overflow-y-auto bg-background shadow-lg" style={{ zIndex: 1000, position: 'relative' }}>
+                  {salesItemResults.map((item, idx) => (
+                    <div key={item.id || idx} onClick={() => addSalesItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
+                      {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {salesOrderForm.items.map((item, i) => {
+                const itemTotal = (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0) + item.makingEntries.reduce((s, me) => s + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0)
+                return (
+                <div key={i} className="border rounded-lg p-4 space-y-3 bg-card">
+                  <div className="flex items-center justify-between">
+                    <span className="font-medium">{item.itemName}</span>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm font-semibold text-primary">{itemTotal.toFixed(2)}</span>
+                      <Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive"><X className="w-4 h-4" /></Button>
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input type="number" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-9" /></div>
+                    <div className="space-y-1"><Label className="text-xs">Unit Price</Label><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-9" /></div>
+                  </div>
+                  {item.makingEntries.length > 0 && (
+                    <div className="space-y-2 pl-3 border-l-2 border-muted">
+                      {item.makingEntries.map((me, mi) => (
+                        <div key={mi} className="flex gap-2 items-end">
+                          <div className="flex-1"><Label className="text-xs">Making Name</Label><Input placeholder="e.g. Stitching" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-8 text-sm" /></div>
+                          <div className="w-16"><Label className="text-xs">Qty</Label><Input type="number" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-8 text-sm" /></div>
+                          <div className="w-24"><Label className="text-xs">Unit Price</Label><Input type="number" step="0.01" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-8 text-sm" /></div>
+                          <Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-8"><X className="w-3 h-3" /></Button>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                  <Button type="button" variant="ghost" size="sm" onClick={() => addMakingEntry(i)} className="text-xs">+ Add Making</Button>
+                </div>
+                )
+              })}
+              {salesOrderForm.items.length === 0 && <p className="text-sm text-muted-foreground text-center py-4">No items added yet. Search and add items above.</p>}
+            </div>
+
+            {/* Order Total */}
+            {salesOrderForm.items.length > 0 && (
+              <div className="flex justify-end">
+                <div className="text-right space-y-1 border rounded-lg p-4 bg-muted/30 min-w-[200px]">
+                  <p className="text-sm">Order Total: <span className="font-bold text-lg">{salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0) + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0).toFixed(2)}</span></p>
+                  {salesOrderForm.payments.length > 0 && <p className="text-sm">Paid: {salesOrderForm.payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0).toFixed(2)}</p>}
+                  {salesOrderForm.payments.length > 0 && <p className="text-sm font-bold">Due: {(salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0) + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0) - salesOrderForm.payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)).toFixed(2)}</p>}
+                </div>
+              </div>
+            )}
+
+            <Separator />
+            {/* Payments */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-bold">Payments (Optional)</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addPayment}><Plus className="w-3 h-3 mr-1" />Add Payment</Button>
+              </div>
+              {salesOrderForm.payments.map((p, i) => (
+                <div key={i} className="border rounded-lg p-3 grid grid-cols-2 md:grid-cols-4 gap-2">
+                  <div className="space-y-1"><Label className="text-xs">Amount</Label><Input type="number" step="0.01" value={p.amount} onChange={e => updatePayment(i, 'amount', e.target.value)} className="h-8 text-sm" /></div>
+                  <div className="space-y-1"><Label className="text-xs">Type</Label><Select value={p.paymentType} onValueChange={v => updatePayment(i, 'paymentType', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1"><Label className="text-xs">Mode</Label><Select value={p.paymentMode} onValueChange={v => updatePayment(i, 'paymentMode', v)}><SelectTrigger className="h-8 text-sm"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="advance">Advance</SelectItem><SelectItem value="collection">Collection</SelectItem></SelectContent></Select></div>
+                  <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={p.paymentDate} onChange={e => updatePayment(i, 'paymentDate', e.target.value)} className="h-8 text-sm" /></div>
+                  {p.paymentType === 'cheque' && (<><div className="space-y-1"><Label className="text-xs">Cheque No</Label><Input value={p.chequeNo} onChange={e => updatePayment(i, 'chequeNo', e.target.value)} className="h-8 text-sm" /></div><div className="space-y-1"><Label className="text-xs">Bank</Label><Input value={p.bankName} onChange={e => updatePayment(i, 'bankName', e.target.value)} className="h-8 text-sm" /></div></>)}
+                  <div className="flex items-end"><Button type="button" variant="ghost" size="sm" onClick={() => removePayment(i)} className="text-destructive"><X className="w-3 h-3" /></Button></div>
+                </div>
+              ))}
+            </div>
+
+            <div className="space-y-2"><Label>Notes</Label><Input value={salesOrderForm.notes} onChange={e => setSalesOrderForm({...salesOrderForm, notes: e.target.value})} /></div>
+
+            <div className="flex gap-3 pt-4">
+              <Button type="submit" size="lg"><Save className="w-4 h-4 mr-2" />Create Sales Order</Button>
+              <Button type="button" variant="outline" size="lg" onClick={() => { resetSalesOrderForm(); setCurrentView('salesOrder') }}>Cancel</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
     </div>
   )
 
@@ -3318,6 +3468,7 @@ export default function Home() {
       case 'transfer': return renderTransferPage()
       case 'receive': return renderReceivePage()
       case 'salesOrder': return renderSalesOrderPage()
+      case 'newSalesOrder': return renderNewSalesOrderPage()
       case 'salesReturn': return renderSalesReturnPage()
       case 'booking': return renderBookingPage()
       case 'bookingReasons': return renderBookingReasonsPage()
