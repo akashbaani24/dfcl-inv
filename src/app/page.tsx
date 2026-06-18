@@ -159,6 +159,7 @@ type ViewType =
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers'
   | 'groups' | 'subGroups'
+  | 'bookingReasons'
   | 'stockDetail' | 'stockEntry' | 'stockUpload'
   | 'settings'
 
@@ -281,11 +282,21 @@ export default function Home() {
     customerId: '', bookingDate: new Date().toISOString().split('T')[0],
     tillDate: '', status: 'pending', reason: '', notes: '',
     items: [] as Array<{ itemId: string; fromEntityId: string; quantity: string }>,
+    // New customer fields
+    newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
   })
   const [showBookingDialog, setShowBookingDialog] = useState(false)
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null)
   const [bookingItemSearch, setBookingItemSearch] = useState('')
   const [bookingItemResults, setBookingItemResults] = useState<ItemData[]>([])
+  const [bookingCustomerMode, setBookingCustomerMode] = useState<'existing' | 'new'>('existing')
+  const [bookingCustomerSearch, setBookingCustomerSearch] = useState('')
+  const [bookingReasons, setBookingReasons] = useState<Array<{ id: string; name: string; description: string; status: string }>>([])
+  const [bookingReasonForm, setBookingReasonForm] = useState({ name: '', description: '', status: 'active' })
+  const [editingReasonId, setEditingReasonId] = useState<string | null>(null)
+  const [showReasonDialog, setShowReasonDialog] = useState(false)
+  const [bookingDateFrom, setBookingDateFrom] = useState('')
+  const [bookingDateTo, setBookingDateTo] = useState('')
 
   // Item search for transaction forms
   const [txItemSearch, setTxItemSearch] = useState('')
@@ -619,9 +630,20 @@ export default function Home() {
     e.preventDefault()
     if (bookingForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
     try {
+      let customerId = bookingForm.customerId
+
+      // If "new customer" mode, create customer first
+      if (bookingCustomerMode === 'new') {
+        if (!bookingForm.newCustomerName) { toast({ title: 'Error', description: 'Customer name is required for new customer', variant: 'destructive' }); return }
+        const custRes = await authFetch('/api/customers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: bookingForm.newCustomerName, phone: bookingForm.newCustomerPhone, email: bookingForm.newCustomerEmail, address: bookingForm.newCustomerAddress, type: 'regular', status: 'active' }) })
+        const custData = await custRes.json()
+        if (custRes.ok && custData.customer) { customerId = custData.customer.id }
+        else { toast({ title: 'Error', description: custData.error || 'Failed to create customer', variant: 'destructive' }); return }
+      }
+
       const payload = {
         entityId: workingEntity?.id,
-        customerId: bookingForm.customerId,
+        customerId,
         bookingDate: bookingForm.bookingDate,
         tillDate: bookingForm.tillDate,
         status: bookingForm.status,
@@ -632,16 +654,23 @@ export default function Home() {
       const res = editingBookingId
         ? await authFetch(`/api/bookings/${editingBookingId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
         : await authFetch('/api/bookings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (res.ok) { toast({ title: 'Success', description: editingBookingId ? 'Booking updated' : 'Booking created' }); setShowBookingDialog(false); resetBookingForm(); fetchBookings() }
+      if (res.ok) {
+        const data = await res.json()
+        const msg = editingBookingId ? 'Booking updated' : `Booking created! ID: ${data.booking?.bookingNo || ''}`
+        toast({ title: 'Success', description: msg })
+        setShowBookingDialog(false); resetBookingForm(); fetchBookings()
+      }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
 
   const resetBookingForm = () => {
-    setBookingForm({ customerId: '', bookingDate: new Date().toISOString().split('T')[0], tillDate: '', status: 'pending', reason: '', notes: '', items: [] })
+    setBookingForm({ customerId: '', bookingDate: new Date().toISOString().split('T')[0], tillDate: '', status: 'pending', reason: '', notes: '', items: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
     setEditingBookingId(null)
     setBookingItemSearch('')
     setBookingItemResults([])
+    setBookingCustomerMode('existing')
+    setBookingCustomerSearch('')
   }
 
   const handleBookingItemSearch = async () => {
@@ -760,7 +789,31 @@ export default function Home() {
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
-  useEffect(() => { if (currentView === 'booking') fetchBookings() }, [currentView])
+  useEffect(() => { if (currentView === 'booking') { handleAutoCancelBookings(); fetchBookings() } }, [currentView])
+  useEffect(() => { if (currentView === 'booking' || currentView === 'bookingReasons') fetchBookingReasons() }, [currentView])
+
+  const fetchBookingReasons = async () => { try { const res = await authFetch('/api/booking-reasons'); if (res.ok) { const d = await res.json(); setBookingReasons(d.reasons) } } catch {} }
+
+  const handleSaveBookingReason = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = editingReasonId
+        ? await authFetch(`/api/booking-reasons/${editingReasonId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookingReasonForm) })
+        : await authFetch('/api/booking-reasons', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(bookingReasonForm) })
+      if (res.ok) { toast({ title: 'Success', description: editingReasonId ? 'Reason updated' : 'Reason created' }); setShowReasonDialog(false); setBookingReasonForm({ name: '', description: '', status: 'active' }); setEditingReasonId(null); fetchBookingReasons() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteBookingReason = async (id: string) => { if (!confirm('Delete this reason?')) return; try { const res = await authFetch(`/api/booking-reasons/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchBookingReasons() } } catch {} }
+
+  // Auto-cancel expired bookings
+  const handleAutoCancelBookings = async () => {
+    try {
+      const now = new Date().toISOString()
+      const res = await authFetch('/api/bookings', { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ autoCancel: true, now }) })
+      if (res.ok) { const d = await res.json(); if (d.cancelled > 0) { toast({ title: 'Auto-Cancelled', description: `${d.cancelled} expired booking(s) cancelled` }) } }
+    } catch {}
+  }
 
   // Reports fetch
   const fetchReports = useCallback(async () => {
@@ -1217,7 +1270,9 @@ export default function Home() {
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
     ]},
-    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
+    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt, isParent: true, children: [
+      { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText },
+    ]},
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
   ].filter(item => {
@@ -1720,11 +1775,29 @@ export default function Home() {
     </div>
   )
 
-  const renderBookingPage = () => (
+  const renderBookingPage = () => {
+    // Filter bookings by date range
+    const filteredBookings = bookings.filter((b: any) => {
+      if (bookingDateFrom && new Date(b.bookingDate) < new Date(bookingDateFrom)) return false
+      if (bookingDateTo) {
+        const endToDate = new Date(bookingDateTo); endToDate.setHours(23, 59, 59, 999)
+        if (new Date(b.bookingDate) > endToDate) return false
+      }
+      return true
+    })
+
+    return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-semibold">Booking - {workingEntity?.name}</h2>
-        <Button onClick={() => { resetBookingForm(); setShowBookingDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
+        <div className="flex gap-2 flex-wrap">
+          <Input type="date" placeholder="From" value={bookingDateFrom} onChange={e => setBookingDateFrom(e.target.value)} className="w-auto text-xs" />
+          <Input type="date" placeholder="To" value={bookingDateTo} onChange={e => setBookingDateTo(e.target.value)} className="w-auto text-xs" />
+          <Button variant="outline" size="sm" onClick={handleExportBookings} disabled={exporting}>
+            {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}Excel
+          </Button>
+          <Button onClick={() => { resetBookingForm(); setShowBookingDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
+        </div>
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -1739,8 +1812,8 @@ export default function Home() {
             <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {bookings.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings yet</TableCell></TableRow>
-            : bookings.map((b: any) => (
+            {filteredBookings.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
+            : filteredBookings.map((b: any) => (
               <TableRow key={b.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{b.bookingNo}</TableCell>
                 <TableCell>
@@ -1756,6 +1829,7 @@ export default function Home() {
                 <TableCell className="text-xs">{b.reason || '—'}</TableCell>
                 <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
                 <TableCell className="text-center">
+                  <Button variant="ghost" size="sm" onClick={() => printBooking(b)} title="Print / PDF"><FileText className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="sm" onClick={() => {
                     setEditingBookingId(b.id)
                     setBookingForm({
@@ -1766,7 +1840,9 @@ export default function Home() {
                       reason: b.reason || '',
                       notes: b.notes || '',
                       items: (b.items || []).map((bi: any) => ({ itemId: bi.itemId, fromEntityId: bi.fromEntityId, quantity: String(bi.quantity) })),
+                      newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
                     })
+                    setBookingCustomerMode('existing')
                     setShowBookingDialog(true)
                   }} title="Edit"><Edit className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="sm" onClick={() => handleDeleteBooking(b.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
@@ -1780,24 +1856,56 @@ export default function Home() {
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
           <DialogHeader><DialogTitle>{editingBookingId ? 'Edit Booking' : 'New Booking'}</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveBooking} className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Customer</Label>
-                <Select value={bookingForm.customerId} onValueChange={v => setBookingForm({ ...bookingForm, customerId: v })}>
-                  <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
-                  <SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent>
-                </Select>
+            {/* Customer: Existing vs New toggle */}
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Customer</Label>
+              <div className="flex gap-2 mb-2">
+                <Button type="button" size="sm" variant={bookingCustomerMode === 'existing' ? 'default' : 'outline'} onClick={() => setBookingCustomerMode('existing')}>Existing Customer</Button>
+                <Button type="button" size="sm" variant={bookingCustomerMode === 'new' ? 'default' : 'outline'} onClick={() => setBookingCustomerMode('new')}>New Customer</Button>
               </div>
+              {bookingCustomerMode === 'existing' ? (
+                <div className="space-y-2">
+                  <Input placeholder="Search by name or phone..." value={bookingCustomerSearch} onChange={e => setBookingCustomerSearch(e.target.value)} className="text-sm" />
+                  <Select value={bookingForm.customerId} onValueChange={v => setBookingForm({ ...bookingForm, customerId: v })}>
+                    <SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger>
+                    <SelectContent>
+                      {customers.filter(c => {
+                        if (!bookingCustomerSearch) return true
+                        const s = bookingCustomerSearch.toLowerCase()
+                        return c.name.toLowerCase().includes(s) || (c.phone || '').includes(bookingCustomerSearch)
+                      }).map(c => <SelectItem key={c.id} value={c.id}>{c.name} {c.phone ? `(${c.phone})` : ''}</SelectItem>)}
+                    </SelectContent>
+                  </Select>
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 gap-3 border rounded-lg p-3 bg-muted/30">
+                  <div className="space-y-1"><Label className="text-xs">Name *</Label><Input placeholder="Customer name" value={bookingForm.newCustomerName} onChange={e => setBookingForm({ ...bookingForm, newCustomerName: e.target.value })} required /></div>
+                  <div className="space-y-1"><Label className="text-xs">Phone</Label><Input placeholder="Phone" value={bookingForm.newCustomerPhone} onChange={e => setBookingForm({ ...bookingForm, newCustomerPhone: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Email</Label><Input placeholder="Email" value={bookingForm.newCustomerEmail} onChange={e => setBookingForm({ ...bookingForm, newCustomerEmail: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Address</Label><Input placeholder="Address" value={bookingForm.newCustomerAddress} onChange={e => setBookingForm({ ...bookingForm, newCustomerAddress: e.target.value })} /></div>
+                </div>
+              )}
+            </div>
+
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <div className="space-y-2"><Label>Booking Date</Label><Input type="date" value={bookingForm.bookingDate} onChange={e => setBookingForm({ ...bookingForm, bookingDate: e.target.value })} /></div>
               <div className="space-y-2"><Label>Till Date</Label><Input type="date" value={bookingForm.tillDate} onChange={e => setBookingForm({ ...bookingForm, tillDate: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Reason</Label><Input placeholder="Booking reason" value={bookingForm.reason} onChange={e => setBookingForm({ ...bookingForm, reason: e.target.value })} /></div>
               <div className="space-y-2"><Label>Status</Label><Select value={bookingForm.status} onValueChange={v => setBookingForm({ ...bookingForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="confirmed">Confirmed</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
+            </div>
+
+            {/* Reason dropdown from BookingReason master data */}
+            <div className="space-y-2">
+              <Label>Reason</Label>
+              <Select value={bookingForm.reason} onValueChange={v => setBookingForm({ ...bookingForm, reason: v })}>
+                <SelectTrigger><SelectValue placeholder="Select reason (or type below)" /></SelectTrigger>
+                <SelectContent>{bookingReasons.map(r => <SelectItem key={r.id} value={r.name}>{r.name}</SelectItem>)}</SelectContent>
+              </Select>
+              <Input placeholder="Or type a custom reason" value={bookingForm.reason} onChange={e => setBookingForm({ ...bookingForm, reason: e.target.value })} className="text-xs" />
             </div>
 
             <Separator />
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Items (For Entity: {workingEntity?.name})</Label>
-              {/* Item search */}
               <div className="flex gap-2">
                 <Input placeholder="Search item to add..." value={bookingItemSearch} onChange={e => setBookingItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleBookingItemSearch())} className="flex-1" />
                 <Button type="button" variant="outline" onClick={handleBookingItemSearch}><Search className="w-4 h-4" /></Button>
@@ -1811,7 +1919,6 @@ export default function Home() {
                   ))}
                 </div>
               )}
-              {/* Added items list */}
               {bookingForm.items.length > 0 && (
                 <div className="border rounded-lg overflow-hidden">
                   <Table>
@@ -1823,13 +1930,13 @@ export default function Home() {
                     </TableRow></TableHeader>
                     <TableBody>
                       {bookingForm.items.map((bi, i) => {
-                        const item = bookingItemResults.find(r => r.id === bi.itemId) || { itemName: bi.itemId }
+                        // Find item name from search results or from the booking's existing items
+                        const itemName = bookingItemResults.find(x => x.id === bi.itemId)?.itemName
+                          || (editingBookingId && bookings.find((b: any) => b.id === editingBookingId)?.items?.find((bi2: any) => bi2.itemId === bi.itemId)?.item?.itemName)
+                          || bi.itemId.slice(0, 8)
                         return (
                           <TableRow key={i}>
-                            <TableCell className="text-xs">
-                              {/* Try to find item name from search results or just show ID */}
-                              {(() => { const r = bookingItemResults.find(x => x.id === bi.itemId); return r?.itemName || bi.itemId.slice(0, 8) })()}
-                            </TableCell>
+                            <TableCell className="text-xs">{itemName}</TableCell>
                             <TableCell>
                               <Select value={bi.fromEntityId} onValueChange={v => updateBookingItem(i, 'fromEntityId', v)}>
                                 <SelectTrigger className="h-8 text-xs"><SelectValue placeholder="Select entity" /></SelectTrigger>
@@ -1852,6 +1959,123 @@ export default function Home() {
               <Button type="button" variant="outline" onClick={() => { setShowBookingDialog(false); resetBookingForm() }}><X className="w-4 h-4 mr-2" />Cancel</Button>
               <Button type="submit"><Save className="w-4 h-4 mr-2" />{editingBookingId ? 'Update' : 'Create Booking'}</Button>
             </DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+    )
+  }
+
+  // Print booking — opens a new window with printable HTML
+  const printBooking = (b: any) => {
+    const win = window.open('', '_blank', 'width=800,height=600')
+    if (!win) { toast({ title: 'Error', description: 'Please allow popups', variant: 'destructive' }); return }
+    const itemsHtml = (b.items || []).map((bi: any, i: number) => `
+      <tr>
+        <td style="padding:6px 12px;border:1px solid #ddd">${i + 1}</td>
+        <td style="padding:6px 12px;border:1px solid #ddd">${bi.item?.itemName || '—'}</td>
+        <td style="padding:6px 12px;border:1px solid #ddd">${bi.fromEntity?.name || '—'}</td>
+        <td style="padding:6px 12px;border:1px solid #ddd;text-align:right">${bi.quantity}</td>
+      </tr>
+    `).join('')
+    win.document.write(`
+      <html><head><title>Booking ${b.bookingNo}</title>
+      <style>
+        body { font-family: Arial, sans-serif; padding: 40px; }
+        h1 { font-size: 22px; margin-bottom: 5px; }
+        .info { display: flex; gap: 40px; margin: 20px 0; }
+        .info div { font-size: 14px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        th { background: #f0f0f0; padding: 8px 12px; border: 1px solid #ddd; text-align: left; }
+        .footer { margin-top: 40px; display: flex; justify-content: space-between; }
+        .signature { border-top: 1px solid #000; padding-top: 5px; width: 200px; text-align: center; font-size: 12px; }
+      </style></head><body>
+      <h1>Booking Receipt</h1>
+      <p style="font-size:14px;color:#666">Booking No: <strong>${b.bookingNo}</strong></p>
+      <div class="info">
+        <div><strong>Customer:</strong> ${b.customer?.name || '—'}<br>${b.customer?.phone ? 'Phone: ' + b.customer.phone : ''}</div>
+        <div><strong>Booking Date:</strong> ${new Date(b.bookingDate).toLocaleDateString()}<br><strong>Till Date:</strong> ${b.tillDate ? new Date(b.tillDate).toLocaleDateString() : '—'}</div>
+        <div><strong>For Entity:</strong> ${b.entity?.name || workingEntity?.name || ''}<br><strong>Status:</strong> ${b.status}</div>
+      </div>
+      ${b.reason ? `<p><strong>Reason:</strong> ${b.reason}</p>` : ''}
+      <table>
+        <thead><tr><th style="padding:8px 12px;border:1px solid #ddd">SL</th><th style="padding:8px 12px;border:1px solid #ddd">Item</th><th style="padding:8px 12px;border:1px solid #ddd">From Entity</th><th style="padding:8px 12px;border:1px solid #ddd;text-align:right">Qty</th></tr></thead>
+        <tbody>${itemsHtml}</tbody>
+      </table>
+      ${b.notes ? `<p style="margin-top:20px"><strong>Notes:</strong> ${b.notes}</p>` : ''}
+      <div class="footer">
+        <div class="signature">Authorized Signature</div>
+        <div class="signature">Customer Signature</div>
+      </div>
+      <script>window.onload = () => { window.print() }</script>
+      </body></html>
+    `)
+    win.document.close()
+  }
+
+  // Export bookings to Excel
+  const handleExportBookings = async () => {
+    setExporting(true)
+    try {
+      const params = new URLSearchParams()
+      if (bookingDateFrom) params.set('from', bookingDateFrom)
+      if (bookingDateTo) params.set('to', bookingDateTo)
+      if (workingEntity?.id) params.set('entityId', workingEntity.id)
+      const res = await authFetch(`/api/bookings/export?${params.toString()}`)
+      if (!res.ok) { toast({ title: 'Error', description: 'Export failed', variant: 'destructive' }); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `bookings-export-${new Date().toISOString().split('T')[0]}.xlsx`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      toast({ title: 'Downloaded', description: link.download })
+    } catch { toast({ title: 'Error', description: 'Export failed', variant: 'destructive' }) }
+    finally { setExporting(false) }
+  }
+
+  // Booking Reasons management page
+  const renderBookingReasonsPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div><h2 className="text-xl font-bold">Booking Reasons</h2><p className="text-sm text-muted-foreground">Pre-define reasons for bookings</p></div>
+        <Button onClick={() => { setEditingReasonId(null); setBookingReasonForm({ name: '', description: '', status: 'active' }); setShowReasonDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />Add Reason</Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Name</TableHead>
+            <TableHead className="font-semibold">Description</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {bookingReasons.length === 0 ? <TableRow><TableCell colSpan={4} className="text-center py-8 text-muted-foreground">No reasons found</TableCell></TableRow>
+            : bookingReasons.map(r => (
+              <TableRow key={r.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium">{r.name}</TableCell>
+                <TableCell>{r.description || '—'}</TableCell>
+                <TableCell><Badge variant={r.status === 'active' ? 'default' : 'secondary'}>{r.status}</Badge></TableCell>
+                <TableCell className="text-center">
+                  <Button variant="ghost" size="sm" onClick={() => { setEditingReasonId(r.id); setBookingReasonForm({ name: r.name, description: r.description, status: r.status }); setShowReasonDialog(true) }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteBookingReason(r.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={showReasonDialog} onOpenChange={setShowReasonDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle>{editingReasonId ? 'Edit Reason' : 'Add Reason'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveBookingReason} className="space-y-4">
+            <div className="space-y-2"><Label>Reason Name *</Label><Input value={bookingReasonForm.name} onChange={e => setBookingReasonForm({ ...bookingReasonForm, name: e.target.value })} required /></div>
+            <div className="space-y-2"><Label>Description</Label><Input value={bookingReasonForm.description} onChange={e => setBookingReasonForm({ ...bookingReasonForm, description: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Status</Label><Select value={bookingReasonForm.status} onValueChange={v => setBookingReasonForm({ ...bookingReasonForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingReasonId ? 'Update' : 'Create'}</Button></DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -2705,6 +2929,7 @@ export default function Home() {
       case 'salesOrder': return renderSalesOrderPage()
       case 'salesReturn': return renderSalesReturnPage()
       case 'booking': return renderBookingPage()
+      case 'bookingReasons': return renderBookingReasonsPage()
       case 'incentive': return renderIncentivePage()
       case 'reports': return renderReportsPage()
       case 'tailors': return renderMasterDataPage<TailorData>('Tailors', tailors, ['name','phone','address','specialization','status'], tailorForm, setTailorForm, editingTailorId, setEditingTailorId, showTailorDialog, setShowTailorDialog, handleSaveTailor, handleDeleteTailor, { name:{label:'Name*',type:'text'},phone:{label:'Phone',type:'text'},address:{label:'Address',type:'text'},specialization:{label:'Specialization',type:'text',placeholder:'e.g. Shirt, Pant, Suit'},status:{label:'Status',type:'select',options:['active','inactive']} })

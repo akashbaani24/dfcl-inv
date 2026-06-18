@@ -2,6 +2,42 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
+// Auto-cancel expired bookings (called when user opens Booking page)
+async function autoCancelExpired() {
+  try {
+    const now = new Date()
+    const result = await db.booking.updateMany({
+      where: {
+        tillDate: { lt: now },
+        status: { notIn: ['delivered', 'cancelled'] },
+      },
+      data: { status: 'cancelled' },
+    })
+    return result.count
+  } catch (e) {
+    console.error('Auto-cancel error:', e)
+    return 0
+  }
+}
+
+// PUT with autoCancel flag — auto-cancels expired bookings
+export async function PUT(request: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser(request);
+    if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+    const body = await request.json();
+    if (body.autoCancel) {
+      const cancelled = await autoCancelExpired();
+      return NextResponse.json({ success: true, cancelled });
+    }
+    return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+  } catch (error) {
+    console.error('Auto-cancel error:', error);
+    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+  }
+}
+
 export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);

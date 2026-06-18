@@ -335,6 +335,15 @@ model SalesReturn {
   salesOrder SalesOrder? @relation(fields: [salesOrderId], references: [id], onDelete: SetNull)
 }
 
+model BookingReason {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String   @default("")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
 model Incentive {
   id        String   @id @default(cuid())
   itemId    String

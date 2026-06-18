@@ -61,7 +61,20 @@ export async function GET() {
     try { await c.execute('CREATE INDEX IF NOT EXISTS idx_stock_entityId ON Stock(entityId)'); results.push('✓ Stock.entityId index'); } catch (e) {}
     try { await c.execute('CREATE INDEX IF NOT EXISTS idx_session_userId ON Session(userId)'); results.push('✓ Session.userId index'); } catch (e) {}
 
-    return NextResponse.json({ success: true, results });
+    
+    // BookingReason table
+    try {
+      await c.execute(`CREATE TABLE IF NOT EXISTS "BookingReason" (
+        "id" TEXT NOT NULL PRIMARY KEY, "name" TEXT NOT NULL,
+        "description" TEXT NOT NULL DEFAULT '', "status" TEXT NOT NULL DEFAULT 'active',
+        "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        "updatedAt" DATETIME NOT NULL
+      )`);
+      await c.execute('CREATE UNIQUE INDEX IF NOT EXISTS "BookingReason_name_key" ON "BookingReason"("name")');
+      results.push('✓ BookingReason table');
+    } catch (e) { results.push('× BookingReason: ' + String(e).slice(0, 80)); }
+
+return NextResponse.json({ success: true, results });
   } catch (error) {
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
