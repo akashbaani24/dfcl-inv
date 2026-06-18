@@ -722,6 +722,7 @@ export default function Home() {
   const fetchAdjustments = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/item-adjustments?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setAdjustments(d.adjustments.map((a: any) => ({ ...a, itemName: a.item?.itemName || '', entityName: a.entity?.name || '' }))) } } catch {} }
   const fetchTransfers = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/transfers?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setTransfers(d.transfers.map((t: any) => ({ ...t, itemName: t.item?.itemName || '', fromEntityName: t.fromEntity?.name || '', toEntityName: t.toEntity?.name || '' }))) } } catch {} }
   const fetchReceives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/receives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setReceives(d.receives.map((r: any) => ({ ...r, itemName: r.item?.itemName || '', entityName: r.entity?.name || '', sourceEntityName: r.sourceEntity?.name || '' }))) } } catch {} }
+  const fetchPurchases = async (statusFilter = '') => { if (!workingEntity) return; try { const params = new URLSearchParams(); params.set('entityId', workingEntity.id); if (statusFilter) params.set('status', statusFilter); const res = await authFetch(`/api/purchases?${params}`); if (res.ok) { const d = await res.json(); setPurchases(d.purchases || []) } } catch {} }
   const fetchSalesOrders = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-orders?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesOrders(d.salesOrders || []) } } catch {} }
   const fetchSalesReturns = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-returns?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesReturns(d.salesReturns.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
   const fetchIncentives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/incentives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setIncentives(d.incentives.map((i: any) => ({ ...i, itemName: i.item?.itemName || '', entityName: i.entity?.name || '', tailorName: i.tailor?.name || '' }))) } } catch {} }
@@ -2866,19 +2867,7 @@ export default function Home() {
   }
 
   // ─── Purchase module ────────────────────────────────────────────────────
-  // Fetch purchases list (called from useEffect when entering Purchase list page)
-  const fetchPurchases = useCallback(async (statusFilter = '') => {
-    try {
-      const params = new URLSearchParams()
-      if (workingEntity?.id) params.set('entityId', workingEntity.id)
-      if (statusFilter) params.set('status', statusFilter)
-      const res = await authFetch(`/api/purchases?${params}`)
-      if (res.ok) {
-        const data = await res.json()
-        setPurchases(data.purchases || [])
-      }
-    } catch {}
-  }, [workingEntity?.id])
+  // (fetchPurchases is defined above near other fetch handlers)
 
   const resetPurchaseForm = () => {
     setPurchaseForm({
