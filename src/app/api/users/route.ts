@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, hashPassword, ITEM_COLUMNS, MENU_ITEMS } from '@/lib/auth';
+import { getCurrentUser, hashPassword, ITEM_COLUMNS, MENU_ITEMS, MASTER_DATA_ITEMS } from '@/lib/auth';
 
 // GET all users (admin only)
 export async function GET(request: NextRequest) {
@@ -31,6 +31,9 @@ export async function GET(request: NextRequest) {
         menuAccess: {
           select: { menuKey: true, visible: true },
         },
+        masterDataAccess: {
+          select: { masterDataKey: true, visible: true },
+        },
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -59,7 +62,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { username, password, displayName, role, canCreateItem, canModifyItem, columnAccess, entityIds, menuAccess } = await request.json();
+    const { username, password, displayName, role, canCreateItem, canModifyItem, columnAccess, entityIds, menuAccess, masterDataAccess } = await request.json();
 
     if (!username || !password || !displayName) {
       return NextResponse.json({ error: 'Username, password, and display name are required' }, { status: 400 });
@@ -88,6 +91,14 @@ export async function POST(request: NextRequest) {
       })
     );
 
+    // Build master data access: default all visible if not provided
+    const masterDataAccessData = (masterDataAccess || MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true }))).map(
+      (mda: { masterDataKey: string; visible: boolean }) => ({
+        masterDataKey: mda.masterDataKey,
+        visible: mda.visible,
+      })
+    );
+
     const user = await db.user.create({
       data: {
         username,
@@ -105,11 +116,15 @@ export async function POST(request: NextRequest) {
         menuAccess: {
           create: menuAccessData,
         },
+        masterDataAccess: {
+          create: masterDataAccessData,
+        },
       },
       include: {
         columnAccess: true,
         entityAccess: { include: { entity: true } },
         menuAccess: true,
+        masterDataAccess: true,
       },
     });
 
@@ -124,6 +139,7 @@ export async function POST(request: NextRequest) {
         columnAccess: user.columnAccess.map(ca => ({ columnName: ca.columnName, canView: ca.canView })),
         entityAccess: user.entityAccess.map(ea => ({ entityId: ea.entityId, entityName: ea.entity.name })),
         menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible })),
+        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible })),
       },
     });
   } catch (error) {

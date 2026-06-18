@@ -22,10 +22,11 @@ model User {
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
-  columnAccess  UserColumnAccess[]
-  entityAccess  UserEntityAccess[]
-  menuAccess    UserMenuAccess[]
-  sessions      Session[]
+  columnAccess      UserColumnAccess[]
+  entityAccess      UserEntityAccess[]
+  menuAccess        UserMenuAccess[]
+  masterDataAccess  UserMasterDataAccess[]
+  sessions          Session[]
 }
 
 model UserColumnAccess {
@@ -59,6 +60,20 @@ model UserMenuAccess {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@unique([userId, menuKey])
+}
+
+// Per-user access control for Master Data tab pages
+// Allows admin to grant/revoke access to specific master data pages
+// (Tailors, Making Info, UoM, Suppliers, Customers, Entities, Users, Item Information, New Item, Upload CSV)
+model UserMasterDataAccess {
+  id            String @id @default(cuid())
+  userId        String
+  masterDataKey String  // e.g. "items", "newItem", "upload", "entities", "users", "tailors", "makingInfo", "uom", "suppliers", "customers"
+  visible       Boolean @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, masterDataKey])
 }
 
 model Session {

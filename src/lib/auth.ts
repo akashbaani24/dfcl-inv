@@ -52,6 +52,7 @@ export async function getCurrentUser(request?: NextRequest) {
           columnAccess: true,
           entityAccess: { include: { entity: true } },
           menuAccess: true,
+          masterDataAccess: true,
         },
       },
     },
@@ -100,3 +101,19 @@ export const MENU_ITEMS = [
 ] as const;
 
 export type MenuItemKey = typeof MENU_ITEMS[number]['key'];
+
+// Master Data tab sub-pages that can be controlled per user
+export const MASTER_DATA_ITEMS = [
+  { key: 'items', label: 'Item Information', adminOnly: false },
+  { key: 'newItem', label: 'New Item', adminOnly: false },
+  { key: 'upload', label: 'Upload CSV', adminOnly: false },
+  { key: 'entities', label: 'Entity', adminOnly: true },
+  { key: 'users', label: 'Users', adminOnly: true },
+  { key: 'tailors', label: 'Tailors', adminOnly: false },
+  { key: 'makingInfo', label: 'Making Information', adminOnly: false },
+  { key: 'uom', label: 'UoM', adminOnly: false },
+  { key: 'suppliers', label: 'Suppliers', adminOnly: false },
+  { key: 'customers', label: 'Customer Database', adminOnly: false },
+] as const;
+
+export type MasterDataKey = typeof MASTER_DATA_ITEMS[number]['key'];

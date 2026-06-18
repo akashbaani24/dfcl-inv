@@ -70,12 +70,14 @@ import {
 interface ColumnAccess { columnName: string; canView: boolean }
 interface EntityAccess { entityId: string; entityName: string }
 interface MenuAccess { menuKey: string; visible: boolean }
+interface MasterDataAccess { masterDataKey: string; visible: boolean }
 interface EntityData { id: string; name: string; description?: string; _count?: { stocks: number; userAccess: number } }
 
 interface UserData {
   id: string; username: string; displayName: string; role: string
   canCreateItem: boolean; canModifyItem: boolean
   columnAccess: ColumnAccess[]; entityAccess: EntityAccess[]; menuAccess: MenuAccess[]
+  masterDataAccess?: MasterDataAccess[]
 }
 
 interface ItemData {
@@ -184,6 +186,20 @@ const ALL_MENU_ITEMS = [
   { key: 'reports', label: 'Reports', group: 'Function' },
 ]
 
+// Master Data sub-pages that can be granted/revoked per user
+const ALL_MASTER_DATA_ITEMS = [
+  { key: 'items', label: 'Item Information' },
+  { key: 'newItem', label: 'New Item' },
+  { key: 'upload', label: 'Upload CSV' },
+  { key: 'entities', label: 'Entity' },
+  { key: 'users', label: 'Users' },
+  { key: 'tailors', label: 'Tailors' },
+  { key: 'makingInfo', label: 'Making Information' },
+  { key: 'uom', label: 'UoM' },
+  { key: 'suppliers', label: 'Suppliers' },
+  { key: 'customers', label: 'Customer Database' },
+]
+
 // Auth-aware fetch helper: always sends token via Authorization header + credentials
 function getAuthHeaders(headers: Record<string, string> = {}): Record<string, string> {
   const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null
@@ -286,6 +302,7 @@ export default function Home() {
   const [userForm, setUserForm] = useState({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false })
   const [userEntityIds, setUserEntityIds] = useState<string[]>([])
   const [userMenuAccess, setUserMenuAccess] = useState<MenuAccess[]>(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true })))
+  const [userMasterDataAccess, setUserMasterDataAccess] = useState<MasterDataAccess[]>(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true })))
   const [editingUserId, setEditingUserId] = useState<string | null>(null)
   const [columnAccessForm, setColumnAccessForm] = useState<ColumnAccess[]>([])
   const [showUserDialog, setShowUserDialog] = useState(false)
@@ -865,9 +882,9 @@ export default function Home() {
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
-      const res = await authFetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, columnAccess: columnAccessForm }) })
+      const res = await authFetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, masterDataAccess: userMasterDataAccess, columnAccess: columnAccessForm }) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'User created' }); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); fetchUsers() }
+      if (res.ok) { toast({ title: 'Success', description: 'User created' }); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))); setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); fetchUsers() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create user', variant: 'destructive' }) }
   }
@@ -876,11 +893,11 @@ export default function Home() {
     e.preventDefault()
     if (!editingUserId) return
     try {
-      const updateData: Record<string, unknown> = { ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, columnAccess: columnAccessForm }
+      const updateData: Record<string, unknown> = { ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, masterDataAccess: userMasterDataAccess, columnAccess: columnAccessForm }
       if (!updateData.password) delete updateData.password
       const res = await authFetch(`/api/users/${editingUserId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updateData) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'User updated' }); setEditingUserId(null); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); fetchUsers() }
+      if (res.ok) { toast({ title: 'Success', description: 'User updated' }); setEditingUserId(null); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))); setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); fetchUsers() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update user', variant: 'destructive' }) }
   }
@@ -924,6 +941,14 @@ export default function Home() {
         })
       : ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true }))
     )
+    // Load masterDataAccess (defaults to visible=true for legacy users with no records)
+    setUserMasterDataAccess(u.masterDataAccess && u.masterDataAccess.length > 0
+      ? ALL_MASTER_DATA_ITEMS.map(m => {
+          const existing = u.masterDataAccess!.find(mda => mda.masterDataKey === m.key)
+          return { masterDataKey: m.key, visible: existing ? existing.visible : true }
+        })
+      : ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true }))
+    )
     setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => {
       const existing = u.columnAccess.find(ca => ca.columnName === col.key)
       return { columnName: col.key, canView: existing ? existing.canView : true }
@@ -936,6 +961,7 @@ export default function Home() {
     setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false })
     setUserEntityIds([])
     setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true })))
+    setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true })))
     setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true })))
     setShowUserDialog(true)
   }
@@ -1078,18 +1104,25 @@ export default function Home() {
     return item
   })
 
-  // Master Data sub-menu items
+  // Master Data sub-menu items — checks both role-based perm AND user-specific masterDataAccess
+  const hasMasterDataAccess = (key: string): boolean => {
+    if (isManagerOrAdmin) return true // admins/managers see everything
+    // Check user-specific masterDataAccess (defaults to visible=true if no record exists)
+    const access = user.masterDataAccess?.find(mda => mda.masterDataKey === key)
+    return access ? access.visible : false
+  }
+
   const masterDataItems = [
-    { key: 'items' as ViewType, label: 'Item Information', icon: LayoutDashboard },
-    { key: 'newItem' as ViewType, label: 'New Item', icon: Plus, perm: canCreate },
-    { key: 'upload' as ViewType, label: 'Upload CSV', icon: Upload, perm: canCreate },
-    { key: 'entities' as ViewType, label: 'Entity', icon: Building2, perm: isAdmin },
-    { key: 'users' as ViewType, label: 'Users', icon: Users, perm: isAdmin },
-    { key: 'tailors' as ViewType, label: 'Tailors', icon: Scissors, perm: isManagerOrAdmin },
-    { key: 'makingInfo' as ViewType, label: 'Making Information', icon: Ruler, perm: isManagerOrAdmin },
-    { key: 'uom' as ViewType, label: 'UoM', icon: Package, perm: isManagerOrAdmin },
-    { key: 'suppliers' as ViewType, label: 'Suppliers', icon: Truck, perm: isManagerOrAdmin },
-    { key: 'customers' as ViewType, label: 'Customer Database', icon: UserCircle, perm: isManagerOrAdmin },
+    { key: 'items' as ViewType, label: 'Item Information', icon: LayoutDashboard, perm: hasMasterDataAccess('items') },
+    { key: 'newItem' as ViewType, label: 'New Item', icon: Plus, perm: hasMasterDataAccess('newItem') && canCreate },
+    { key: 'upload' as ViewType, label: 'Upload CSV', icon: Upload, perm: hasMasterDataAccess('upload') && canCreate },
+    { key: 'entities' as ViewType, label: 'Entity', icon: Building2, perm: isAdmin && hasMasterDataAccess('entities') },
+    { key: 'users' as ViewType, label: 'Users', icon: Users, perm: isAdmin && hasMasterDataAccess('users') },
+    { key: 'tailors' as ViewType, label: 'Tailors', icon: Scissors, perm: hasMasterDataAccess('tailors') },
+    { key: 'makingInfo' as ViewType, label: 'Making Information', icon: Ruler, perm: hasMasterDataAccess('makingInfo') },
+    { key: 'uom' as ViewType, label: 'UoM', icon: Package, perm: hasMasterDataAccess('uom') },
+    { key: 'suppliers' as ViewType, label: 'Suppliers', icon: Truck, perm: hasMasterDataAccess('suppliers') },
+    { key: 'customers' as ViewType, label: 'Customer Database', icon: UserCircle, perm: hasMasterDataAccess('customers') },
   ]
 
   const visibleMasterDataItems = masterDataItems.filter(item => item.perm === undefined || item.perm)
@@ -2963,6 +2996,41 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
                   </div>
                 ))
               })()}
+            </div>
+            <Separator />
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-sm font-semibold">Master Data Access</Label>
+                <div className="flex gap-2">
+                  <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={() => setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true })))}>Select All</Button>
+                  <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={() => setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: false })))}>Deselect All</Button>
+                </div>
+              </div>
+              <p className="text-xs text-muted-foreground">Grant access to specific Master Data tab pages. Admin &amp; Manager always see all. Entity &amp; Users are admin-only regardless of this setting.</p>
+              <div className="space-y-2 border rounded-lg p-3">
+                {ALL_MASTER_DATA_ITEMS.map(item => {
+                  const idx = userMasterDataAccess.findIndex(mda => mda.masterDataKey === item.key)
+                  const checked = idx >= 0 ? userMasterDataAccess[idx].visible : true
+                  return (
+                    <div key={item.key} className="flex items-center gap-2">
+                      <Checkbox
+                        id={`md-${item.key}`}
+                        checked={checked}
+                        onCheckedChange={v => {
+                          const updated = [...userMasterDataAccess]
+                          if (idx >= 0) {
+                            updated[idx] = { ...updated[idx], visible: !!v }
+                          } else {
+                            updated.push({ masterDataKey: item.key, visible: !!v })
+                          }
+                          setUserMasterDataAccess(updated)
+                        }}
+                      />
+                      <Label htmlFor={`md-${item.key}`} className="text-sm cursor-pointer">{item.label}</Label>
+                    </div>
+                  )
+                })}
+              </div>
             </div>
             <Separator />
             <div className="space-y-2">

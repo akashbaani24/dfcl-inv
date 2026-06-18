@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, hashPassword, ITEM_COLUMNS, MENU_ITEMS } from '@/lib/auth';
+import { getCurrentUser, hashPassword, ITEM_COLUMNS, MENU_ITEMS, MASTER_DATA_ITEMS } from '@/lib/auth';
 
 // PUT update user (admin only)
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -11,7 +11,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { displayName, role, canCreateItem, canModifyItem, password, entityIds, menuAccess, columnAccess } = await request.json();
+    const { displayName, role, canCreateItem, canModifyItem, password, entityIds, menuAccess, masterDataAccess, columnAccess } = await request.json();
 
     const updateData: Record<string, unknown> = {};
     if (displayName !== undefined) updateData.displayName = displayName;
@@ -60,6 +60,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       }
     }
 
+    // Update master data access if provided
+    if (masterDataAccess !== undefined) {
+      await db.userMasterDataAccess.deleteMany({ where: { userId: id } });
+      const masterDataAccessData = (masterDataAccess as { masterDataKey: string; visible: boolean }[]).map(mda => ({
+        userId: id,
+        masterDataKey: mda.masterDataKey,
+        visible: mda.visible,
+      }));
+      if (masterDataAccessData.length > 0) {
+        await db.userMasterDataAccess.createMany({ data: masterDataAccessData });
+      }
+    }
+
     const user = await db.user.update({
       where: { id },
       data: updateData,
@@ -67,6 +80,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         columnAccess: true,
         entityAccess: { include: { entity: true } },
         menuAccess: true,
+        masterDataAccess: true,
       },
     });
 
@@ -81,6 +95,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         columnAccess: user.columnAccess.map(ca => ({ columnName: ca.columnName, canView: ca.canView })),
         entityAccess: user.entityAccess.map(ea => ({ entityId: ea.entityId, entityName: ea.entity.name })),
         menuAccess: user.menuAccess.map(ma => ({ menuKey: ma.menuKey, visible: ma.visible })),
+        masterDataAccess: user.masterDataAccess.map(mda => ({ masterDataKey: mda.masterDataKey, visible: mda.visible })),
       },
     });
   } catch (error) {
