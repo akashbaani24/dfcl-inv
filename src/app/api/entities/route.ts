@@ -10,9 +10,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
+    // Optimized: skip _count (was causing slow COUNT subqueries on 22k+ items)
     const entities = await db.entity.findMany({
       orderBy: { name: 'asc' },
-      include: { _count: { select: { stocks: true, userAccess: true } } },
+      select: { id: true, name: true, description: true, createdAt: true, updatedAt: true },
     });
 
     return NextResponse.json({ entities });

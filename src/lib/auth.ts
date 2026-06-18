@@ -25,10 +25,14 @@ export async function createSession(userId: string): Promise<string> {
 }
 
 // Get current user from either cookie or Authorization header
+// Optimized: uses in-memory cache (5 min TTL) to avoid repeated DB queries
+// on every API call within the same session
+const userCache = new Map<string, { user: unknown; expires: number }>();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 export async function getCurrentUser(request?: NextRequest) {
   let token: string | undefined;
 
-  // Try Authorization header first (for iframe/proxy scenarios where cookies may not be sent)
   if (request) {
     const authHeader = request.headers.get('authorization');
     if (authHeader?.startsWith('Bearer ')) {
@@ -36,13 +40,18 @@ export async function getCurrentUser(request?: NextRequest) {
     }
   }
 
-  // Fall back to cookie
   if (!token) {
     const cookieStore = await cookies();
     token = cookieStore.get('session_token')?.value;
   }
 
   if (!token) return null;
+
+  // Check cache first
+  const cached = userCache.get(token);
+  if (cached && cached.expires > Date.now()) {
+    return cached.user;
+  }
 
   const session = await db.session.findUnique({
     where: { token },
@@ -62,10 +71,19 @@ export async function getCurrentUser(request?: NextRequest) {
     if (session) {
       await db.session.delete({ where: { id: session.id } });
     }
+    userCache.delete(token);
     return null;
   }
 
+  // Cache the user for 5 minutes
+  userCache.set(token, { user: session.user, expires: Date.now() + CACHE_TTL });
+
   return session.user;
+}
+
+// Clear cache when user logs out
+export function clearUserCache(token: string) {
+  userCache.delete(token);
 }
 
 export async function deleteSession(token: string) {
