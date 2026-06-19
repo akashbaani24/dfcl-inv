@@ -2089,35 +2089,150 @@ export default function Home() {
   if (!user) {
     try {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <Card className="w-full max-w-md shadow-xl border-0">
-          <CardHeader className="text-center pb-2">
-            <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4">
-              <Package className="w-8 h-8 text-primary-foreground" />
+      <div className="min-h-screen w-full bg-slate-100 flex flex-col lg:flex-row">
+        {/* === LOGIN SIDE === */}
+        <div className="flex-1 flex items-center justify-center p-6 sm:p-10 order-1 lg:order-1">
+          <div className="w-full max-w-md">
+            {/* Mobile-only compact header (branding panel is hidden on small screens below) */}
+            <div className="lg:hidden flex flex-col items-center mb-8 text-center">
+              <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-indigo-500/30">
+                <Package className="w-7 h-7 text-white" />
+              </div>
+              <h1 className="text-xl font-bold text-slate-800">Akash Inventory System</h1>
             </div>
-            <CardTitle className="text-2xl font-bold">Akash Inventory System</CardTitle>
-            <p className="text-muted-foreground mt-1">Sign in to your account</p>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleLogin} className="space-y-4">
-              {loginError && <div className="bg-destructive/10 text-destructive text-sm p-3 rounded-lg border border-destructive/20">{loginError}</div>}
-              <div className="space-y-2">
-                <Label htmlFor="username">Username</Label>
-                <Input id="username" placeholder="Enter your username" value={loginUsername} onChange={e => setLoginUsername(e.target.value)} required />
+
+            <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-7 sm:p-9">
+              <div className="mb-7">
+                <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
+                <p className="text-slate-500 text-sm mt-1">Sign in to your account to continue</p>
               </div>
-              <div className="space-y-2">
-                <Label htmlFor="password">Password</Label>
-                <div className="relative">
-                  <Input id="password" type={showPassword ? 'text' : 'password'} placeholder="Enter your password" value={loginPassword} onChange={e => setLoginPassword(e.target.value)} required />
-                  <button type="button" onClick={() => setShowPassword(!showPassword)} className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground">
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+
+              <form onSubmit={handleLogin} className="space-y-5">
+                {loginError && (
+                  <div className="bg-red-50 text-red-700 text-sm p-3 rounded-lg border border-red-200 flex items-start gap-2">
+                    <span className="text-red-500 mt-0.5">!</span>
+                    <span>{loginError}</span>
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label htmlFor="username" className="text-sm font-medium text-slate-700">Username</Label>
+                  <Input
+                    id="username"
+                    placeholder="Enter your username"
+                    value={loginUsername}
+                    onChange={e => setLoginUsername(e.target.value)}
+                    required
+                    className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-indigo-500/20"
+                  />
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                  <div className="relative">
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="Enter your password"
+                      value={loginPassword}
+                      onChange={e => setLoginPassword(e.target.value)}
+                      required
+                      className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-indigo-500/20 pr-10"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-700 transition-colors"
+                      aria-label="Toggle password visibility"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  size="lg"
+                  className="w-full h-11 bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-700 hover:to-blue-800 shadow-md shadow-indigo-500/30 text-white font-medium"
+                >
+                  Sign In
+                </Button>
+              </form>
+            </div>
+
+            {/* Mobile-only developer credit (under the form) */}
+            <p className="lg:hidden text-center text-xs text-slate-400 mt-6">
+              Developed by <span className="font-semibold text-slate-600">Abdur Rahman Akash</span>
+            </p>
+          </div>
+        </div>
+
+        {/* === BRANDING SIDE === */}
+        <div className="hidden lg:flex lg:flex-1 relative overflow-hidden bg-gradient-to-br from-indigo-700 via-blue-800 to-slate-900 order-2 lg:order-2">
+          {/* Decorative geometric shapes */}
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute top-10 left-10 w-72 h-72 bg-white/10 rounded-full blur-3xl" />
+            <div className="absolute bottom-20 right-10 w-96 h-96 bg-indigo-400/20 rounded-full blur-3xl" />
+            <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-blue-300/10 rounded-full blur-3xl" />
+          </div>
+
+          {/* Polygonal pattern overlay */}
+          <div
+            className="absolute inset-0 opacity-10"
+            style={{
+              backgroundImage:
+                'linear-gradient(45deg, transparent 48%, rgba(255,255,255,0.4) 49%, rgba(255,255,255,0.4) 51%, transparent 52%), linear-gradient(-45deg, transparent 48%, rgba(255,255,255,0.4) 49%, rgba(255,255,255,0.4) 51%, transparent 52%)',
+              backgroundSize: '60px 60px'
+            }}
+          />
+
+          {/* Main branding content */}
+          <div className="relative z-10 flex flex-col justify-between h-full w-full p-12 xl:p-16 text-white">
+            {/* Top: logo + name */}
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 bg-white/15 backdrop-blur-sm rounded-2xl flex items-center justify-center border border-white/20">
+                <Package className="w-7 h-7 text-white" />
               </div>
-              <Button type="submit" className="w-full" size="lg">Sign In</Button>
-            </form>
-          </CardContent>
-        </Card>
+              <div>
+                <p className="text-xs uppercase tracking-widest text-blue-200">Inventory &amp; Sales</p>
+                <p className="text-lg font-semibold">DFCL</p>
+              </div>
+            </div>
+
+            {/* Middle: hero text */}
+            <div className="max-w-xl">
+              <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-4">
+                Akash Inventory System
+              </h1>
+              <p className="text-base xl:text-lg text-blue-100/90 leading-relaxed">
+                Multi-entity inventory, sales, purchase, and incentive management — built for speed, accuracy, and scale.
+              </p>
+
+              {/* Feature pills */}
+              <div className="flex flex-wrap gap-2 mt-6">
+                {['Multi-Entity', 'Sales & POS', 'Purchase & COGS', 'Incentive Engine', 'Approval Workflow'].map(feature => (
+                  <span
+                    key={feature}
+                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm"
+                  >
+                    {feature}
+                  </span>
+                ))}
+              </div>
+            </div>
+
+            {/* Bottom: developer credit */}
+            <div className="flex items-center gap-3 pt-6 border-t border-white/10">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-lg">
+                A
+              </div>
+              <div>
+                <p className="text-xs text-blue-200 uppercase tracking-wider">Developed by</p>
+                <p className="text-sm font-semibold text-white">Abdur Rahman Akash</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
     )
     } catch (loginErr) {
