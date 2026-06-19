@@ -395,6 +395,47 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: "DELETE FROM IncentiveFormula WHERE id NOT IN (SELECT DISTINCT formulaId FROM IncentiveFormulaRange)",
     description: 'Delete old IncentiveFormula records that have no ranges (pre-migration records)',
   },
+  // v51: Set defaults on old IncentiveFormula columns so INSERT doesn't fail
+  // SQLite doesn't support ALTER COLUMN SET DEFAULT, so we use a workaround:
+  // Create a new table without the constraints, copy data, drop old, rename.
+  // But simpler: just set the values via UPDATE for existing rows, and for new rows,
+  // Prisma won't send those columns so SQLite will use the column default.
+  // Since we can't change the default in SQLite, we need to recreate the table.
+  {
+    id: '2026_06_19_recreate_IncentiveFormula',
+    sql: `CREATE TABLE IF NOT EXISTS "IncentiveFormula_new" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "notes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+    description: 'Create new IncentiveFormula table without old columns',
+  },
+  {
+    id: '2026_06_19_copy_IncentiveFormula',
+    sql: `INSERT INTO "IncentiveFormula_new" ("id", "name", "description", "status", "notes", "createdBy", "createdAt", "updatedAt")
+          SELECT "id", "name", "description", "status", "notes", "createdBy", "createdAt", "updatedAt" FROM "IncentiveFormula"`,
+    description: 'Copy data to new IncentiveFormula table',
+  },
+  {
+    id: '2026_06_19_drop_old_IncentiveFormula',
+    sql: 'DROP TABLE IF EXISTS "IncentiveFormula"',
+    description: 'Drop old IncentiveFormula table',
+  },
+  {
+    id: '2026_06_19_rename_IncentiveFormula',
+    sql: 'ALTER TABLE "IncentiveFormula_new" RENAME TO "IncentiveFormula"',
+    description: 'Rename new IncentiveFormula table',
+  },
+  {
+    id: '2026_06_19_formula_idx_status_v2',
+    sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormula_status_idx` ON `IncentiveFormula`(`status`)',
+    description: 'Recreate index on IncentiveFormula.status',
+  },
 ];
 
 export async function POST(request: NextRequest) {
