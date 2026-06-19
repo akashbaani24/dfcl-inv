@@ -314,10 +314,20 @@ export default function Home() {
   const [multiTransferRows, setMultiTransferRows] = useState<MultiTransferRow[]>([])
   const [multiTransferToEntityId, setMultiTransferToEntityId] = useState<string>('')
   const [multiTransferNotes, setMultiTransferNotes] = useState<string>('')
+  // ★ Transfer detail dialog state
+  const [transferDetailData, setTransferDetailData] = useState<any>(null)
+  const [showTransferDetailDialog, setShowTransferDetailDialog] = useState(false)
+  const openTransferDetail = (t: any) => {
+    setTransferDetailData(t)
+    setShowTransferDetailDialog(true)
+  }
 
   const [receives, setReceives] = useState<ReceiveData[]>([])
   const [receiveForm, setReceiveForm] = useState({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
   const [showReceiveDialog, setShowReceiveDialog] = useState(false)
+  // ★ Incoming transfers — pending transfers destined TO this entity, shown on the Receive page
+  //    with a one-click "Receive" button that creates a Receive from the source entity.
+  const [incomingTransfers, setIncomingTransfers] = useState<any[]>([])
 
   // ★ Purchase state
   const [purchases, setPurchases] = useState<any[]>([])
@@ -942,6 +952,59 @@ export default function Home() {
   const fetchAdjustments = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/item-adjustments?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setAdjustments(d.adjustments.map((a: any) => ({ ...a, itemName: a.item?.itemName || '', entityName: a.entity?.name || '' }))) } } catch {} }
   const fetchTransfers = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/transfers?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setTransfers(d.transfers.map((t: any) => ({ ...t, itemName: t.item?.itemName || '', fromEntityName: t.fromEntity?.name || '', toEntityName: t.toEntity?.name || '' }))) } } catch {} }
   const fetchReceives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/receives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setReceives(d.receives.map((r: any) => ({ ...r, itemName: r.item?.itemName || '', entityName: r.entity?.name || '', sourceEntityName: r.sourceEntity?.name || '' }))) } } catch {} }
+  // ★ Fetch pending transfers destined TO this entity (for the Receive page's "Incoming Transfers" panel)
+  const fetchIncomingTransfers = async () => {
+    if (!workingEntity) return
+    try {
+      const res = await authFetch(`/api/transfers?entityId=${workingEntity.id}`)
+      if (res.ok) {
+        const d = await res.json()
+        // Only show pending transfers where this entity is the destination
+        const incoming = (d.transfers || [])
+          .filter((t: any) => t.toEntityId === workingEntity.id && t.status === 'pending')
+          .map((t: any) => ({
+            ...t,
+            itemName: t.item?.itemName || '',
+            fromEntityName: t.fromEntity?.name || '',
+            toEntityName: t.toEntity?.name || '',
+          }))
+        setIncomingTransfers(incoming)
+      }
+    } catch {}
+  }
+  // ★ Quick-receive: create a Receive entry directly from an incoming transfer
+  const handleQuickReceive = async (transfer: any) => {
+    if (!workingEntity) return
+    const ok = await confirm({
+      title: 'Receive this transfer?',
+      message: `This will receive ${transfer.quantity} unit(s) of "${transfer.itemName}" from "${transfer.fromEntityName}". The source entity's stock will be decremented and your entity's stock will be incremented. The transfer will be marked as completed. Do you want to continue?`,
+      confirmLabel: 'Receive Now',
+    })
+    if (!ok) return
+    try {
+      const res = await authFetch('/api/receives', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          itemId: transfer.itemId,
+          entityId: workingEntity.id,
+          quantity: transfer.quantity,
+          sourceEntityId: transfer.fromEntityId,
+          transferId: transfer.id,
+          referenceNo: `TR-${transfer.id.slice(-6).toUpperCase()}`,
+          notes: `Auto-received from transfer ${transfer.id}`,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Success', description: `Received ${transfer.quantity} unit(s) of ${transfer.itemName}` })
+        fetchReceives()
+        fetchIncomingTransfers()
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
   const fetchPurchases = async (statusFilter = '') => { if (!workingEntity) return; try { const params = new URLSearchParams(); params.set('entityId', workingEntity.id); if (statusFilter) params.set('status', statusFilter); const res = await authFetch(`/api/purchases?${params}`); if (res.ok) { const d = await res.json(); setPurchases(d.purchases || []) } } catch {} }
   const fetchSalesOrders = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-orders?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesOrders(d.salesOrders || []) } } catch {} }
   const fetchSalesReturns = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-returns?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesReturns(d.salesReturns.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
@@ -1615,7 +1678,7 @@ export default function Home() {
   useEffect(() => { if (currentView === 'newItem' || currentView === 'editItem') { fetchGroups(); fetchSubGroups() } }, [currentView])
   useEffect(() => { if (currentView === 'itemAdjustment') fetchAdjustments() }, [currentView])
   useEffect(() => { if (currentView === 'transfer') fetchTransfers() }, [currentView])
-  useEffect(() => { if (currentView === 'receive') fetchReceives() }, [currentView])
+  useEffect(() => { if (currentView === 'receive') { fetchReceives(); fetchIncomingTransfers() } }, [currentView, workingEntity?.id])
   // ★ Fetch purchases when entering Purchase list or Purchase Approval page
   useEffect(() => { if (currentView === 'purchase' || currentView === 'purchaseApproval') fetchPurchases() }, [currentView])
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
@@ -3483,6 +3546,7 @@ export default function Home() {
       <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Transfer ID</TableHead>
             <TableHead className="font-semibold">Item</TableHead>
             <TableHead className="font-semibold">From</TableHead>
             <TableHead className="font-semibold">To</TableHead>
@@ -3492,9 +3556,22 @@ export default function Home() {
             <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {transfers.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No transfers</TableCell></TableRow>
-            : transfers.map(t => (
+            {transfers.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No transfers</TableCell></TableRow>
+            : transfers.map(t => {
+              // Generate a short, readable transfer ID like TR-...AB12CD
+              const shortId = `TR-${t.id.slice(-6).toUpperCase()}`
+              return (
               <TableRow key={t.id} className="hover:bg-muted/30">
+                <TableCell>
+                  <button
+                    type="button"
+                    onClick={() => openTransferDetail(t)}
+                    className="font-mono text-xs text-primary hover:underline"
+                    title="Click to view transfer details"
+                  >
+                    {shortId}
+                  </button>
+                </TableCell>
                 <TableCell className="font-medium">{t.itemName}</TableCell>
                 <TableCell>{t.fromEntityName}</TableCell>
                 <TableCell>{t.toEntityName}</TableCell>
@@ -3502,30 +3579,39 @@ export default function Home() {
                 <TableCell>{statusBadge(t.status)}</TableCell>
                 <TableCell className="text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</TableCell>
                 <TableCell className="text-center">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    title="Print / Download Challan (PDF)"
-                    onClick={() => {
-                      // Open the challan HTML in a new tab — user prints from there.
-                      const token = localStorage.getItem('auth_token') || ''
-                      // Use fetch to get the HTML then write to a new tab (so we can pass auth header)
-                      fetch(`/api/transfers/${t.id}/challan`, { headers: { 'Authorization': `Bearer ${token}` } })
-                        .then(r => r.text())
-                        .then(html => {
-                          const w = window.open('', '_blank')
-                          if (!w) { toast({ title: 'Popup blocked', description: 'Allow popups to view the challan.', variant: 'destructive' }); return }
-                          w.document.write(html)
-                          w.document.close()
-                        })
-                        .catch(() => toast({ title: 'Error', description: 'Failed to load challan', variant: 'destructive' }))
-                    }}
-                  >
-                    <Printer className="w-4 h-4" />
-                  </Button>
+                  <div className="flex items-center justify-center gap-1">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="View details"
+                      onClick={() => openTransferDetail(t)}
+                    >
+                      <Eye className="w-4 h-4" />
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Print / Download Challan (PDF)"
+                      onClick={() => {
+                        const token = localStorage.getItem('auth_token') || ''
+                        fetch(`/api/transfers/${t.id}/challan`, { headers: { 'Authorization': `Bearer ${token}` } })
+                          .then(r => r.text())
+                          .then(html => {
+                            const w = window.open('', '_blank')
+                            if (!w) { toast({ title: 'Popup blocked', description: 'Allow popups to view the challan.', variant: 'destructive' }); return }
+                            w.document.write(html)
+                            w.document.close()
+                          })
+                          .catch(() => toast({ title: 'Error', description: 'Failed to load challan', variant: 'destructive' }))
+                      }}
+                    >
+                      <Printer className="w-4 h-4" />
+                    </Button>
+                  </div>
                 </TableCell>
               </TableRow>
-            ))}
+              )
+            })}
           </TableBody>
         </Table>
       </div>
@@ -3564,6 +3650,76 @@ export default function Home() {
             <div className="space-y-2"><Label>Notes</Label><Input value={transferForm.notes} onChange={e => setTransferForm(f => ({ ...f, notes: e.target.value }))} /></div>
             <DialogFooter><Button type="submit">Create Transfer</Button></DialogFooter>
           </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* ★ Transfer detail dialog — opened when user clicks the Transfer ID */}
+      <Dialog open={showTransferDetailDialog} onOpenChange={setShowTransferDetailDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>Transfer Details</DialogTitle>
+          </DialogHeader>
+          {transferDetailData && (() => {
+            const t = transferDetailData
+            const shortId = `TR-${t.id.slice(-6).toUpperCase()}`
+            return (
+              <div className="space-y-3 text-sm">
+                <div className="bg-muted/40 rounded-lg p-3 space-y-1">
+                  <div className="flex justify-between"><span className="text-muted-foreground">Transfer ID:</span> <span className="font-mono font-semibold">{shortId}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Full ID:</span> <span className="font-mono text-xs">{t.id}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Status:</span> <span>{statusBadge(t.status)}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Created:</span> <span>{new Date(t.createdAt).toLocaleString()}</span></div>
+                </div>
+                <div className="border rounded-lg p-3 space-y-1.5">
+                  <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide">Item</p>
+                  <div><strong>{t.itemName}</strong></div>
+                  {(t as any).item?.barcode && <div className="text-xs"><span className="text-muted-foreground">Barcode:</span> <span className="font-mono">{(t as any).item.barcode}</span></div>}
+                  {(t as any).item?.itemCode && <div className="text-xs"><span className="text-muted-foreground">Item Code:</span> <span className="font-mono">{(t as any).item.itemCode}</span></div>}
+                  {(t as any).item?.uom && <div className="text-xs"><span className="text-muted-foreground">UoM:</span> {(t as any).item.uom}</div>}
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="border rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide">From</p>
+                    <p className="font-medium">{t.fromEntityName}</p>
+                  </div>
+                  <div className="border rounded-lg p-3 space-y-1">
+                    <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide">To</p>
+                    <p className="font-medium">{t.toEntityName}</p>
+                  </div>
+                </div>
+                <div className="border rounded-lg p-3 grid grid-cols-2 gap-2">
+                  <div><span className="text-muted-foreground">Quantity:</span> <strong className="text-base">{t.quantity}</strong></div>
+                  <div><span className="text-muted-foreground">UoM:</span> {(t as any).item?.uom || 'PCS'}</div>
+                </div>
+                {(t as any).notes && (
+                  <div className="border rounded-lg p-3">
+                    <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide mb-1">Notes</p>
+                    <p className="text-sm">{(t as any).notes}</p>
+                  </div>
+                )}
+                <div className="flex gap-2 pt-2">
+                  <Button
+                    type="button"
+                    className="flex-1"
+                    onClick={() => {
+                      const token = localStorage.getItem('auth_token') || ''
+                      fetch(`/api/transfers/${t.id}/challan`, { headers: { 'Authorization': `Bearer ${token}` } })
+                        .then(r => r.text())
+                        .then(html => {
+                          const w = window.open('', '_blank')
+                          if (!w) { toast({ title: 'Popup blocked', description: 'Allow popups to view the challan.', variant: 'destructive' }); return }
+                          w.document.write(html)
+                          w.document.close()
+                        })
+                    }}
+                  >
+                    <Printer className="w-4 h-4 mr-2" />Print Challan
+                  </Button>
+                  <Button type="button" variant="outline" onClick={() => setShowTransferDetailDialog(false)}>Close</Button>
+                </div>
+              </div>
+            )
+          })()}
         </DialogContent>
       </Dialog>
     </div>
@@ -3739,6 +3895,56 @@ export default function Home() {
         <h2 className="text-xl font-semibold">Receive - {workingEntity?.name}</h2>
         <Button onClick={() => { setShowReceiveDialog(true); setTxItemSearch(''); setTxItemResults([]) }}><Plus className="w-4 h-4 mr-2" />New Receive</Button>
       </div>
+
+      {/* ★ Incoming Transfers panel — pending transfers destined TO this entity.
+          User can one-click Receive them, which auto-creates a Receive and completes the transfer. */}
+      {incomingTransfers.length > 0 && (
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-base flex items-center gap-2 text-amber-900">
+              <ArrowDownToLine className="w-4 h-4" />
+              Incoming Transfers ({incomingTransfers.length})
+            </CardTitle>
+            <p className="text-xs text-amber-800">
+              These items are being transferred TO you from other entities. Click "Receive" to accept them — the source entity's stock will be decremented and yours incremented.
+            </p>
+          </CardHeader>
+          <CardContent className="pt-0">
+            <div className="border rounded-lg overflow-x-auto bg-white">
+              <Table>
+                <TableHeader><TableRow className="bg-amber-100/60">
+                  <TableHead className="font-semibold text-xs">Transfer ID</TableHead>
+                  <TableHead className="font-semibold text-xs">Item</TableHead>
+                  <TableHead className="font-semibold text-xs">From</TableHead>
+                  <TableHead className="font-semibold text-xs text-right">Qty</TableHead>
+                  <TableHead className="font-semibold text-xs">Date</TableHead>
+                  <TableHead className="font-semibold text-xs text-center">Action</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {incomingTransfers.map(t => (
+                    <TableRow key={t.id} className="hover:bg-amber-50">
+                      <TableCell className="font-mono text-xs">TR-{t.id.slice(-6).toUpperCase()}</TableCell>
+                      <TableCell className="font-medium">
+                        {t.itemName}
+                        {t.item?.barcode && <span className="ml-2 text-[10px] font-mono text-muted-foreground">BC: {t.item.barcode}</span>}
+                      </TableCell>
+                      <TableCell>{t.fromEntityName}</TableCell>
+                      <TableCell className="text-right font-bold">{t.quantity}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-center">
+                        <Button size="sm" onClick={() => handleQuickReceive(t)}>
+                          <ArrowDownToLine className="w-3.5 h-3.5 mr-1" />Receive
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
@@ -7575,7 +7781,6 @@ export default function Home() {
             <div className="space-y-2"><Label>Price</Label><Input type="number" step="0.01" placeholder="0.00" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e.target.value })} /></div>
             <div className="space-y-2"><Label>UoM</Label><Select value={itemForm.uom} onValueChange={v => setItemForm({ ...itemForm, uom: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['PCS','KG','LTR','MTR','BOX','SET','DOZ','PACK'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Barcode</Label><Input placeholder="Optional" value={itemForm.barcode} onChange={e => setItemForm({ ...itemForm, barcode: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Item Code</Label><Input placeholder="Optional" value={itemForm.itemCode} onChange={e => setItemForm({ ...itemForm, itemCode: e.target.value })} /></div>
             <div className="space-y-2"><Label>Color</Label><Input placeholder="Optional" value={itemForm.color} onChange={e => setItemForm({ ...itemForm, color: e.target.value })} /></div>
             <div className="space-y-2"><Label>Pattern</Label><Input placeholder="Optional" value={itemForm.pattern} onChange={e => setItemForm({ ...itemForm, pattern: e.target.value })} /></div>
             <div className="space-y-2"><Label>Supplier Code</Label><Input placeholder="Optional" value={itemForm.supplierCode} onChange={e => setItemForm({ ...itemForm, supplierCode: e.target.value })} /></div>

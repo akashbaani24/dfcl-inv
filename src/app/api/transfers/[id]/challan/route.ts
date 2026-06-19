@@ -222,15 +222,23 @@ export async function GET(
     }
 
     @media print {
-      body { padding: 16px; }
+      body { padding: 0; margin: 0; }
       .no-print { display: none !important; }
+      .toolbar { display: none !important; }
       @page { margin: 1cm; }
     }
 
+    /* ★ Toolbar at the top of the page — pushes the challan content down so it
+          doesn't overlap with the print button. Hidden when printing. */
+    .toolbar {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      padding: 12px 0;
+      margin-bottom: 8px;
+      border-bottom: 1px solid #e5e7eb;
+    }
     .print-btn {
-      position: fixed;
-      top: 16px;
-      right: 16px;
       background: #1e3a8a;
       color: white;
       border: none;
@@ -239,13 +247,15 @@ export async function GET(
       font-size: 14px;
       cursor: pointer;
       box-shadow: 0 4px 12px rgba(30, 58, 138, 0.3);
-      z-index: 100;
     }
     .print-btn:hover { background: #1e40af; }
   </style>
 </head>
 <body>
-  <button class="print-btn no-print" onclick="window.print()">Print / Save as PDF</button>
+  <!-- ★ Toolbar — pushes content down so it doesn't overlap. Hidden when printing. -->
+  <div class="toolbar no-print">
+    <button class="print-btn" onclick="window.print()">🖨 Print / Save as PDF</button>
+  </div>
 
   <div class="header">
     <div class="brand">
