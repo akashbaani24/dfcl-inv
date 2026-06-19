@@ -1234,6 +1234,7 @@ export default function Home() {
   // ★ Fetch purchases when entering Purchase list or Purchase Approval page
   useEffect(() => { if (currentView === 'purchase' || currentView === 'purchaseApproval') fetchPurchases() }, [currentView])
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
+  useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
 
@@ -4593,7 +4594,6 @@ export default function Home() {
 
   // ★ Delivery Management page
   const renderDeliveryPage = () => {
-    useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [])
     const deliveryOrders = (salesOrders || []).filter((s: any) => s.status === 'delivered' || s.status === 'processing' || (s as any).deliveryStatus === 'out_for_delivery')
     const updateDeliveryStatus = async (id: string, status: string) => {
       try {
