@@ -166,7 +166,7 @@ interface ReportData {
 type ViewType =
   | 'entitySelect'
   | 'itemPrice' | 'myEntityStock' | 'allEntityStock'
-  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'receive'
+  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'tailorPayment' | 'newTailorPayment'
   | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
@@ -297,6 +297,22 @@ export default function Home() {
   const [transferCurrentStock, setTransferCurrentStock] = useState<number | null>(null)
   const [transferPendingOutgoing, setTransferPendingOutgoing] = useState<number>(0)
   const [showTransferDialog, setShowTransferDialog] = useState(false)
+
+  // ★ Multi-item transfer form (full page)
+  // Each row: { itemId, itemName, barcode, itemCode, uom, quantity, currentStock, pendingOutgoing }
+  type MultiTransferRow = {
+    itemId: string
+    itemName: string
+    barcode: string
+    itemCode: string
+    uom: string
+    quantity: string
+    currentStock: number | null  // fetched from /api/stock for this entity + item
+    pendingOutgoing: number      // sum of pending transfers already in flight
+  }
+  const [multiTransferRows, setMultiTransferRows] = useState<MultiTransferRow[]>([])
+  const [multiTransferToEntityId, setMultiTransferToEntityId] = useState<string>('')
+  const [multiTransferNotes, setMultiTransferNotes] = useState<string>('')
 
   const [receives, setReceives] = useState<ReceiveData[]>([])
   const [receiveForm, setReceiveForm] = useState({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
@@ -1118,6 +1134,136 @@ export default function Home() {
       if (res.ok) { toast({ title: 'Success', description: 'Transfer created' }); setShowTransferDialog(false); setTransferForm({ itemId: '', toEntityId: '', quantity: '', notes: '' }); fetchTransfers() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+
+  // ★ Save a multi-item transfer — fires N individual POSTs to /api/transfers
+  // (one per row), all targeted to the same destination entity.
+  const handleSaveMultiTransfer = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!workingEntity) return
+    if (!multiTransferToEntityId) { toast({ title: 'Error', description: 'Please select a destination entity', variant: 'destructive' }); return }
+    if (multiTransferRows.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
+    if (multiTransferToEntityId === workingEntity.id) { toast({ title: 'Error', description: 'Source and destination cannot be the same entity', variant: 'destructive' }); return }
+    // Validate every row has quantity > 0
+    const invalid = multiTransferRows.find(r => !r.quantity || parseInt(r.quantity) <= 0)
+    if (invalid) { toast({ title: 'Error', description: `Quantity for "${invalid.itemName}" must be greater than 0`, variant: 'destructive' }); return }
+    // Check stock availability locally first (best-effort warning before submitting)
+    const over = multiTransferRows.find(r => r.currentStock !== null && (parseInt(r.quantity) || 0) > (r.currentStock - r.pendingOutgoing))
+    if (over) {
+      const avail = (over.currentStock ?? 0) - over.pendingOutgoing
+      toast({ title: 'Insufficient stock', description: `"${over.itemName}": available ${avail}, requested ${over.quantity}. Reduce the quantity or remove this row.`, variant: 'destructive' })
+      return
+    }
+
+    // Confirmation dialog with summary
+    const totalQty = multiTransferRows.reduce((s, r) => s + (parseInt(r.quantity) || 0), 0)
+    const ok = await confirm({
+      title: 'Create Multi-Item Transfer?',
+      message: `This will create ${multiTransferRows.length} transfer(s) totaling ${totalQty} unit(s) from "${workingEntity?.name}" to "${entities.find(e => e.id === multiTransferToEntityId)?.name || 'destination'}". Each transfer will be created as "pending" and the destination entity will need to receive them. Regular users will not be able to modify these transfers afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Create Transfers',
+    })
+    if (!ok) return
+
+    // Submit each row in sequence
+    let success = 0
+    const failures: string[] = []
+    for (const row of multiTransferRows) {
+      try {
+        const res = await authFetch('/api/transfers', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            itemId: row.itemId,
+            fromEntityId: workingEntity.id,
+            toEntityId: multiTransferToEntityId,
+            quantity: parseInt(row.quantity),
+            notes: multiTransferNotes || undefined,
+          }),
+        })
+        if (res.ok) {
+          success++
+        } else {
+          const d = await res.json().catch(() => ({}))
+          failures.push(`${row.itemName}: ${d.error || 'failed'}`)
+        }
+      } catch {
+        failures.push(`${row.itemName}: network error`)
+      }
+    }
+    if (success > 0) {
+      toast({ title: 'Success', description: `Created ${success} of ${multiTransferRows.length} transfers${failures.length > 0 ? `. ${failures.length} failed.` : ''}` })
+    }
+    if (failures.length > 0) {
+      toast({ title: 'Some transfers failed', description: failures.slice(0, 3).join(' | '), variant: 'destructive' })
+    }
+    if (success === multiTransferRows.length) {
+      // All succeeded — reset form and go back to transfer list
+      setMultiTransferRows([])
+      setMultiTransferToEntityId('')
+      setMultiTransferNotes('')
+      setCurrentView('transfer')
+      fetchTransfers()
+    } else {
+      // Some failed — refresh transfers list but keep the form
+      fetchTransfers()
+    }
+  }
+
+  // ★ Add a row to the multi-item transfer form (after picking an item via barcode scan)
+  const addMultiTransferRow = (item: any) => {
+    if (multiTransferRows.find(r => r.itemId === item.id)) {
+      toast({ title: 'Already added', description: `${item.itemName} is already in the transfer list.`, variant: 'destructive' })
+      return
+    }
+    setMultiTransferRows(rows => [...rows, {
+      itemId: item.id,
+      itemName: item.itemName || '',
+      barcode: item.barcode || '',
+      itemCode: item.itemCode || '',
+      uom: item.uom || 'PCS',
+      quantity: '1',
+      currentStock: null,
+      pendingOutgoing: 0,
+    }])
+    // Fetch stock for this item asynchronously
+    if (workingEntity) {
+      fetchMultiTransferRowStock(item.id)
+    }
+  }
+
+  // Fetch current stock + pending outgoing for a specific row's item
+  const fetchMultiTransferRowStock = async (itemId: string) => {
+    if (!workingEntity) return
+    try {
+      const [stockRes, transferRes] = await Promise.all([
+        authFetch(`/api/stock/by-entity?entityId=${workingEntity.id}`),
+        authFetch(`/api/transfers?entityId=${workingEntity.id}`),
+      ])
+      let currentStock: number | null = null
+      let pendingOutgoing = 0
+      if (stockRes.ok) {
+        const d = await stockRes.json()
+        const row = (d.stocks || []).find((s: any) => s.itemId === itemId)
+        if (row) currentStock = row.quantity
+      }
+      if (transferRes.ok) {
+        const d = await transferRes.json()
+        pendingOutgoing = (d.transfers || [])
+          .filter((t: any) => t.itemId === itemId && t.fromEntityId === workingEntity.id && t.status === 'pending')
+          .reduce((s: number, t: any) => s + t.quantity, 0)
+      }
+      setMultiTransferRows(rows => rows.map(r => r.itemId === itemId ? { ...r, currentStock, pendingOutgoing } : r))
+    } catch {}
+  }
+
+  // Update a single row's quantity
+  const updateMultiTransferRow = (itemId: string, field: 'quantity', value: string) => {
+    setMultiTransferRows(rows => rows.map(r => r.itemId === itemId ? { ...r, [field]: value } : r))
+  }
+
+  // Remove a row from the multi-item transfer form
+  const removeMultiTransferRow = (itemId: string) => {
+    setMultiTransferRows(rows => rows.filter(r => r.itemId !== itemId))
   }
 
   const handleSaveReceive = async (e: React.FormEvent) => {
@@ -3284,7 +3430,15 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Transfer - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowTransferDialog(true); setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null) }}><Plus className="w-4 h-4 mr-2" />New Transfer</Button>
+        <Button onClick={() => {
+          setMultiTransferRows([])
+          setMultiTransferToEntityId('')
+          setMultiTransferNotes('')
+          setTxItemSearch('')
+          setTxItemResults([])
+          setTxSelectedItem(null)
+          setCurrentView('newTransfer')
+        }}><Plus className="w-4 h-4 mr-2" />New Transfer</Button>
       </div>
       <div className="border rounded-lg overflow-x-auto">
         <Table>
@@ -3374,6 +3528,170 @@ export default function Home() {
       </Dialog>
     </div>
   )
+
+  // ★ New Transfer page (full page, multi-item)
+  // User scans/ypes barcode for each item → adds a row → enters qty → submit creates N transfers.
+  const renderNewTransferPage = () => {
+    const totalQty = multiTransferRows.reduce((s, r) => s + (parseInt(r.quantity) || 0), 0)
+    return (
+      <div className="space-y-4 max-w-6xl mx-auto">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" size="sm" onClick={() => setCurrentView('transfer')}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+            <h2 className="text-xl font-semibold">New Transfer — from {workingEntity?.name}</h2>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSaveMultiTransfer} className="space-y-5">
+              {/* From / To entity */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">From Entity</Label>
+                  <Input value={workingEntity?.name || ''} disabled />
+                </div>
+                <div className="space-y-2">
+                  <Label className="text-sm font-semibold">To Entity *</Label>
+                  <Select value={multiTransferToEntityId} onValueChange={v => setMultiTransferToEntityId(v)}>
+                    <SelectTrigger><SelectValue placeholder="Select destination entity" /></SelectTrigger>
+                    <SelectContent>
+                      {entities.filter(e => e.id !== workingEntity?.id).map(e => (
+                        <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              <Separator />
+
+              {/* Item picker — barcode scan → add row */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between flex-wrap gap-2">
+                  <Label className="text-sm font-semibold">Add Items (scan barcode or search)</Label>
+                  <span className="text-xs text-muted-foreground">
+                    {multiTransferRows.length} item{multiTransferRows.length !== 1 ? 's' : ''} added
+                    {totalQty > 0 && ` • ${totalQty} unit${totalQty !== 1 ? 's' : ''} total`}
+                  </span>
+                </div>
+                {renderItemSearchField('', (item) => { addMultiTransferRow(item); setTxSelectedItem(null) })}
+              </div>
+
+              {/* Items table */}
+              {multiTransferRows.length > 0 ? (
+                <div className="border rounded-md overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-primary text-primary-foreground">
+                      <tr>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-10">SL</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-32">Barcode</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-28">Item Code</th>
+                        <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Current Stock</th>
+                        <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Pending Out</th>
+                        <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Available</th>
+                        <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-24">Qty *</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-16">UoM</th>
+                        <th className="px-2 py-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiTransferRows.map((row, i) => {
+                        const available = (row.currentStock ?? 0) - row.pendingOutgoing
+                        const requested = parseInt(row.quantity) || 0
+                        const isOver = row.currentStock !== null && requested > available
+                        return (
+                          <tr key={row.itemId} className={`border-t hover:bg-muted/20 ${isOver ? 'bg-red-50' : ''}`}>
+                            <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
+                            <td className="px-2 py-2 font-medium">{row.itemName}</td>
+                            <td className="px-2 py-2 font-mono text-xs">{row.barcode || '—'}</td>
+                            <td className="px-2 py-2 font-mono text-xs">{row.itemCode || '—'}</td>
+                            <td className="px-2 py-2 text-right">{row.currentStock === null ? '…' : row.currentStock}</td>
+                            <td className="px-2 py-2 text-right text-amber-600">{row.pendingOutgoing}</td>
+                            <td className={`px-2 py-2 text-right font-bold ${available < 0 ? 'text-red-600' : 'text-blue-700'}`}>{row.currentStock === null ? '…' : available}</td>
+                            <td className="px-2 py-2 text-right">
+                              <Input
+                                type="number"
+                                min="1"
+                                value={row.quantity}
+                                onChange={e => updateMultiTransferRow(row.itemId, 'quantity', e.target.value)}
+                                className={`h-8 text-right text-sm w-full min-w-[70px] ${isOver ? 'border-red-500' : ''}`}
+                              />
+                            </td>
+                            <td className="px-2 py-2">{row.uom}</td>
+                            <td className="px-2 py-2 text-center">
+                              <Button type="button" variant="ghost" size="sm" onClick={() => removeMultiTransferRow(row.itemId)} className="text-destructive h-7 w-7 p-0">
+                                <X className="w-3.5 h-3.5" />
+                              </Button>
+                            </td>
+                          </tr>
+                        )
+                      })}
+                      <tr className="border-t bg-muted/30">
+                        <td colSpan={7} className="px-2 py-2 text-right text-sm font-semibold">TOTAL UNITS:</td>
+                        <td className="px-2 py-2 text-right font-bold text-primary text-base">{totalQty}</td>
+                        <td colSpan={2}></td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6 border rounded-md border-dashed">
+                  No items added yet. Scan a barcode or search for an item above to add it.
+                </p>
+              )}
+
+              {/* Stock validation summary */}
+              {multiTransferRows.length > 0 && (
+                <div className="rounded-md border p-3 text-xs">
+                  <p className="font-semibold mb-1">Stock validation</p>
+                  <ul className="space-y-0.5">
+                    {multiTransferRows.map(r => {
+                      const available = (r.currentStock ?? 0) - r.pendingOutgoing
+                      const requested = parseInt(r.quantity) || 0
+                      const status = r.currentStock === null
+                        ? { text: 'Loading stock...', color: 'text-muted-foreground' }
+                        : requested > available
+                          ? { text: `⚠ Over: ${requested} > ${available} available`, color: 'text-red-600' }
+                          : { text: `OK — ${requested} of ${available} available`, color: 'text-green-700' }
+                      return (
+                        <li key={r.itemId} className={status.color}>
+                          {r.itemName}: {status.text}
+                        </li>
+                      )
+                    })}
+                  </ul>
+                </div>
+              )}
+
+              {/* Notes */}
+              <div className="space-y-2">
+                <Label>Notes (applies to all transfers in this batch)</Label>
+                <Input value={multiTransferNotes} onChange={e => setMultiTransferNotes(e.target.value)} placeholder="Optional notes about this transfer batch..." />
+              </div>
+
+              {/* Action buttons */}
+              <div className="flex items-center justify-end gap-2 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => { setMultiTransferRows([]); setMultiTransferToEntityId(''); setMultiTransferNotes(''); setCurrentView('transfer') }}>
+                  Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={multiTransferRows.length === 0 || !multiTransferToEntityId}
+                >
+                  <Save className="w-4 h-4 mr-2" />
+                  Create {multiTransferRows.length} Transfer{multiTransferRows.length !== 1 ? 's' : ''}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const renderReceivePage = () => (
     <div className="space-y-4">
@@ -6957,6 +7275,7 @@ export default function Home() {
       case 'itemAdjustment': return renderItemAdjustmentPage()
       case 'newAdjustment': return renderNewAdjustmentPage()
       case 'transfer': return renderTransferPage()
+      case 'newTransfer': return renderNewTransferPage()
       case 'receive': return renderReceivePage()
       case 'purchase': return renderPurchaseListPage()
       case 'newPurchase': return renderNewPurchasePage()
