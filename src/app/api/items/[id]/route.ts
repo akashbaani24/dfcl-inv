@@ -15,7 +15,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { year, lcNo, group, subGroup, itemName, price, uom } = await request.json();
+    const { year, lcNo, group, subGroup, itemName, price, uom, barcode, itemCode, color, pattern, supplierCode, dimension, description } = await request.json();
 
     const item = await db.item.update({
       where: { id },
@@ -27,6 +27,13 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         itemName,
         price: parseFloat(price) || 0,
         uom,
+        barcode: barcode !== undefined ? (barcode || null) : undefined,
+        itemCode: itemCode !== undefined ? (itemCode || null) : undefined,
+        color: color !== undefined ? (color || null) : undefined,
+        pattern: pattern !== undefined ? (pattern || null) : undefined,
+        supplierCode: supplierCode !== undefined ? (supplierCode || null) : undefined,
+        dimension: dimension !== undefined ? (dimension || null) : undefined,
+        description: description !== undefined ? (description || null) : undefined,
         updatedBy: currentUser.id,
       },
     });

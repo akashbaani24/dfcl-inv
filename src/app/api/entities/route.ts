@@ -13,7 +13,7 @@ export async function GET(request: NextRequest) {
     // Optimized: skip _count (was causing slow COUNT subqueries on 22k+ items)
     const entities = await db.entity.findMany({
       orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true, createdAt: true, updatedAt: true },
+      select: { id: true, name: true, description: true, entityType: true, createdAt: true, updatedAt: true },
     });
 
     return NextResponse.json({ entities });
@@ -31,7 +31,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { name, description } = await request.json();
+    const { name, description, entityType } = await request.json();
 
     if (!name) {
       return NextResponse.json({ error: 'Entity name is required' }, { status: 400 });
@@ -43,7 +43,7 @@ export async function POST(request: NextRequest) {
     }
 
     const entity = await db.entity.create({
-      data: { name, description: description || null },
+      data: { name, description: description || null, entityType: entityType || 'outlet' },
     });
 
     return NextResponse.json({ entity });

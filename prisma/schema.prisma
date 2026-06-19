@@ -106,6 +106,12 @@ model Entity {
   id          String   @id @default(cuid())
   name        String   @unique
   description String?
+  // ★ Entity type: "outlet" (shop/branch), "warehouse", "head_office"
+  // Used by incentive formula to determine which commission rate applies:
+  //   - outlet → use outletCommission
+  //   - head_office → use headOfficeCommission
+  //   - warehouse → use headOfficeCommission (falls under "Head Office and others")
+  entityType  String   @default("outlet")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
@@ -137,6 +143,12 @@ model Item {
   uom         String   @default("PCS")
   barcode     String?  @unique
   itemCode    String?
+  // ★ Optional descriptive fields (non-mandatory)
+  color       String?
+  pattern     String?
+  supplierCode String?
+  dimension   String?
+  description String?
   supplierId  String?
   createdBy   String?
   updatedBy   String?
@@ -542,32 +554,41 @@ model Incentive {
 }
 
 // ★ Incentive Formula — defines commission rules for items based on sale price ranges
-// Example: Formula "Fresh Fabric" with range 700-1200 → Commission 10 for Outlet, 5 for Head Office
+// A single formula can have MULTIPLE ranges (e.g. 700-1000, 1001-1500, 1501-2000)
+// Each range has two commission rates:
+//   - outletCommission: applies to all entities of type "outlet"
+//   - headOfficeCommission: applies to entities of type "head_office" and "warehouse" (Head Office and others)
 // A single formula can include multiple items (via IncentiveFormulaItem).
-// When a sales order item is created with a price falling within a formula's range,
-// an Incentive entry is auto-created for that item with the calculated commission.
 model IncentiveFormula {
   id              String   @id @default(cuid())
   name            String   // e.g. "Fresh Fabric", "Premium Bed Sheet"
   description     String?
-  // Range (inclusive) — sale price per unit must fall within [priceFrom, priceTo]
-  priceFrom       Float    // e.g. 700
-  priceTo         Float    // e.g. 1200
-  // Commission amount per unit sold (flat amount, not percentage)
-  // Stored as JSON string: { "<entityName>": <amount>, ... }
-  // Example: {"Outlet": 10, "Head Office": 5, "default": 5}
-  // On sales: look up commission by the destination entity's name; fall back to "default"
-  commissionMap   String   @default("{}")
   status          String   @default("active") // "active" or "inactive"
   notes           String?
   createdBy       String?
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
+  ranges  IncentiveFormulaRange[]
   items   IncentiveFormulaItem[]
   incentives Incentive[]  // incentives auto-generated from this formula
 
   @@index([status])
+}
+
+// ★ Each range within a formula has its own price window and commission rates
+model IncentiveFormulaRange {
+  id                  String  @id @default(cuid())
+  formulaId           String
+  priceFrom           Float   // inclusive
+  priceTo             Float   // inclusive
+  outletCommission    Float   @default(0) // per unit, for entities of type "outlet"
+  headOfficeCommission Float  @default(0) // per unit, for "head_office" and "warehouse" and others
+  createdAt           DateTime @default(now())
+
+  formula IncentiveFormula @relation(fields: [formulaId], references: [id], onDelete: Cascade)
+
+  @@index([formulaId])
 }
 
 // ★ Link table: which items are covered by which formula

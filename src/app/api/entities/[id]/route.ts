@@ -11,11 +11,11 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { name, description } = await request.json();
+    const { name, description, entityType } = await request.json();
 
     const entity = await db.entity.update({
       where: { id },
-      data: { name, description: description || null },
+      data: { name, description: description || null, entityType: entityType || undefined },
     });
 
     return NextResponse.json({ entity });

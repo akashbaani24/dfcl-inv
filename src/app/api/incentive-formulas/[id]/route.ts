@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// GET /api/incentive-formulas/[id] — formula detail
+// GET /api/incentive-formulas/[id] — formula detail with ranges + items
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -12,6 +12,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
     const formula = await db.incentiveFormula.findUnique({
       where: { id },
       include: {
+        ranges: { orderBy: { priceFrom: 'asc' } },
         items: { include: { item: { select: { id: true, itemName: true, barcode: true, itemCode: true, uom: true } } } },
         incentives: { include: { item: { select: { itemName: true } }, entity: { select: { name: true } } }, take: 50, orderBy: { createdAt: 'desc' } },
       },
@@ -25,7 +26,7 @@ export async function GET(request: NextRequest, { params }: { params: Promise<{ 
   }
 }
 
-// PUT /api/incentive-formulas/[id] — update formula + sync item assignments
+// PUT /api/incentive-formulas/[id] — update formula + replace ranges + sync items
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -36,12 +37,28 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     const { id } = await params;
     const body = await request.json();
-    const { name, description, priceFrom, priceTo, commissionMap, status, notes, itemIds } = body;
+    const { name, description, status, notes, ranges, itemIds } = body;
 
     const existing = await db.incentiveFormula.findUnique({ where: { id } });
     if (!existing) return NextResponse.json({ error: 'Formula not found' }, { status: 404 });
 
-    // If itemIds provided, replace all assignments
+    // Replace ranges if provided
+    if (ranges !== undefined) {
+      await db.incentiveFormulaRange.deleteMany({ where: { formulaId: id } });
+      if (Array.isArray(ranges) && ranges.length > 0) {
+        await db.incentiveFormulaRange.createMany({
+          data: ranges.map((r: any) => ({
+            formulaId: id,
+            priceFrom: parseFloat(r.priceFrom),
+            priceTo: parseFloat(r.priceTo),
+            outletCommission: parseFloat(r.outletCommission) || 0,
+            headOfficeCommission: parseFloat(r.headOfficeCommission) || 0,
+          })),
+        });
+      }
+    }
+
+    // Sync items if provided
     if (itemIds !== undefined) {
       await db.incentiveFormulaItem.deleteMany({ where: { formulaId: id } });
       if (Array.isArray(itemIds) && itemIds.length > 0) {
@@ -55,11 +72,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const updateData: Record<string, unknown> = {};
     if (name !== undefined) updateData.name = name;
     if (description !== undefined) updateData.description = description || null;
-    if (priceFrom !== undefined) updateData.priceFrom = parseFloat(priceFrom);
-    if (priceTo !== undefined) updateData.priceTo = parseFloat(priceTo);
-    if (commissionMap !== undefined) {
-      updateData.commissionMap = typeof commissionMap === 'string' ? commissionMap : JSON.stringify(commissionMap || {});
-    }
     if (status !== undefined) updateData.status = status;
     if (notes !== undefined) updateData.notes = notes || null;
 
@@ -67,6 +79,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       where: { id },
       data: updateData,
       include: {
+        ranges: { orderBy: { priceFrom: 'asc' } },
         items: { include: { item: { select: { id: true, itemName: true, barcode: true, itemCode: true, uom: true } } } },
       },
     });

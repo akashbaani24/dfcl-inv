@@ -124,47 +124,47 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // ★ Auto-calculate incentives based on IncentiveFormula
-    // For each item in this sales order, check if it's part of an active formula
-    // AND the sale unit price falls within the formula's [priceFrom, priceTo] range.
-    // If yes, look up the commission for the destination entity's name in commissionMap
-    // (falling back to "default"), and create an Incentive entry of type "formula".
+    // ★ Auto-calculate incentives based on IncentiveFormula (multiple ranges + entity type)
+    // For each item in this sales order:
+    //   1. Find active formulas that include this item
+    //   2. For each formula, find a range where sale unit price falls within [priceFrom, priceTo]
+    //   3. Determine entity type (outlet → outletCommission; head_office/warehouse → headOfficeCommission)
+    //   4. Create Incentive entry with commission = rate × quantity
     try {
-      const entity = await db.entity.findUnique({ where: { id: entityId }, select: { name: true } });
-      const entityName = entity?.name || '';
-      // Collect distinct item IDs in this order
+      const entity = await db.entity.findUnique({ where: { id: entityId }, select: { name: true, entityType: true } });
+      const entityType = entity?.entityType || 'outlet';
       const orderItemIds = items.map((it: any) => it.itemId);
       if (orderItemIds.length > 0) {
-        // Find all active formula-items matching these item IDs
+        // Find all active formula-items matching these item IDs, with formula + ranges
         const formulaItems = await db.incentiveFormulaItem.findMany({
-          where: { itemId: { in: orderItemIds } },
-          include: { formula: true },
+          where: { itemId: { in: orderItemIds }, formula: { status: 'active' } },
+          include: { formula: { include: { ranges: { orderBy: { priceFrom: 'asc' } } } } },
         });
-        // Group by item → formulas (a single item may be in multiple formulas with non-overlapping ranges)
+        // Group by item → formulas
         const byItem = new Map<string, typeof formulaItems>();
         for (const fi of formulaItems) {
-          if (fi.formula.status !== 'active') continue;
           const arr = byItem.get(fi.itemId) || [];
           arr.push(fi);
           byItem.set(fi.itemId, arr);
         }
-        // For each item in the order, try to find a formula whose range matches the unit price
+        // For each item, find a matching range in any formula
         for (const item of items) {
           const unitPrice = parseFloat(item.unitPrice) || 0;
           const quantity = parseInt(item.quantity) || 1;
-          const formulas = byItem.get(item.itemId) || [];
-          // Pick the first matching formula (first by createdAt asc)
-          const match = formulas
-            .sort((a, b) => a.formula.createdAt.getTime() - b.formula.createdAt.getTime())
-            .find(fi => unitPrice >= fi.formula.priceFrom && unitPrice <= fi.formula.priceTo);
-          if (!match) continue;
-          // Parse commissionMap: { "<entityName>": <amount>, "default": <amount> }
-          let commissionMap: Record<string, number> = {};
-          try { commissionMap = JSON.parse(match.formula.commissionMap || '{}'); } catch {}
-          const commissionPerUnit = commissionMap[entityName] ?? commissionMap['default'] ?? 0;
+          const fis = byItem.get(item.itemId) || [];
+          // Sort formulas by createdAt asc, then find first matching range
+          let matchedFormula: any = null;
+          let matchedRange: any = null;
+          for (const fi of fis.sort((a, b) => a.formula.createdAt.getTime() - b.formula.createdAt.getTime())) {
+            const range = fi.formula.ranges.find((r: any) => unitPrice >= r.priceFrom && unitPrice <= r.priceTo);
+            if (range) { matchedFormula = fi.formula; matchedRange = range; break; }
+          }
+          if (!matchedFormula || !matchedRange) continue;
+          // Determine commission based on entity type
+          const isOutlet = entityType === 'outlet';
+          const commissionPerUnit = isOutlet ? matchedRange.outletCommission : matchedRange.headOfficeCommission;
           if (commissionPerUnit <= 0) continue;
           const totalCommission = commissionPerUnit * quantity;
-          // Find the created SalesOrderItem for this item (to link salesOrderItemId)
           const soItem = salesOrder.items.find((si: any) => si.itemId === item.itemId);
           await db.incentive.create({
             data: {
@@ -173,8 +173,8 @@ export async function POST(request: NextRequest) {
               amount: totalCommission,
               type: 'formula',
               status: 'pending',
-              notes: `Auto-generated from ${salesOrder.salesNo} • Formula: ${match.formula.name} • Range ${match.formula.priceFrom}-${match.formula.priceTo} • Commission/unit: ${commissionPerUnit}`,
-              formulaId: match.formula.id,
+              notes: `Auto from ${salesOrder.salesNo} • Formula: ${matchedFormula.name} • Range ${matchedRange.priceFrom}-${matchedRange.priceTo} • Entity type: ${entityType} • Commission/unit: ${commissionPerUnit}`,
+              formulaId: matchedFormula.id,
               salesOrderItemId: soItem?.id || null,
               units: quantity,
               saleUnitPrice: unitPrice,
@@ -184,7 +184,6 @@ export async function POST(request: NextRequest) {
         }
       }
     } catch (incError) {
-      // Don't fail the sales order creation if incentive calculation fails
       console.error('Incentive auto-calc error:', incError);
     }
 

@@ -141,7 +141,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not have permission to create items' }, { status: 403 });
     }
 
-    const { year, lcNo, group, subGroup, itemName, price, uom } = await request.json();
+    const { year, lcNo, group, subGroup, itemName, price, uom, barcode, itemCode, color, pattern, supplierCode, dimension, description } = await request.json();
 
     if (!itemName) {
       return NextResponse.json({ error: 'Item name is required' }, { status: 400 });
@@ -168,6 +168,13 @@ export async function POST(request: NextRequest) {
         itemName,
         price: parseFloat(price) || 0,
         uom: uom || 'PCS',
+        barcode: barcode || null,
+        itemCode: itemCode || null,
+        color: color || null,
+        pattern: pattern || null,
+        supplierCode: supplierCode || null,
+        dimension: dimension || null,
+        description: description || null,
         createdBy: currentUser.id,
       },
     });

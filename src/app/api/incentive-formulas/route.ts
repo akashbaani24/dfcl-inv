@@ -3,7 +3,7 @@ import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/incentive-formulas?status=active
-// Returns all formulas with their assigned items
+// Returns all formulas with their ranges and assigned items
 export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -19,6 +19,7 @@ export async function GET(request: NextRequest) {
       where,
       orderBy: { createdAt: 'desc' },
       include: {
+        ranges: { orderBy: { priceFrom: 'asc' } },
         items: { include: { item: { select: { id: true, itemName: true, barcode: true, itemCode: true, uom: true } } } },
       },
     });
@@ -31,7 +32,7 @@ export async function GET(request: NextRequest) {
 }
 
 // POST /api/incentive-formulas
-// Body: { name, description, priceFrom, priceTo, commissionMap: {<entityName>: <amount>, default: <amount>}, status, notes, itemIds: string[] }
+// Body: { name, description, status, notes, ranges: [{priceFrom, priceTo, outletCommission, headOfficeCommission}], itemIds: string[] }
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -40,33 +41,33 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Only admins and managers can create formulas' }, { status: 403 });
     }
 
-    const { name, description, priceFrom, priceTo, commissionMap, status, notes, itemIds } = await request.json();
+    const { name, description, status, notes, ranges, itemIds } = await request.json();
     if (!name) return NextResponse.json({ error: 'Formula name is required' }, { status: 400 });
-    if (priceFrom === undefined || priceTo === undefined) {
-      return NextResponse.json({ error: 'priceFrom and priceTo are required' }, { status: 400 });
+    if (!ranges || !Array.isArray(ranges) || ranges.length === 0) {
+      return NextResponse.json({ error: 'At least one range is required' }, { status: 400 });
     }
-    if (parseFloat(priceFrom) > parseFloat(priceTo)) {
-      return NextResponse.json({ error: 'priceFrom must be ≤ priceTo' }, { status: 400 });
-    }
-
-    // commissionMap can be either an object or already a JSON string
-    const commissionMapStr = typeof commissionMap === 'string' ? commissionMap : JSON.stringify(commissionMap || {});
 
     const formula = await db.incentiveFormula.create({
       data: {
         name,
         description: description || null,
-        priceFrom: parseFloat(priceFrom),
-        priceTo: parseFloat(priceTo),
-        commissionMap: commissionMapStr,
         status: status || 'active',
         notes: notes || null,
         createdBy: currentUser.id,
+        ranges: {
+          create: ranges.map((r: any) => ({
+            priceFrom: parseFloat(r.priceFrom),
+            priceTo: parseFloat(r.priceTo),
+            outletCommission: parseFloat(r.outletCommission) || 0,
+            headOfficeCommission: parseFloat(r.headOfficeCommission) || 0,
+          })),
+        },
         items: itemIds && itemIds.length > 0 ? {
           create: itemIds.map((itemId: string) => ({ itemId }))
         } : undefined,
       },
       include: {
+        ranges: { orderBy: { priceFrom: 'asc' } },
         items: { include: { item: { select: { id: true, itemName: true, barcode: true, itemCode: true, uom: true } } } },
       },
     });

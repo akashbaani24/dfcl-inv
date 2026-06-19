@@ -329,6 +329,58 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE PurchaseItem ADD COLUMN landedCostPerUnit REAL NOT NULL DEFAULT 0',
     description: 'Add landedCostPerUnit column to PurchaseItem',
   },
+  // v50: Entity type (outlet/warehouse/head_office)
+  {
+    id: '2026_06_19_entity_type',
+    sql: 'ALTER TABLE Entity ADD COLUMN entityType TEXT NOT NULL DEFAULT \'outlet\'',
+    description: 'Add entityType column to Entity (outlet/warehouse/head_office)',
+  },
+  // v50: Item optional descriptive fields
+  {
+    id: '2026_06_19_item_color',
+    sql: 'ALTER TABLE Item ADD COLUMN color TEXT',
+    description: 'Add color column to Item',
+  },
+  {
+    id: '2026_06_19_item_pattern',
+    sql: 'ALTER TABLE Item ADD COLUMN pattern TEXT',
+    description: 'Add pattern column to Item',
+  },
+  {
+    id: '2026_06_19_item_supplierCode',
+    sql: 'ALTER TABLE Item ADD COLUMN supplierCode TEXT',
+    description: 'Add supplierCode column to Item',
+  },
+  {
+    id: '2026_06_19_item_dimension',
+    sql: 'ALTER TABLE Item ADD COLUMN dimension TEXT',
+    description: 'Add dimension column to Item',
+  },
+  {
+    id: '2026_06_19_item_description',
+    sql: 'ALTER TABLE Item ADD COLUMN description TEXT',
+    description: 'Add description column to Item',
+  },
+  // v50: IncentiveFormulaRange — new table for multiple ranges per formula
+  {
+    id: '2026_06_19_create_IncentiveFormulaRange',
+    sql: `CREATE TABLE IF NOT EXISTS "IncentiveFormulaRange" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "formulaId" TEXT NOT NULL,
+      "priceFrom" REAL NOT NULL,
+      "priceTo" REAL NOT NULL,
+      "outletCommission" REAL NOT NULL DEFAULT 0,
+      "headOfficeCommission" REAL NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("formulaId") REFERENCES "IncentiveFormula"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create IncentiveFormulaRange table (multiple ranges per formula)',
+  },
+  {
+    id: '2026_06_19_ifr_idx_formula',
+    sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormulaRange_formulaId_idx` ON `IncentiveFormulaRange`(`formulaId`)',
+    description: 'Index on IncentiveFormulaRange.formulaId',
+  },
 ];
 
 export async function POST(request: NextRequest) {
