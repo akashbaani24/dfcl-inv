@@ -267,7 +267,7 @@ export default function Home() {
   const [loginError, setLoginError] = useState('')
   const [isLoading, setIsLoading] = useState(true)
   const [showPassword, setShowPassword] = useState(false)
-  const [currentView, setCurrentView] = useState<ViewType>('items')
+  const [currentView, setCurrentViewState] = useState<ViewType>('items')
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [masterDataOpen, setMasterDataOpen] = useState(true)
   const [stockViewOpen, setStockViewOpen] = useState(false)
@@ -276,7 +276,7 @@ export default function Home() {
   const [inventoryOpen, setInventoryOpen] = useState(false)
 
   // Working entity (selected after login)
-  const [workingEntity, setWorkingEntity] = useState<{ id: string; name: string } | null>(null)
+  const [workingEntity, setWorkingEntityState] = useState<{ id: string; name: string } | null>(null)
 
   // Transaction state
   const [adjustments, setAdjustments] = useState<ItemAdjustmentData[]>([])
@@ -527,6 +527,30 @@ export default function Home() {
 
   const { toast } = useToast()
 
+  // ★ Persist currentView + workingEntity in localStorage so refresh keeps the same page
+  const setCurrentView = (view: ViewType) => {
+    setCurrentViewState(view)
+    if (typeof window !== 'undefined') localStorage.setItem('currentView', view)
+  }
+  const setWorkingEntity = (entity: { id: string; name: string } | null) => {
+    setWorkingEntityState(entity)
+    if (typeof window !== 'undefined') {
+      if (entity) localStorage.setItem('workingEntity', JSON.stringify(entity))
+      else localStorage.removeItem('workingEntity')
+    }
+  }
+
+  // ★ Restore saved view + entity on mount (after login check)
+  useEffect(() => {
+    if (typeof window === 'undefined' || !user) return
+    const savedView = localStorage.getItem('currentView') as ViewType | null
+    const savedEntity = localStorage.getItem('workingEntity')
+    if (savedView) setCurrentViewState(savedView)
+    if (savedEntity) {
+      try { setWorkingEntityState(JSON.parse(savedEntity)) } catch {}
+    }
+  }, [user])
+
   // Close context menu on any click
   useEffect(() => {
     if (contextMenu && typeof window !== 'undefined') {
@@ -643,6 +667,7 @@ export default function Home() {
     await authFetch('/api/auth/logout', { method: 'POST' })
     localStorage.removeItem('auth_token')
     setUser(null); setWorkingEntity(null); setCurrentView('entitySelect')
+    if (typeof window !== 'undefined') { localStorage.removeItem('currentView'); localStorage.removeItem('workingEntity') }
   }
 
   // Item handlers
@@ -6956,7 +6981,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
       </button>
 
       {/* Main Content */}
-      <main className="flex-1 min-w-0 overflow-auto">
+      <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
         <div className="p-3 sm:p-4 md:p-6 pt-12 md:pt-14">
           <div className="max-w-7xl mx-auto">
             {renderContent()}
@@ -6973,9 +6998,9 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
 
       </div>{/* close flex-1 div */}
 
-      {/* ★ Chat Widget — always fixed bottom right, outside main layout divs */}
+      {/* ★ Chat Widget — always fixed bottom right, outside all layout divs */}
       {chatOpen ? (
-        <div className="fixed bottom-4 right-4 z-[9998] w-80 bg-card border rounded-lg shadow-2xl flex flex-col" style={{ maxHeight: '500px' }}>
+        <div className="fixed bottom-4 right-4 z-[10000] w-80 bg-card border rounded-lg shadow-2xl flex flex-col" style={{ maxHeight: '500px' }}>
           {/* Header */}
           <div className="flex items-center justify-between p-3 border-b bg-primary text-primary-foreground rounded-t-lg">
             <span className="text-sm font-semibold flex items-center gap-2">
@@ -7039,7 +7064,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           )}
         </div>
       ) : (
-        <button onClick={() => { setChatOpen(true); fetchChatPartners(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[9998] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105 relative">
+        <button onClick={() => { setChatOpen(true); fetchChatPartners(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[10000] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105 relative">
           <span className="text-2xl">💬</span>
           {chatUnreadCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</span>
