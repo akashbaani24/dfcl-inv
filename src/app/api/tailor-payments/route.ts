@@ -45,7 +45,6 @@ export async function GET(request: NextRequest) {
               select: {
                 id: true,
                 itemId: true,
-                itemName: true,
                 quantity: true,
                 unitPrice: true,
                 makingEntries: { select: { id: true, name: true, unitPrice: true, quantity: true } },
@@ -56,12 +55,15 @@ export async function GET(request: NextRequest) {
         },
         entity: { select: { id: true, name: true } },
       },
+    }).catch((err) => {
+      console.error('TailorPayment query error:', err);
+      throw err;
     });
 
     return NextResponse.json({ payments });
   } catch (error) {
     console.error('Get tailor payments error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', detail: String(error) }, { status: 500 });
   }
 }
 
