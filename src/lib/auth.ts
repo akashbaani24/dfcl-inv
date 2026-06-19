@@ -86,6 +86,75 @@ export function clearUserCache(token: string) {
   userCache.delete(token);
 }
 
+// Lightweight auth check — only validates session exists and returns minimal user info
+// (id, username, role, displayName, entityId, entityAccess). Skips the expensive
+// columnAccess / menuAccess / masterDataAccess joins.
+// Use this for read-only endpoints that just need to know "who is calling" without
+// needing the full permission matrix (e.g. /api/entities).
+const basicUserCache = new Map<string, { user: unknown; expires: number }>();
+
+export async function getCurrentUserBasic(request?: NextRequest) {
+  let token: string | undefined;
+
+  if (request) {
+    const authHeader = request.headers.get('authorization');
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.substring(7);
+    }
+  }
+
+  if (!token) {
+    const cookieStore = await cookies();
+    token = cookieStore.get('session_token')?.value;
+  }
+
+  if (!token) return null;
+
+  // Check basic cache first
+  const cached = basicUserCache.get(token);
+  if (cached && cached.expires > Date.now()) {
+    return cached.user;
+  }
+
+  // Lightweight query — only session + user + entityAccess (for filtering)
+  const session = await db.session.findUnique({
+    where: { token },
+    select: {
+      expiresAt: true,
+      id: true,
+      user: {
+        select: {
+          id: true,
+          username: true,
+          displayName: true,
+          role: true,
+          entityId: true,
+          canCreateItem: true,
+          canModifyItem: true,
+          entityAccess: { select: { entityId: true } },
+        },
+      },
+    },
+  });
+
+  if (!session || session.expiresAt < new Date()) {
+    if (session) {
+      await db.session.delete({ where: { id: session.id } }).catch(() => {});
+    }
+    basicUserCache.delete(token);
+    userCache.delete(token);
+    return null;
+  }
+
+  basicUserCache.set(token, { user: session.user, expires: Date.now() + CACHE_TTL });
+
+  return session.user;
+}
+
+export function clearBasicUserCache(token: string) {
+  basicUserCache.delete(token);
+}
+
 export async function deleteSession(token: string) {
   await db.session.deleteMany({ where: { token } });
 }

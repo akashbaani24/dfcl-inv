@@ -1,12 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 import { getEntitiesCache, setEntitiesCache, invalidateEntitiesCache } from '@/lib/entities-cache';
 
 // GET all entities
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser(request);
+    // Use lightweight auth check — entity list doesn't need the full permission matrix
+    const currentUser = await getCurrentUserBasic(request);
     if (!currentUser) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
@@ -36,7 +37,7 @@ export async function GET(request: NextRequest) {
 // POST create new entity (admin only)
 export async function POST(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser(request);
+    const currentUser = await getCurrentUserBasic(request);
     if (!currentUser || currentUser.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }

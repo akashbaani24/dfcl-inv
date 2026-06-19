@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 import { invalidateEntitiesCache } from '@/lib/entities-cache';
 
 // PUT update entity
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const currentUser = await getCurrentUser(request);
+    const currentUser = await getCurrentUserBasic(request);
     if (!currentUser || currentUser.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
@@ -32,7 +32,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 // DELETE entity
 export async function DELETE(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
-    const currentUser = await getCurrentUser(request);
+    const currentUser = await getCurrentUserBasic(request);
     if (!currentUser || currentUser.role !== 'admin') {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
