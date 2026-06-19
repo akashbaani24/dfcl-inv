@@ -7,7 +7,14 @@ import { getEntitiesCache, setEntitiesCache, invalidateEntitiesCache } from '@/l
 export async function GET(request: NextRequest) {
   try {
     // Use lightweight auth check — entity list doesn't need the full permission matrix
-    const currentUser = await getCurrentUserBasic(request);
+    let currentUser;
+    try {
+      currentUser = await getCurrentUserBasic(request);
+    } catch (authErr) {
+      console.error('getCurrentUserBasic error in /api/entities:', authErr);
+      return NextResponse.json({ error: 'Auth check failed', detail: String(authErr) }, { status: 500 });
+    }
+
     if (!currentUser) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
@@ -19,18 +26,26 @@ export async function GET(request: NextRequest) {
     }
 
     // Optimized: skip _count (was causing slow COUNT subqueries on 22k+ items)
-    const entities = await db.entity.findMany({
-      orderBy: { name: 'asc' },
-      select: { id: true, name: true, description: true, entityType: true, createdAt: true, updatedAt: true },
-    });
+    let entities;
+    try {
+      entities = await db.entity.findMany({
+        orderBy: { name: 'asc' },
+        select: { id: true, name: true, description: true, entityType: true, createdAt: true, updatedAt: true },
+      });
+    } catch (dbErr) {
+      console.error('db.entity.findMany error in /api/entities:', dbErr);
+      return NextResponse.json({ error: 'DB query failed', detail: String(dbErr) }, { status: 500 });
+    }
 
-    // Cache for next call
-    setEntitiesCache(entities);
+    // Cache for next call (only if non-empty to avoid caching transient failures)
+    if (entities && entities.length > 0) {
+      setEntitiesCache(entities);
+    }
 
     return NextResponse.json({ entities });
   } catch (error) {
     console.error('Get entities error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error', detail: String(error) }, { status: 500 });
   }
 }
 
