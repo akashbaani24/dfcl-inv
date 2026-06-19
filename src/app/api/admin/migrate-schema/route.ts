@@ -723,6 +723,12 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `DeliveryItem_itemId_idx` ON `DeliveryItem`(`itemId`)',
     description: 'Index on DeliveryItem.itemId',
   },
+  // ★ v59: Add canApprove column to UserMenuAccess
+  {
+    id: '2026_06_19_usermenuaccess_canapprove',
+    sql: 'ALTER TABLE "UserMenuAccess" ADD COLUMN "canApprove" BOOLEAN NOT NULL DEFAULT 0',
+    description: 'Add canApprove column to UserMenuAccess',
+  },
 ];
 
 export async function POST(request: NextRequest) {

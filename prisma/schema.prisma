@@ -64,6 +64,9 @@ model UserMenuAccess {
   // ★ Per-menu data-transfer permissions (Req #2)
   canUpload  Boolean @default(false)  // Show "Upload CSV" / "Upload Stock" buttons for this menu
   canExport  Boolean @default(false)  // Show "Excel" / "Download" buttons for this menu
+  // ★ v59: Per-menu approval permission — only users with this flag can approve
+  //    purchases / sales returns / adjustments / etc.
+  canApprove Boolean @default(false)  // Show Approve buttons for this menu
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 

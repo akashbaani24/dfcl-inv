@@ -236,7 +236,7 @@ function isPrivileged(user: AnyUser): boolean {
   return user.role === 'admin' || user.role === 'manager';
 }
 
-export function canMenu(user: AnyUser, menuKey: string, action: 'create' | 'edit' | 'delete' | 'upload' | 'export'): boolean {
+export function canMenu(user: AnyUser, menuKey: string, action: 'create' | 'edit' | 'delete' | 'upload' | 'export' | 'approve'): boolean {
   if (isPrivileged(user)) return true;
   const ma = user.menuAccess?.find(m => m.menuKey === menuKey);
   if (!ma || !ma.visible) return false;
@@ -246,6 +246,7 @@ export function canMenu(user: AnyUser, menuKey: string, action: 'create' | 'edit
     case 'delete': return !!(ma.canDelete ?? user.canModifyItem ?? false);
     case 'upload': return !!(ma.canUpload ?? user.canCreateItem ?? false);
     case 'export': return !!(ma.canExport ?? true);  // default allow export for backward compat
+    case 'approve': return !!((ma as any).canApprove ?? false);  // ★ v59: approval permission
   }
 }
 

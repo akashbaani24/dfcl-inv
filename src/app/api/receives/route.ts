@@ -98,6 +98,28 @@ export async function POST(request: NextRequest) {
       // 2. Increment receiving entity's stock (always safe — never goes negative)
       await applyStockDelta(tx, itemId, entityId, qty);
 
+      // ★ v59: Auto-create barcode on the item if it doesn't have one.
+      // Generate a unique barcode based on the item's ID + timestamp.
+      try {
+        const item = await tx.item.findUnique({
+          where: { id: itemId },
+          select: { barcode: true, itemName: true },
+        });
+        if (item && (!item.barcode || item.barcode.trim() === '')) {
+          // Generate barcode: BC-<timestamp>-<random 4 digits>
+          const ts = Date.now().toString().slice(-10);
+          const rand = Math.floor(1000 + Math.random() * 9000);
+          const newBarcode = `BC${ts}${rand}`;
+          await tx.item.update({
+            where: { id: itemId },
+            data: { barcode: newBarcode },
+          });
+        }
+      } catch (e) {
+        // Non-fatal — barcode creation failure shouldn't block the receive
+        console.error('Auto-barcode creation error:', e);
+      }
+
       // 3. If receiving from another entity → decrement source stock (with guard)
       //    + complete matching transfer
       if (sourceEntityId && sourceEntityId !== entityId) {
