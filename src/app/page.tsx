@@ -1299,11 +1299,12 @@ export default function Home() {
     } catch {}
   }
 
-  // ★ Chat: fetch mentionable users (users who have access to current entity)
-  const fetchMentionUsers = async () => {
-    if (!workingEntity) return
+  // ★ Chat: fetch mentionable users for a SPECIFIC entity (the chat partner)
+  const fetchMentionUsers = async (entityId?: string) => {
+    const targetEntityId = entityId || workingEntity?.id
+    if (!targetEntityId) return
     try {
-      const res = await authFetch(`/api/chat?entityId=${workingEntity.id}&users=true`)
+      const res = await authFetch(`/api/chat?entityId=${targetEntityId}&users=true`)
       if (res.ok) { const d = await res.json(); setChatMentionUsers(d.users || []) }
     } catch {}
   }
@@ -7069,7 +7070,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
                 {entities.filter(e => e.id !== workingEntity?.id).map(e => {
                   const partner = chatPartners.find(p => p.partnerId === e.id)
                   return (
-                    <button key={e.id} onClick={() => { setChatPartnerId(e.id); fetchChatMessages(e.id) }} className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm flex items-center justify-between">
+                    <button key={e.id} onClick={() => { setChatPartnerId(e.id); fetchChatMessages(e.id); fetchMentionUsers(e.id) }} className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm flex items-center justify-between">
                       <span>{e.name}</span>
                       {partner && partner.unread > 0 && <Badge className="bg-red-500 text-white text-[10px]">{partner.unread}</Badge>}
                     </button>
