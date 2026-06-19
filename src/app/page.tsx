@@ -6916,6 +6916,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
   }
 
   return (
+    <>
     <div className="min-h-screen flex flex-col bg-background">
       {/* ★ News Ticker — scrolling text at top, right-to-left */}
       {tickerMessages.length > 0 && (
@@ -7042,111 +7043,108 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
       )}
 
       </div>{/* close flex-1 div */}
-
-      {/* ★ Chat Widget — always fixed bottom right, outside all layout divs */}
-      {chatOpen ? (
-        <div className="fixed bottom-4 right-4 z-[10000] w-80 bg-card border rounded-lg shadow-2xl flex flex-col" style={{ maxHeight: '500px' }}>
-          {/* Header */}
-          <div className="flex items-center justify-between p-3 border-b bg-primary text-primary-foreground rounded-t-lg">
-            <span className="text-sm font-semibold flex items-center gap-2">
-              {chatPartnerId ? (
-                <>
-                  <button onClick={() => { setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">←</button>
-                  {entities.find(e => e.id === chatPartnerId)?.name || 'Chat'}
-                  {chatPartnerId === workingEntity?.id && <Badge variant="outline" className="ml-1 text-[9px] bg-blue-50 text-blue-600">Me</Badge>}
-                </>
-              ) : (
-                <>💬 Entity Chat — {workingEntity?.name}</>
-              )}
-            </span>
-            <button onClick={() => { setChatOpen(false); setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">✕</button>
-          </div>
-
-          {/* Content */}
-          <div className="flex-1 overflow-y-auto" style={{ minHeight: '200px', maxHeight: '350px' }}>
-            {!chatPartnerId ? (
-              /* Partner list */
-              <div className="p-2 space-y-1">
-                <p className="text-xs text-muted-foreground px-2 py-1">Select an entity to chat with:</p>
-                {entities.map(e => {
-                  const isSelf = e.id === workingEntity?.id
-                  const partner = chatPartners.find(p => p.partnerId === e.id)
-                  return (
-                    <button key={e.id} onClick={() => { setChatPartnerId(e.id); fetchChatMessages(e.id); fetchMentionUsers(e.id) }} className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm flex items-center justify-between">
-                      <span>{e.name} {isSelf && <Badge variant="outline" className="ml-1 text-[9px] bg-blue-50 text-blue-600">Me</Badge>}</span>
-                      {partner && partner.unread > 0 && <Badge className="bg-red-500 text-white text-[10px]">{partner.unread}</Badge>}
-                    </button>
-                  )
-                })}
-              </div>
+    </div>{/* close root min-h-screen div */}
+    
+    {/* ★ Chat Widget — completely OUTSIDE all layout divs, truly fixed to viewport */}
+    {chatOpen ? (
+      <div className="fixed bottom-4 right-4 z-[10000] w-80 bg-card border rounded-lg shadow-2xl flex flex-col" style={{ maxHeight: '500px' }}>
+        {/* Header */}
+        <div className="flex items-center justify-between p-3 border-b bg-primary text-primary-foreground rounded-t-lg">
+          <span className="text-sm font-semibold flex items-center gap-2">
+            {chatPartnerId ? (
+              <>
+                <button onClick={() => { setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">←</button>
+                {entities.find(e => e.id === chatPartnerId)?.name || 'Chat'}
+                {chatPartnerId === workingEntity?.id && <Badge variant="outline" className="ml-1 text-[9px] bg-blue-50 text-blue-600">Me</Badge>}
+              </>
             ) : (
-              /* Messages */
-              <div className="p-2 space-y-2">
-                {chatLoading ? <p className="text-center text-xs text-muted-foreground py-4">Loading...</p>
-                : chatMessages.length === 0 ? <p className="text-center text-xs text-muted-foreground py-4">No messages yet. Say hello!</p>
-                : chatMessages.map((msg, i) => {
-                  // Highlight @mentions in message text
-                  const renderMessage = (text: string) => {
-                    const parts = text.split(/(@\w+)/g)
-                    return parts.map((part, pi) => {
-                      if (part.startsWith('@') && part.length > 1) {
-                        return <span key={pi} className="font-semibold text-blue-600 bg-blue-100 px-0.5 rounded">{part}</span>
-                      }
-                      return <span key={pi}>{part}</span>
-                    })
-                  }
-                  return (
-                  <div key={i} className={`flex ${msg.fromEntityId === workingEntity?.id ? 'justify-end' : 'justify-start'}`}>
-                    <div className={`max-w-[75%] rounded-lg px-3 py-1.5 text-xs ${msg.fromEntityId === workingEntity?.id ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
-                      <p className={`text-[10px] font-semibold mb-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
-                        {msg.fromEntityId === workingEntity?.id ? 'You' : (msg as any).senderName || msg.fromEntity?.name || 'Unknown'}
-                      </p>
-                      <p>{renderMessage(msg.message)}</p>
-                      <p className={`text-[9px] mt-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
-                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </p>
-                    </div>
-                  </div>
-                  )
-                })}
-                <div ref={chatEndRef} />
-              </div>
+              <>💬 Entity Chat — {workingEntity?.name}</>
             )}
-          </div>
+          </span>
+          <button onClick={() => { setChatOpen(false); setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">✕</button>
+        </div>
 
-          {/* Input */}
-          {chatPartnerId && (
-            <div className="p-2 border-t relative">
-              {/* @mention suggestions */}
-              {chatMentionStart >= 0 && filteredMentionUsers.length > 0 && (
-                <div className="absolute bottom-full left-0 right-0 bg-card border rounded-t-md shadow-lg max-h-32 overflow-y-auto z-10">
-                  {filteredMentionUsers.slice(0, 5).map(u => (
-                    <button key={u.id} type="button" onClick={() => selectMentionUser(u)} className="w-full text-left px-3 py-1.5 hover:bg-primary hover:text-primary-foreground text-xs border-b last:border-0 transition-colors">
-                      <span className="font-semibold">@{u.displayName}</span>
-                      <span className="text-muted-foreground ml-1">({u.username})</span>
-                      {u.role === 'admin' && <Badge variant="outline" className="ml-1 text-[8px]">admin</Badge>}
-                    </button>
-                  ))}
+        {/* Content */}
+        <div className="flex-1 overflow-y-auto" style={{ minHeight: '200px', maxHeight: '350px' }}>
+          {!chatPartnerId ? (
+            <div className="p-2 space-y-1">
+              <p className="text-xs text-muted-foreground px-2 py-1">Select an entity to chat with:</p>
+              {entities.map(e => {
+                const isSelf = e.id === workingEntity?.id
+                const partner = chatPartners.find(p => p.partnerId === e.id)
+                return (
+                  <button key={e.id} onClick={() => { setChatPartnerId(e.id); fetchChatMessages(e.id); fetchMentionUsers(e.id) }} className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm flex items-center justify-between">
+                    <span>{e.name} {isSelf && <Badge variant="outline" className="ml-1 text-[9px] bg-blue-50 text-blue-600">Me</Badge>}</span>
+                    {partner && partner.unread > 0 && <Badge className="bg-red-500 text-white text-[10px]">{partner.unread}</Badge>}
+                  </button>
+                )
+              })}
+            </div>
+          ) : (
+            <div className="p-2 space-y-2">
+              {chatLoading ? <p className="text-center text-xs text-muted-foreground py-4">Loading...</p>
+              : chatMessages.length === 0 ? <p className="text-center text-xs text-muted-foreground py-4">No messages yet. Say hello!</p>
+              : chatMessages.map((msg, i) => {
+                const renderMessage = (text: string) => {
+                  const parts = text.split(/(@\w+)/g)
+                  return parts.map((part, pi) => {
+                    if (part.startsWith('@') && part.length > 1) {
+                      return <span key={pi} className="font-semibold text-blue-600 bg-blue-100 px-0.5 rounded">{part}</span>
+                    }
+                    return <span key={pi}>{part}</span>
+                  })
+                }
+                return (
+                <div key={i} className={`flex ${msg.fromEntityId === workingEntity?.id ? 'justify-end' : 'justify-start'}`}>
+                  <div className={`max-w-[75%] rounded-lg px-3 py-1.5 text-xs ${msg.fromEntityId === workingEntity?.id ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                    <p className={`text-[10px] font-semibold mb-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                      {msg.fromEntityId === workingEntity?.id ? 'You' : (msg as any).senderName || msg.fromEntity?.name || 'Unknown'}
+                    </p>
+                    <p>{renderMessage(msg.message)}</p>
+                    <p className={`text-[9px] mt-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                      {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
                 </div>
-              )}
-              <div className="flex gap-1">
-                <Input placeholder="Type a message... use @ to mention" value={chatInput} onChange={e => handleChatInputChange(e.target.value)} onKeyDown={e => {
-                  if (e.key === 'Enter' && chatMentionStart < 0) sendChatMessage()
-                }} className="h-8 text-xs flex-1" />
-                <Button size="sm" className="h-8 px-2" onClick={sendChatMessage}>Send</Button>
-              </div>
+                )
+              })}
+              <div ref={chatEndRef} />
             </div>
           )}
         </div>
-      ) : (
-        <button onClick={() => { setChatOpen(true); fetchChatPartners(); fetchMentionUsers(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[10000] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105 relative">
-          <span className="text-2xl">💬</span>
-          {chatUnreadCount > 0 && (
-            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</span>
-          )}
-        </button>
-      )}
-    </div>
+
+        {/* Input */}
+        {chatPartnerId && (
+          <div className="p-2 border-t relative">
+            {chatMentionStart >= 0 && filteredMentionUsers.length > 0 && (
+              <div className="absolute bottom-full left-0 right-0 bg-card border rounded-t-md shadow-lg max-h-32 overflow-y-auto z-10">
+                {filteredMentionUsers.slice(0, 5).map(u => (
+                  <button key={u.id} type="button" onClick={() => selectMentionUser(u)} className="w-full text-left px-3 py-1.5 hover:bg-primary hover:text-primary-foreground text-xs border-b last:border-0 transition-colors">
+                    <span className="font-semibold">@{u.displayName}</span>
+                    <span className="text-muted-foreground ml-1">({u.username})</span>
+                    {u.role === 'admin' && <Badge variant="outline" className="ml-1 text-[8px]">admin</Badge>}
+                  </button>
+                ))}
+              </div>
+            )}
+            <div className="flex gap-1">
+              <Input placeholder="Type a message... use @ to mention" value={chatInput} onChange={e => handleChatInputChange(e.target.value)} onKeyDown={e => {
+                if (e.key === 'Enter' && chatMentionStart < 0) sendChatMessage()
+              }} className="h-8 text-xs flex-1" />
+              <Button size="sm" className="h-8 px-2" onClick={sendChatMessage}>Send</Button>
+            </div>
+          </div>
+        )}
+      </div>
+    ) : (
+      <button onClick={() => { setChatOpen(true); fetchChatPartners(); fetchMentionUsers(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[10000] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105">
+        <span className="text-2xl">💬</span>
+        {chatUnreadCount > 0 && (
+          <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</span>
+        )}
+      </button>
+    )}
+    </>
   )
 }
 
