@@ -1070,7 +1070,7 @@ export default function Home() {
       }
 
       const payload = {
-        entityId: bookingForm.forEntityId,
+        entityId: workingEntity.id, // ★ Booking is "owned" by the entity that creates it (so it shows in that entity's booking summary)
         customerId,
         bookingDate: bookingForm.bookingDate,
         tillDate: bookingForm.tillDate,
@@ -1670,7 +1670,7 @@ export default function Home() {
 
   useEffect(() => { if (currentView === 'tailors') fetchTailors() }, [currentView])
   useEffect(() => { if (currentView === 'makingInfo') fetchMakingInfo() }, [currentView])
-  useEffect(() => { if (currentView === 'uom') fetchUom() }, [currentView])
+  useEffect(() => { if (currentView === 'uom' || currentView === 'newItem' || currentView === 'editItem') fetchUom() }, [currentView])
   useEffect(() => { if (currentView === 'suppliers') fetchSuppliers() }, [currentView])
   useEffect(() => { if (currentView === 'employees') fetchEmployees() }, [currentView])
   useEffect(() => { if (currentView === 'customers') fetchCustomers() }, [currentView])
@@ -7780,7 +7780,7 @@ export default function Home() {
             </div>
             <div className="space-y-2 sm:col-span-2"><Label>Item Name *</Label><Input placeholder="e.g. Samsung Galaxy S23" value={itemForm.itemName} onChange={e => setItemForm({ ...itemForm, itemName: e.target.value })} required /></div>
             <div className="space-y-2"><Label>Price</Label><Input type="number" step="0.01" placeholder="0.00" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e.target.value })} /></div>
-            <div className="space-y-2"><Label>UoM</Label><Select value={itemForm.uom} onValueChange={v => setItemForm({ ...itemForm, uom: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['PCS','KG','LTR','MTR','BOX','SET','DOZ','PACK'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>UoM</Label><Select value={itemForm.uom} onValueChange={v => setItemForm({ ...itemForm, uom: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{uomList.length > 0 ? uomList.map(u => <SelectItem key={u.id} value={u.name}>{u.name}</SelectItem>) : ['PCS','KG','LTR','MTR','BOX','SET','DOZ','PACK'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Barcode</Label><Input placeholder="Optional" value={itemForm.barcode} onChange={e => setItemForm({ ...itemForm, barcode: e.target.value })} /></div>
             <div className="space-y-2"><Label>Color</Label><Input placeholder="Optional" value={itemForm.color} onChange={e => setItemForm({ ...itemForm, color: e.target.value })} /></div>
             <div className="space-y-2"><Label>Pattern</Label><Input placeholder="Optional" value={itemForm.pattern} onChange={e => setItemForm({ ...itemForm, pattern: e.target.value })} /></div>
