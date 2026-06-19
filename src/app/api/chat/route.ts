@@ -5,6 +5,7 @@ import { getCurrentUser } from '@/lib/auth';
 // GET /api/chat?entityId=xxx&partnerEntityId=yyy
 // Returns messages between entityId and partnerEntityId (both directions)
 // If no partnerEntityId, returns latest message per partner for the entity
+// Also supports ?entityId=xxx&users=true — returns all users with entity access
 export async function GET(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -13,6 +14,23 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const entityId = searchParams.get('entityId') || '';
     const partnerEntityId = searchParams.get('partnerEntityId') || '';
+    const getUsers = searchParams.get('users') === 'true';
+
+    // ★ Return users who have access to the entity (for @mention suggestions)
+    if (getUsers && entityId) {
+      const users = await db.user.findMany({
+        where: {
+          OR: [
+            { role: 'admin' },
+            { role: 'manager' },
+            { entityAccess: { some: { entityId } } },
+          ],
+        },
+        select: { id: true, displayName: true, username: true, role: true },
+        orderBy: { displayName: 'asc' },
+      });
+      return NextResponse.json({ users });
+    }
 
     if (!entityId) return NextResponse.json({ messages: [] });
 

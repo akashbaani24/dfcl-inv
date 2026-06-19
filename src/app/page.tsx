@@ -516,6 +516,9 @@ export default function Home() {
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
   const [chatUnreadCount, setChatUnreadCount] = useState(0)
+  const [chatMentionUsers, setChatMentionUsers] = useState<any[]>([])
+  const [chatMentionQuery, setChatMentionQuery] = useState('')
+  const [chatMentionStart, setChatMentionStart] = useState(-1)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
 
   // ★ News Ticker state (top-level)
@@ -1295,6 +1298,47 @@ export default function Home() {
       if (res.ok) { const d = await res.json(); setChatPartners(d.partners || []) }
     } catch {}
   }
+
+  // ★ Chat: fetch mentionable users (users who have access to current entity)
+  const fetchMentionUsers = async () => {
+    if (!workingEntity) return
+    try {
+      const res = await authFetch(`/api/chat?entityId=${workingEntity.id}&users=true`)
+      if (res.ok) { const d = await res.json(); setChatMentionUsers(d.users || []) }
+    } catch {}
+  }
+
+  // ★ Chat: handle @ mention in input
+  const handleChatInputChange = (value: string) => {
+    setChatInput(value)
+    // Detect @ mention
+    const lastAtIndex = value.lastIndexOf('@')
+    if (lastAtIndex >= 0) {
+      const query = value.substring(lastAtIndex + 1)
+      // Only show suggestions if there's no space after @ (still typing the name)
+      if (!query.includes(' ')) {
+        setChatMentionQuery(query)
+        setChatMentionStart(lastAtIndex)
+      } else {
+        setChatMentionStart(-1)
+      }
+    } else {
+      setChatMentionStart(-1)
+    }
+  }
+
+  // ★ Chat: select a mentioned user
+  const selectMentionUser = (user: any) => {
+    const before = chatInput.substring(0, chatMentionStart)
+    const after = chatInput.substring(chatMentionStart + 1 + chatMentionQuery.length)
+    const newValue = `${before}@${user.displayName} ${after}`
+    setChatInput(newValue)
+    setChatMentionStart(-1)
+  }
+
+  const filteredMentionUsers = chatMentionQuery
+    ? chatMentionUsers.filter(u => u.displayName.toLowerCase().includes(chatMentionQuery.toLowerCase()) || u.username.toLowerCase().includes(chatMentionQuery.toLowerCase()))
+    : chatMentionUsers
 
   // ★ Chat: poll for unread messages (notification badge)
   useEffect(() => {
@@ -7037,19 +7081,31 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
               <div className="p-2 space-y-2">
                 {chatLoading ? <p className="text-center text-xs text-muted-foreground py-4">Loading...</p>
                 : chatMessages.length === 0 ? <p className="text-center text-xs text-muted-foreground py-4">No messages yet. Say hello!</p>
-                : chatMessages.map((msg, i) => (
+                : chatMessages.map((msg, i) => {
+                  // Highlight @mentions in message text
+                  const renderMessage = (text: string) => {
+                    const parts = text.split(/(@\w+)/g)
+                    return parts.map((part, pi) => {
+                      if (part.startsWith('@') && part.length > 1) {
+                        return <span key={pi} className="font-semibold text-blue-600 bg-blue-100 px-0.5 rounded">{part}</span>
+                      }
+                      return <span key={pi}>{part}</span>
+                    })
+                  }
+                  return (
                   <div key={i} className={`flex ${msg.fromEntityId === workingEntity?.id ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[75%] rounded-lg px-3 py-1.5 text-xs ${msg.fromEntityId === workingEntity?.id ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
                       <p className={`text-[10px] font-semibold mb-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
                         {msg.fromEntityId === workingEntity?.id ? 'You' : (msg as any).senderName || msg.fromEntity?.name || 'Unknown'}
                       </p>
-                      <p>{msg.message}</p>
+                      <p>{renderMessage(msg.message)}</p>
                       <p className={`text-[9px] mt-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
                       </p>
                     </div>
                   </div>
-                ))}
+                  )
+                })}
                 <div ref={chatEndRef} />
               </div>
             )}
@@ -7057,14 +7113,30 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
 
           {/* Input */}
           {chatPartnerId && (
-            <div className="p-2 border-t flex gap-1">
-              <Input placeholder="Type a message..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChatMessage()} className="h-8 text-xs flex-1" />
-              <Button size="sm" className="h-8 px-2" onClick={sendChatMessage}>Send</Button>
+            <div className="p-2 border-t relative">
+              {/* @mention suggestions */}
+              {chatMentionStart >= 0 && filteredMentionUsers.length > 0 && (
+                <div className="absolute bottom-full left-0 right-0 bg-card border rounded-t-md shadow-lg max-h-32 overflow-y-auto z-10">
+                  {filteredMentionUsers.slice(0, 5).map(u => (
+                    <button key={u.id} type="button" onClick={() => selectMentionUser(u)} className="w-full text-left px-3 py-1.5 hover:bg-primary hover:text-primary-foreground text-xs border-b last:border-0 transition-colors">
+                      <span className="font-semibold">@{u.displayName}</span>
+                      <span className="text-muted-foreground ml-1">({u.username})</span>
+                      {u.role === 'admin' && <Badge variant="outline" className="ml-1 text-[8px]">admin</Badge>}
+                    </button>
+                  ))}
+                </div>
+              )}
+              <div className="flex gap-1">
+                <Input placeholder="Type a message... use @ to mention" value={chatInput} onChange={e => handleChatInputChange(e.target.value)} onKeyDown={e => {
+                  if (e.key === 'Enter' && chatMentionStart < 0) sendChatMessage()
+                }} className="h-8 text-xs flex-1" />
+                <Button size="sm" className="h-8 px-2" onClick={sendChatMessage}>Send</Button>
+              </div>
             </div>
           )}
         </div>
       ) : (
-        <button onClick={() => { setChatOpen(true); fetchChatPartners(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[10000] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105 relative">
+        <button onClick={() => { setChatOpen(true); fetchChatPartners(); fetchMentionUsers(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[10000] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105 relative">
           <span className="text-2xl">💬</span>
           {chatUnreadCount > 0 && (
             <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</span>
