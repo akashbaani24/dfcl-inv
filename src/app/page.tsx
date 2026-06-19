@@ -483,6 +483,7 @@ export default function Home() {
   const [reportCustomFrom, setReportCustomFrom] = useState('') // YYYY-MM-DD
   const [reportCustomTo, setReportCustomTo] = useState('') // YYYY-MM-DD
   const [reportExporting, setReportExporting] = useState(false)
+  const [entitySearch, setEntitySearch] = useState('') // entity selection page search
 
   const { toast } = useToast()
 
@@ -4932,7 +4933,6 @@ export default function Home() {
   // Entity selection page
   const renderEntitySelection = () => {
     const availableEntities = isManagerOrAdmin ? entities : entities.filter(e => user.entityAccess.some(ea => ea.entityId === e.id))
-    const [entitySearch, setEntitySearch] = useState('')
     const filteredEntities = entitySearch
       ? availableEntities.filter(e => e.name.toLowerCase().includes(entitySearch.toLowerCase()) || (e.description || '').toLowerCase().includes(entitySearch.toLowerCase()))
       : availableEntities
