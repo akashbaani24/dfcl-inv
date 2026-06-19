@@ -49,6 +49,7 @@ import {
   ChevronDown,
   ArrowRightLeft,
   ArrowDownToLine,
+  ArrowLeft,
   ShoppingCart,
   DollarSign,
   FileText,
@@ -168,7 +169,7 @@ type ViewType =
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
   | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
-  | 'users' | 'entities'
+  | 'users' | 'userForm' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
   | 'groups' | 'subGroups'
   | 'bookingReasons'
@@ -1963,7 +1964,7 @@ export default function Home() {
     try {
       const res = await authFetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, masterDataAccess: userMasterDataAccess, columnAccess: columnAccessForm }) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'User created' }); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); fetchUsers() }
+      if (res.ok) { toast({ title: 'Success', description: 'User created' }); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); setCurrentView('users'); fetchUsers() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create user', variant: 'destructive' }) }
   }
@@ -1976,7 +1977,7 @@ export default function Home() {
       if (!updateData.password) delete updateData.password
       const res = await authFetch(`/api/users/${editingUserId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(updateData) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'User updated' }); setEditingUserId(null); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); fetchUsers() }
+      if (res.ok) { toast({ title: 'Success', description: 'User updated' }); setEditingUserId(null); setUserForm({ username: '', password: '', displayName: '', role: 'user', canCreateItem: false, canModifyItem: false }); setUserEntityIds([]); setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false }))); setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true }))); setShowUserDialog(false); setCurrentView('users'); fetchUsers() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update user', variant: 'destructive' }) }
   }
@@ -2053,7 +2054,7 @@ export default function Home() {
       const existing = u.columnAccess.find(ca => ca.columnName === col.key)
       return { columnName: col.key, canView: existing ? existing.canView : true }
     }))
-    setShowUserDialog(true)
+    setCurrentView('userForm')
   }
 
   const openNewUserDialog = () => {
@@ -2063,7 +2064,7 @@ export default function Home() {
     setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false })))
     setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false })))
     setColumnAccessForm(ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => ({ columnName: col.key, canView: true })))
-    setShowUserDialog(true)
+    setCurrentView('userForm')
   }
 
   // System handlers
@@ -6272,6 +6273,7 @@ export default function Home() {
       case 'groups': return renderGroupsPage()
       case 'subGroups': return renderSubGroupsPage()
       case 'users': return renderUserManagement()
+      case 'userForm': return renderUserFormPage()
       case 'entities': return renderEntityManagement()
       case 'settings': return renderSettingsPage()
       case 'stockDetail': return renderStockDetail()
@@ -7133,6 +7135,248 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           <DialogFooter className="pt-4"><Button onClick={handleSaveColumnAccess}><Save className="w-4 h-4 mr-2" />Save</Button></DialogFooter>
         </DialogContent>
       </Dialog>
+    </div>
+  )
+
+  // ─── User Form Page (full-page, no popup) ────────────────────────────
+  // Renders the same form as the dialog but as a standalone page so users can
+  // navigate back/forward with the browser, scroll comfortably, etc.
+  const renderUserFormPage = () => (
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => { setEditingUserId(null); setShowUserDialog(false); setCurrentView('users') }}
+          >
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          </Button>
+          <h2 className="text-xl font-semibold flex items-center gap-2">
+            <Key className="w-5 h-5" />
+            {editingUserId ? 'Edit User' : 'Create New User'}
+          </h2>
+        </div>
+      </div>
+
+      <form onSubmit={editingUserId ? handleUpdateUser : handleCreateUser} className="space-y-4 bg-white rounded-lg border shadow-sm p-6">
+        {/* Basic info */}
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="space-y-2">
+            <Label>Username *</Label>
+            <Input value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })} required disabled={!!editingUserId} />
+          </div>
+          <div className="space-y-2">
+            <Label>{editingUserId ? 'New Password (leave blank to keep)' : 'Password *'}</Label>
+            <Input type="password" value={userForm.password} onChange={e => setUserForm({ ...userForm, password: e.target.value })} required={!editingUserId} />
+          </div>
+          <div className="space-y-2">
+            <Label>Display Name *</Label>
+            <Input value={userForm.displayName} onChange={e => setUserForm({ ...userForm, displayName: e.target.value })} required />
+          </div>
+          <div className="space-y-2">
+            <Label>Role</Label>
+            <Select value={userForm.role} onValueChange={v => setUserForm({ ...userForm, role: v })}>
+              <SelectTrigger><SelectValue /></SelectTrigger>
+              <SelectContent>
+                <SelectItem value="user">User</SelectItem>
+                <SelectItem value="manager">Manager</SelectItem>
+                <SelectItem value="admin">Admin</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-900">
+          <p className="font-semibold mb-0.5">ℹ️ Per-action permissions</p>
+          <p>Per-menu Create / Edit / Delete / Upload / Export toggles are below. Admin &amp; Manager always have all permissions. The legacy global "Can Create Items" / "Can Modify" toggles have been replaced by these per-menu granular toggles.</p>
+        </div>
+
+        <Separator />
+
+        {/* Assign entities */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Assign Entities</Label>
+          <p className="text-xs text-muted-foreground">Select which entities this user can access.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 max-h-72 overflow-y-auto border rounded-lg p-3">
+            {entities.length === 0 ? <p className="text-sm text-muted-foreground col-span-full">No entities created yet. Create entities first.</p> :
+              entities.map(entity => (
+                <div key={entity.id} className="flex items-center gap-2">
+                  <Checkbox id={`page-entity-${entity.id}`} checked={userEntityIds.includes(entity.id)} onCheckedChange={checked => {
+                    if (checked) setUserEntityIds([...userEntityIds, entity.id])
+                    else setUserEntityIds(userEntityIds.filter(id => id !== entity.id))
+                  }} />
+                  <Label htmlFor={`page-entity-${entity.id}`} className="text-sm cursor-pointer">{entity.name}</Label>
+                </div>
+              ))
+            }
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Menu access */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <Label className="text-sm font-semibold">Menu Access &amp; Permissions</Label>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={() => setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false })))}>Reset</Button>
+              <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={() => setUserMenuAccess(ALL_MENU_ITEMS.map(m => ({ menuKey: m.key, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true })))}>All On</Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Tick "Visible" to grant access. Then tick the per-action permissions (Create / Edit / Delete / Upload / Export) you want this user to have on that menu. Admin &amp; Manager always have every permission.</p>
+          {(() => {
+            const groups = [...new Set(ALL_MENU_ITEMS.map(m => m.group))]
+            return groups.map(group => (
+              <div key={group} className="border rounded-lg p-3">
+                <p className="text-xs font-semibold text-muted-foreground mb-2">{group}</p>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr className="border-b">
+                        <th className="text-left px-2 py-1 font-medium text-muted-foreground">Menu</th>
+                        <th className="px-2 py-1 font-medium text-muted-foreground text-center">Visible</th>
+                        <th className="px-2 py-1 font-medium text-muted-foreground text-center">Create</th>
+                        <th className="px-2 py-1 font-medium text-muted-foreground text-center">Edit</th>
+                        <th className="px-2 py-1 font-medium text-muted-foreground text-center">Delete</th>
+                        <th className="px-2 py-1 font-medium text-muted-foreground text-center">Upload</th>
+                        <th className="px-2 py-1 font-medium text-muted-foreground text-center">Export</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {ALL_MENU_ITEMS.filter(m => m.group === group).map(menu => {
+                        const idx = userMenuAccess.findIndex(ma => ma.menuKey === menu.key)
+                        const entry = idx >= 0 ? userMenuAccess[idx] : { menuKey: menu.key, visible: true }
+                        const setField = (field: 'visible' | 'canCreate' | 'canEdit' | 'canDelete' | 'canUpload' | 'canExport', value: boolean) => {
+                          const updated = [...userMenuAccess]
+                          if (idx >= 0) {
+                            updated[idx] = { ...updated[idx], [field]: value }
+                          } else {
+                            updated.push({ menuKey: menu.key, visible: true, [field]: value } as MenuAccess)
+                          }
+                          setUserMenuAccess(updated)
+                        }
+                        const isChecked = (field: 'visible' | 'canCreate' | 'canEdit' | 'canDelete' | 'canUpload' | 'canExport') => !!(entry as any)[field]
+                        return (
+                          <tr key={menu.key} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="px-2 py-1.5 font-medium">{menu.label}</td>
+                            <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('visible')} onCheckedChange={v => setField('visible', !!v)} /></td>
+                            <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canCreate')} onCheckedChange={v => setField('canCreate', !!v)} disabled={!isChecked('visible')} /></td>
+                            <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canEdit')} onCheckedChange={v => setField('canEdit', !!v)} disabled={!isChecked('visible')} /></td>
+                            <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canDelete')} onCheckedChange={v => setField('canDelete', !!v)} disabled={!isChecked('visible')} /></td>
+                            <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canUpload')} onCheckedChange={v => setField('canUpload', !!v)} disabled={!isChecked('visible')} /></td>
+                            <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canExport')} onCheckedChange={v => setField('canExport', !!v)} disabled={!isChecked('visible')} /></td>
+                          </tr>
+                        )
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            ))
+          })()}
+        </div>
+
+        <Separator />
+
+        {/* Master data access */}
+        <div className="space-y-2">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <Label className="text-sm font-semibold">Master Data Access &amp; Permissions</Label>
+            <div className="flex gap-2">
+              <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={() => setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: false, canEdit: false, canDelete: false, canUpload: false, canExport: false })))}>Reset</Button>
+              <Button type="button" variant="ghost" size="sm" className="text-xs h-7" onClick={() => setUserMasterDataAccess(ALL_MASTER_DATA_ITEMS.map(m => ({ masterDataKey: m.key, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true })))}>All On</Button>
+            </div>
+          </div>
+          <p className="text-xs text-muted-foreground">Same per-action permissions as menus. Admin &amp; Manager always see all. Entity &amp; Users are admin-only regardless.</p>
+          <div className="border rounded-lg p-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead>
+                <tr className="border-b">
+                  <th className="text-left px-2 py-1 font-medium text-muted-foreground">Master Data</th>
+                  <th className="px-2 py-1 font-medium text-muted-foreground text-center">Visible</th>
+                  <th className="px-2 py-1 font-medium text-muted-foreground text-center">Create</th>
+                  <th className="px-2 py-1 font-medium text-muted-foreground text-center">Edit</th>
+                  <th className="px-2 py-1 font-medium text-muted-foreground text-center">Delete</th>
+                  <th className="px-2 py-1 font-medium text-muted-foreground text-center">Upload</th>
+                  <th className="px-2 py-1 font-medium text-muted-foreground text-center">Export</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ALL_MASTER_DATA_ITEMS.map(item => {
+                  const idx = userMasterDataAccess.findIndex(mda => mda.masterDataKey === item.key)
+                  const entry = idx >= 0 ? userMasterDataAccess[idx] : { masterDataKey: item.key, visible: true }
+                  const setField = (field: 'visible' | 'canCreate' | 'canEdit' | 'canDelete' | 'canUpload' | 'canExport', value: boolean) => {
+                    const updated = [...userMasterDataAccess]
+                    if (idx >= 0) {
+                      updated[idx] = { ...updated[idx], [field]: value }
+                    } else {
+                      updated.push({ masterDataKey: item.key, visible: true, [field]: value } as MasterDataAccess)
+                    }
+                    setUserMasterDataAccess(updated)
+                  }
+                  const isChecked = (field: 'visible' | 'canCreate' | 'canEdit' | 'canDelete' | 'canUpload' | 'canExport') => !!(entry as any)[field]
+                  return (
+                    <tr key={item.key} className="border-b last:border-0 hover:bg-muted/30">
+                      <td className="px-2 py-1.5 font-medium">{item.label}</td>
+                      <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('visible')} onCheckedChange={v => setField('visible', !!v)} /></td>
+                      <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canCreate')} onCheckedChange={v => setField('canCreate', !!v)} disabled={!isChecked('visible')} /></td>
+                      <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canEdit')} onCheckedChange={v => setField('canEdit', !!v)} disabled={!isChecked('visible')} /></td>
+                      <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canDelete')} onCheckedChange={v => setField('canDelete', !!v)} disabled={!isChecked('visible')} /></td>
+                      <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canUpload')} onCheckedChange={v => setField('canUpload', !!v)} disabled={!isChecked('visible')} /></td>
+                      <td className="px-2 py-1.5 text-center"><Checkbox checked={isChecked('canExport')} onCheckedChange={v => setField('canExport', !!v)} disabled={!isChecked('visible')} /></td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <Separator />
+
+        {/* Column access */}
+        <div className="space-y-2">
+          <Label className="text-sm font-semibold">Column Access</Label>
+          <p className="text-xs text-muted-foreground">Define which columns this user can view in the Item Information table.</p>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-2 border rounded-lg p-3">
+            {ALL_COLUMNS.filter(c => !c.alwaysVisible).map(col => {
+              const caEntry = columnAccessForm.find(ca => ca.columnName === col.key)
+              const checked = caEntry ? caEntry.canView : true
+              return (
+                <div key={col.key} className="flex items-center justify-between py-0.5">
+                  <Label className="text-sm">{col.label}</Label>
+                  <Switch
+                    checked={checked}
+                    onCheckedChange={v => {
+                      const updated = [...columnAccessForm]
+                      const idx = updated.findIndex(ca => ca.columnName === col.key)
+                      if (idx >= 0) {
+                        updated[idx] = { ...updated[idx], canView: v }
+                      } else {
+                        updated.push({ columnName: col.key, canView: v })
+                      }
+                      setColumnAccessForm(updated)
+                    }}
+                  />
+                </div>
+              )
+            })}
+          </div>
+        </div>
+
+        {/* Action buttons */}
+        <div className="flex items-center justify-end gap-2 pt-4 border-t">
+          <Button type="button" variant="outline" onClick={() => { setEditingUserId(null); setShowUserDialog(false); setCurrentView('users') }}>
+            Cancel
+          </Button>
+          <Button type="submit">
+            <Save className="w-4 h-4 mr-2" />
+            {editingUserId ? 'Update User' : 'Create User'}
+          </Button>
+        </div>
+      </form>
     </div>
   )
 
