@@ -2007,13 +2007,16 @@ export default function Home() {
     { key: 'purchase' as ViewType, label: 'Purchase', icon: ShoppingCart, isParent: true, children: [
       { key: 'purchase' as ViewType, label: 'Purchase List', icon: ClipboardList },
       { key: 'purchaseApproval' as ViewType, label: 'Purchase Approval', icon: CheckCircle2 },
+      { key: 'supplierPayments' as ViewType, label: 'Supplier Payments', icon: DollarSign },
     ]},
     { key: 'sales' as ViewType, label: 'Sales', icon: ShoppingCart, isParent: true, children: [
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
+      { key: 'delivery' as ViewType, label: 'Delivery', icon: Truck },
     ]},
     { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
     { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText },
+    { key: 'damage' as ViewType, label: 'Damage/Wastage', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
   ].filter(item => {
