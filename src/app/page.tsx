@@ -164,7 +164,7 @@ type ViewType =
   | 'itemAdjustment' | 'transfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
-  | 'booking' | 'newBooking' | 'incentive' | 'reports'
+  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -301,9 +301,8 @@ export default function Home() {
   const [purchaseItemResults, setPurchaseItemResults] = useState<any[]>([])
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
   const [showPurchaseDetailDialog, setShowPurchaseDetailDialog] = useState(false)
-  // ★ COGS dialog state
-  const [showCogsDialog, setShowCogsDialog] = useState(false)
-  const [cogsPurchase, setCogsPurchase] = useState<any>(null)
+  // ★ COGS page state (full page, not dialog)
+  const [cogsPagePurchase, setCogsPagePurchase] = useState<any>(null)
   const [cogsItems, setCogsItems] = useState<Array<{ id: string; itemId: string; itemName: string; quantity: number; unitPrice: number; cogsPerUnit: string; cogsNotes: string; landedCostPerUnit: number }>>([])
   const [cogsSaving, setCogsSaving] = useState(false)
 
@@ -334,17 +333,15 @@ export default function Home() {
   const [showIncentiveDialog, setShowIncentiveDialog] = useState(false)
   const [incentiveSubTab, setIncentiveSubTab] = useState<'formulas' | 'manual'>('formulas')
 
-  // ★ Incentive Formula state
+  // ★ Incentive Formula state — multi-range with Outlet/HeadOffice commission
   const [incentiveFormulas, setIncentiveFormulas] = useState<any[]>([])
   const [formulaForm, setFormulaForm] = useState({
-    name: '', description: '', priceFrom: '', priceTo: '',
-    commissionEntries: [] as Array<{ entityName: string; amount: string }>,
-    defaultAmount: '',
+    name: '', description: '',
+    ranges: [] as Array<{ priceFrom: string; priceTo: string; outletCommission: string; headOfficeCommission: string }>,
     status: 'active', notes: '',
     itemIds: [] as string[],
   })
   const [editingFormulaId, setEditingFormulaId] = useState<string | null>(null)
-  const [showFormulaDialog, setShowFormulaDialog] = useState(false)
   const [formulaItemSearch, setFormulaItemSearch] = useState('')
   const [formulaItemResults, setFormulaItemResults] = useState<any[]>([])
 
@@ -1232,29 +1229,40 @@ export default function Home() {
 
   const resetFormulaForm = () => {
     setFormulaForm({
-      name: '', description: '', priceFrom: '', priceTo: '',
-      commissionEntries: [], defaultAmount: '',
+      name: '', description: '',
+      ranges: [{ priceFrom: '', priceTo: '', outletCommission: '', headOfficeCommission: '' }],
       status: 'active', notes: '', itemIds: [],
     })
     setEditingFormulaId(null)
     setFormulaItemSearch('')
     setFormulaItemResults([])
   }
-  const openNewFormulaDialog = () => { resetFormulaForm(); setShowFormulaDialog(true) }
-  const openEditFormulaDialog = (f: any) => {
-    let commissionMap: Record<string, number> = {}
-    try { commissionMap = JSON.parse(f.commissionMap || '{}') } catch {}
-    const entries = Object.entries(commissionMap).filter(([k]) => k !== 'default').map(([k, v]) => ({ entityName: k, amount: String(v) }))
+  const openNewFormulaPage = () => { resetFormulaForm(); setCurrentView('newFormula') }
+  const openEditFormulaPage = (f: any) => {
     setFormulaForm({
       name: f.name, description: f.description || '',
-      priceFrom: String(f.priceFrom), priceTo: String(f.priceTo),
-      commissionEntries: entries,
-      defaultAmount: commissionMap['default'] !== undefined ? String(commissionMap['default']) : '',
+      ranges: (f.ranges || []).map((r: any) => ({
+        priceFrom: String(r.priceFrom), priceTo: String(r.priceTo),
+        outletCommission: String(r.outletCommission), headOfficeCommission: String(r.headOfficeCommission),
+      })),
       status: f.status, notes: f.notes || '',
       itemIds: (f.items || []).map((fi: any) => fi.itemId),
     })
     setEditingFormulaId(f.id)
-    setShowFormulaDialog(true)
+    setCurrentView('newFormula')
+  }
+  const addFormulaRange = () => {
+    setFormulaForm(f => ({ ...f, ranges: [...f.ranges, { priceFrom: '', priceTo: '', outletCommission: '', headOfficeCommission: '' }] }))
+  }
+  const updateFormulaRange = (idx: number, field: 'priceFrom' | 'priceTo' | 'outletCommission' | 'headOfficeCommission', value: string) => {
+    setFormulaForm(f => {
+      const ranges = [...f.ranges]
+      ranges[idx] = { ...ranges[idx], [field]: value }
+      return { ...f, ranges }
+    })
+  }
+  const removeFormulaRange = (idx: number) => {
+    setFormulaForm(f => ({ ...f, ranges: f.ranges.filter((_, i) => i !== idx) }))
   }
   const handleFormulaItemSearch = async () => {
     if (!formulaItemSearch.trim()) return
@@ -1269,35 +1277,20 @@ export default function Home() {
       itemIds: f.itemIds.includes(itemId) ? f.itemIds.filter(id => id !== itemId) : [...f.itemIds, itemId],
     }))
   }
-  const addCommissionEntry = () => {
-    setFormulaForm(f => ({ ...f, commissionEntries: [...f.commissionEntries, { entityName: '', amount: '' }] }))
-  }
-  const updateCommissionEntry = (idx: number, field: 'entityName' | 'amount', value: string) => {
-    setFormulaForm(f => {
-      const arr = [...f.commissionEntries]
-      arr[idx] = { ...arr[idx], [field]: value }
-      return { ...f, commissionEntries: arr }
-    })
-  }
-  const removeCommissionEntry = (idx: number) => {
-    setFormulaForm(f => ({ ...f, commissionEntries: f.commissionEntries.filter((_, i) => i !== idx) }))
-  }
   const handleSaveFormula = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!formulaForm.name) { toast({ title: 'Error', description: 'Formula name required', variant: 'destructive' }); return }
-    if (!formulaForm.priceFrom || !formulaForm.priceTo) { toast({ title: 'Error', description: 'Price range required', variant: 'destructive' }); return }
-    // Build commissionMap object
-    const commissionMap: Record<string, number> = {}
-    for (const e of formulaForm.commissionEntries) {
-      if (e.entityName.trim() && e.amount) commissionMap[e.entityName.trim()] = parseFloat(e.amount) || 0
-    }
-    if (formulaForm.defaultAmount) commissionMap['default'] = parseFloat(formulaForm.defaultAmount) || 0
+    const validRanges = formulaForm.ranges.filter(r => r.priceFrom && r.priceTo)
+    if (validRanges.length === 0) { toast({ title: 'Error', description: 'At least one price range required', variant: 'destructive' }); return }
     const payload = {
       name: formulaForm.name,
       description: formulaForm.description || undefined,
-      priceFrom: parseFloat(formulaForm.priceFrom),
-      priceTo: parseFloat(formulaForm.priceTo),
-      commissionMap,
+      ranges: validRanges.map(r => ({
+        priceFrom: parseFloat(r.priceFrom),
+        priceTo: parseFloat(r.priceTo),
+        outletCommission: parseFloat(r.outletCommission) || 0,
+        headOfficeCommission: parseFloat(r.headOfficeCommission) || 0,
+      })),
       status: formulaForm.status,
       notes: formulaForm.notes || undefined,
       itemIds: formulaForm.itemIds,
@@ -1308,8 +1301,8 @@ export default function Home() {
         : await authFetch('/api/incentive-formulas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
       if (res.ok) {
         toast({ title: 'Success', description: editingFormulaId ? 'Formula updated' : 'Formula created' })
-        setShowFormulaDialog(false)
         resetFormulaForm()
+        setCurrentView('incentive')
         fetchIncentiveFormulas()
       } else {
         const d = await res.json()
@@ -3334,19 +3327,19 @@ export default function Home() {
     }
   }
 
-  // ★ Open COGS dialog for a purchase — fetches current COGS values
-  const openCogsDialog = async (purchase: any) => {
+  // ★ Open COGS page for a purchase — fetches current COGS values
+  const openCogsPage = async (purchase: any) => {
     try {
       const res = await authFetch(`/api/purchases/${purchase.id}/cogs`)
       if (res.ok) {
         const data = await res.json()
-        setCogsPurchase(purchase)
+        setCogsPagePurchase(purchase)
         setCogsItems((data.items || []).map((it: any) => ({
           id: it.id, itemId: it.itemId, itemName: it.itemName, quantity: it.quantity,
           unitPrice: it.unitPrice, cogsPerUnit: String(it.cogsPerUnit || 0),
           cogsNotes: it.cogsNotes || '', landedCostPerUnit: it.landedCostPerUnit || 0,
         })))
-        setShowCogsDialog(true)
+        setCurrentView('cogsPage')
       } else {
         toast({ title: 'Error', description: 'Failed to load COGS', variant: 'destructive' })
       }
@@ -3355,7 +3348,7 @@ export default function Home() {
 
   // ★ Save COGS for a purchase
   const handleSaveCogs = async () => {
-    if (!cogsPurchase) return
+    if (!cogsPagePurchase) return
     setCogsSaving(true)
     try {
       const payload = {
@@ -3365,7 +3358,7 @@ export default function Home() {
           cogsNotes: it.cogsNotes || null,
         })),
       }
-      const res = await authFetch(`/api/purchases/${cogsPurchase.id}/cogs`, {
+      const res = await authFetch(`/api/purchases/${cogsPagePurchase.id}/cogs`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload),
@@ -3373,8 +3366,8 @@ export default function Home() {
       const data = await res.json()
       if (res.ok) {
         toast({ title: 'Success', description: data.message || 'COGS updated' })
-        setShowCogsDialog(false)
-        setCogsPurchase(null)
+        setCogsPagePurchase(null)
+        setCurrentView('purchase')
         fetchPurchases()
       } else {
         toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
@@ -3480,7 +3473,7 @@ export default function Home() {
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="sm" onClick={() => { setSelectedPurchase(p); setShowPurchaseDetailDialog(true) }} title="View Details"><Eye className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => openCogsDialog(p)} title="Edit COGS"><DollarSign className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => openCogsPage(p)} title="Edit COGS"><DollarSign className="w-4 h-4" /></Button>
                     {p.status === 'pending' && hasPermission('menu', 'purchase', 'delete') && (
                       <Button variant="ghost" size="sm" onClick={() => handleDeletePurchase(p.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                     )}
@@ -3548,74 +3541,77 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* COGS Dialog */}
-      <Dialog open={showCogsDialog} onOpenChange={setShowCogsDialog}>
-        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
-          <DialogHeader><DialogTitle className="flex items-center gap-2"><DollarSign className="w-5 h-5" />Edit COGS — {cogsPurchase?.purchaseNo}</DialogTitle></DialogHeader>
-          <div className="space-y-3">
-            <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900">
-              <p className="font-semibold mb-1">💰 COGS = Cost of Goods Sold</p>
-              <p>Additional per-unit costs beyond the purchase unit price (transport, customs, duties, etc.). Landed Cost = Unit Price + COGS per unit. Used for accurate profit/margin reporting.</p>
-            </div>
-            <div className="border rounded-md overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-primary text-primary-foreground">
-                  <tr>
-                    <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
-                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Qty</th>
-                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Unit Price</th>
-                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">COGS / Unit</th>
-                    <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">COGS Notes</th>
-                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Landed / Unit</th>
-                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Total Landed</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {cogsItems.map((it, idx) => {
-                    const cogsPerUnit = parseFloat(it.cogsPerUnit) || 0
-                    const landed = it.unitPrice + cogsPerUnit
-                    const totalLanded = landed * it.quantity
-                    return (
-                      <tr key={it.id} className="border-t hover:bg-muted/20">
-                        <td className="px-2 py-2 font-medium text-xs">{it.itemName}</td>
-                        <td className="px-2 py-2 text-right text-xs">{it.quantity}</td>
-                        <td className="px-2 py-2 text-right text-xs">{it.unitPrice.toFixed(2)}</td>
-                        <td className="px-2 py-2 text-right">
-                          <Input type="number" step="0.01" value={it.cogsPerUnit} onChange={e => {
-                            const val = e.target.value
-                            setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsPerUnit: val } : x))
-                          }} className="h-8 text-right text-sm w-24" />
-                        </td>
-                        <td className="px-2 py-2">
-                          <Input placeholder="e.g. Transport from Ctg" value={it.cogsNotes} onChange={e => {
-                            const val = e.target.value
-                            setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsNotes: val } : x))
-                          }} className="h-8 text-xs w-full min-w-[140px]" />
-                        </td>
-                        <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{landed.toFixed(2)}</td>
-                        <td className="px-2 py-2 text-right text-xs font-bold">{totalLanded.toFixed(2)}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-                <tfoot>
-                  <tr className="bg-muted/30 border-t-2">
-                    <td colSpan={3} className="px-2 py-2 text-right text-xs font-semibold">Totals:</td>
-                    <td className="px-2 py-2 text-right text-xs font-semibold">{cogsItems.reduce((s, it) => s + (parseFloat(it.cogsPerUnit) || 0) * it.quantity, 0).toFixed(2)}</td>
-                    <td></td>
-                    <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{cogsItems.reduce((s, it) => s + (it.unitPrice + (parseFloat(it.cogsPerUnit) || 0)) * it.quantity, 0).toFixed(2)}</td>
-                    <td></td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <Button variant="outline" onClick={() => { setShowCogsDialog(false); setCogsPurchase(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
-              <Button onClick={handleSaveCogs} disabled={cogsSaving}><Save className="w-4 h-4 mr-2" />{cogsSaving ? 'Saving...' : 'Save COGS'}</Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+      {/* COGS is now a full page — see renderCogsPage() */}
+    </div>
+  )
+
+  // ★ COGS — full page (not dialog)
+  const renderCogsPage = () => (
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold flex items-center gap-2"><DollarSign className="w-5 h-5" />Edit COGS — {cogsPagePurchase?.purchaseNo}</h2>
+        <Button variant="outline" onClick={() => { setCogsPagePurchase(null); setCurrentView('purchase') }}><X className="w-4 h-4 mr-2" />Back to Purchase List</Button>
+      </div>
+      <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900">
+        <p className="font-semibold mb-1">💰 COGS = Cost of Goods Sold</p>
+        <p>Additional per-unit costs beyond the purchase unit price (transport, customs, duties, etc.). Landed Cost = Unit Price + COGS per unit.</p>
+      </div>
+      <div className="border rounded-md overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead className="bg-primary text-primary-foreground">
+            <tr>
+              <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
+              <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Qty</th>
+              <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Unit Price</th>
+              <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">COGS / Unit</th>
+              <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">COGS Notes</th>
+              <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Landed / Unit</th>
+              <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Total Landed</th>
+            </tr>
+          </thead>
+          <tbody>
+            {cogsItems.map((it, idx) => {
+              const cogsPerUnit = parseFloat(it.cogsPerUnit) || 0
+              const landed = it.unitPrice + cogsPerUnit
+              const totalLanded = landed * it.quantity
+              return (
+                <tr key={it.id} className="border-t hover:bg-muted/20">
+                  <td className="px-2 py-2 font-medium text-xs">{it.itemName}</td>
+                  <td className="px-2 py-2 text-right text-xs">{it.quantity}</td>
+                  <td className="px-2 py-2 text-right text-xs">{it.unitPrice.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right">
+                    <Input type="number" step="0.01" value={it.cogsPerUnit} onChange={e => {
+                      const val = e.target.value
+                      setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsPerUnit: val } : x))
+                    }} className="h-8 text-right text-sm w-24" />
+                  </td>
+                  <td className="px-2 py-2">
+                    <Input placeholder="e.g. Transport from Ctg" value={it.cogsNotes} onChange={e => {
+                      const val = e.target.value
+                      setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsNotes: val } : x))
+                    }} className="h-8 text-xs w-full min-w-[140px]" />
+                  </td>
+                  <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{landed.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right text-xs font-bold">{totalLanded.toFixed(2)}</td>
+                </tr>
+              )
+            })}
+          </tbody>
+          <tfoot>
+            <tr className="bg-muted/30 border-t-2">
+              <td colSpan={3} className="px-2 py-2 text-right text-xs font-semibold">Totals:</td>
+              <td className="px-2 py-2 text-right text-xs font-semibold">{cogsItems.reduce((s, it) => s + (parseFloat(it.cogsPerUnit) || 0) * it.quantity, 0).toFixed(2)}</td>
+              <td></td>
+              <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{cogsItems.reduce((s, it) => s + (it.unitPrice + (parseFloat(it.cogsPerUnit) || 0)) * it.quantity, 0).toFixed(2)}</td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div className="flex gap-3 pt-2">
+        <Button onClick={handleSaveCogs} disabled={cogsSaving} size="lg"><Save className="w-4 h-4 mr-2" />{cogsSaving ? 'Saving...' : 'Save COGS'}</Button>
+        <Button variant="outline" size="lg" onClick={() => { setCogsPagePurchase(null); setCurrentView('purchase') }}>Cancel</Button>
+      </div>
     </div>
   )
 
@@ -4200,7 +4196,7 @@ export default function Home() {
         <h2 className="text-xl font-semibold">Incentive - {workingEntity?.name}</h2>
         <div className="flex gap-2">
           {incentiveSubTab === 'formulas' ? (
-            <Button onClick={openNewFormulaDialog} className="gap-2"><Plus className="w-4 h-4" />New Formula</Button>
+            <Button onClick={openNewFormulaPage} className="gap-2"><Plus className="w-4 h-4" />New Formula</Button>
           ) : (
             <Button onClick={() => { setShowIncentiveDialog(true); setTxItemSearch(''); setTxItemResults([]); fetchTailors() }} className="gap-2"><Plus className="w-4 h-4" />New Incentive</Button>
           )}
@@ -4238,30 +4234,37 @@ export default function Home() {
               <TableBody>
                 {incentiveFormulas.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No formulas yet. Click "New Formula" to create one.</TableCell></TableRow>
                 : incentiveFormulas.map(f => {
-                  let commissionMap: Record<string, number> = {}
-                  try { commissionMap = JSON.parse(f.commissionMap || '{}') } catch {}
+                  const ranges = f.ranges || []
                   return (
                     <TableRow key={f.id} className="hover:bg-muted/30">
                       <TableCell>
                         <div className="font-semibold">{f.name}</div>
                         {f.description && <div className="text-xs text-muted-foreground">{f.description}</div>}
                       </TableCell>
-                      <TableCell className="text-right font-mono text-sm">{f.priceFrom} – {f.priceTo}</TableCell>
+                      <TableCell>
+                        <div className="flex flex-col gap-1">
+                          {ranges.length === 0 ? <span className="text-xs text-muted-foreground">—</span> :
+                            ranges.map((r: any, i: number) => (
+                              <div key={i} className="text-xs font-mono">
+                                {r.priceFrom}–{r.priceTo}
+                                <span className="ml-1 text-green-700">O:{r.outletCommission}</span>
+                                <span className="ml-1 text-blue-700">H:{r.headOfficeCommission}</span>
+                              </div>
+                            ))
+                          }
+                        </div>
+                      </TableCell>
                       <TableCell>
                         <div className="flex gap-1 flex-wrap">
-                          {Object.entries(commissionMap).map(([k, v]) => (
-                            <Badge key={k} variant="outline" className={`text-xs ${k === 'default' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-800'}`}>
-                              {k === 'default' ? 'Default' : k}: {v}
-                            </Badge>
-                          ))}
-                          {Object.keys(commissionMap).length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+                          <Badge variant="outline" className="text-xs bg-green-50 text-green-700">Outlet</Badge>
+                          <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700">Head Office</Badge>
                         </div>
                       </TableCell>
                       <TableCell className="text-center">{(f.items || []).length}</TableCell>
                       <TableCell>{f.status === 'active' ? <Badge className="bg-green-100 text-green-800">Active</Badge> : <Badge variant="outline">Inactive</Badge>}</TableCell>
                       <TableCell className="text-center">
                         <div className="flex items-center justify-center gap-1">
-                          <Button variant="ghost" size="sm" onClick={() => openEditFormulaDialog(f)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => openEditFormulaPage(f)} title="Edit"><Edit className="w-4 h-4" /></Button>
                           <Button variant="ghost" size="sm" onClick={() => handleDeleteFormula(f.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                         </div>
                       </TableCell>
@@ -4321,61 +4324,71 @@ export default function Home() {
         </DialogContent>
       </Dialog>
 
-      {/* Formula Dialog */}
-      <Dialog open={showFormulaDialog} onOpenChange={setShowFormulaDialog}>
-        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingFormulaId ? 'Edit Formula' : 'New Formula'}</DialogTitle></DialogHeader>
-          <form onSubmit={handleSaveFormula} className="space-y-4">
+      {/* Formula page is now full page — see renderNewFormulaPage() */}
+    </div>
+  )
+
+  // ★ New Formula — full page with multi-range support
+  const renderNewFormulaPage = () => (
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">{editingFormulaId ? 'Edit Formula' : 'New Formula'}</h2>
+        <Button variant="outline" onClick={() => { resetFormulaForm(); setCurrentView('incentive') }}><X className="w-4 h-4 mr-2" />Back to List</Button>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveFormula} className="space-y-5">
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <div className="md:col-span-2 space-y-1"><Label className="text-xs">Formula Name *</Label><Input placeholder="e.g. Fresh Fabric" value={formulaForm.name} onChange={e => setFormulaForm({ ...formulaForm, name: e.target.value })} required /></div>
               <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={formulaForm.status} onValueChange={v => setFormulaForm({ ...formulaForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
             </div>
             <div className="space-y-1"><Label className="text-xs">Description</Label><Input placeholder="Optional description" value={formulaForm.description} onChange={e => setFormulaForm({ ...formulaForm, description: e.target.value })} /></div>
 
-            <div className="grid grid-cols-2 gap-3">
-              <div className="space-y-1"><Label className="text-xs">Price Range From *</Label><Input type="number" step="0.01" placeholder="e.g. 700" value={formulaForm.priceFrom} onChange={e => setFormulaForm({ ...formulaForm, priceFrom: e.target.value })} required /></div>
-              <div className="space-y-1"><Label className="text-xs">Price Range To *</Label><Input type="number" step="0.01" placeholder="e.g. 1200" value={formulaForm.priceTo} onChange={e => setFormulaForm({ ...formulaForm, priceTo: e.target.value })} required /></div>
-            </div>
-            <p className="text-[11px] text-muted-foreground">Sale unit price must fall within this range (inclusive) for the formula to apply.</p>
+            <Separator />
 
-            {/* Commission per entity */}
-            <div className="space-y-2">
+            {/* Multiple Ranges */}
+            <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <Label className="text-xs font-semibold">Commission per Entity (per unit sold)</Label>
-                <Button type="button" variant="outline" size="sm" onClick={addCommissionEntry} className="h-7 text-xs"><Plus className="w-3 h-3 mr-1" />Add Entity</Button>
-              </div>
-              <p className="text-[11px] text-muted-foreground">Type entity names exactly as they appear in Entity master data (e.g. "Head Office", "Gulshan Branch").</p>
-              <div className="space-y-2">
-                {formulaForm.commissionEntries.map((ce, idx) => (
-                  <div key={idx} className="flex gap-2 items-end">
-                    <div className="flex-1 space-y-1">
-                      <Label className="text-[10px]">Entity Name</Label>
-                      <Input list="entity-list" placeholder="e.g. Gulshan Branch" value={ce.entityName} onChange={e => updateCommissionEntry(idx, 'entityName', e.target.value)} />
-                    </div>
-                    <div className="w-32 space-y-1">
-                      <Label className="text-[10px]">Amount/Unit</Label>
-                      <Input type="number" step="0.01" placeholder="e.g. 10" value={ce.amount} onChange={e => updateCommissionEntry(idx, 'amount', e.target.value)} />
-                    </div>
-                    <Button type="button" variant="ghost" size="sm" onClick={() => removeCommissionEntry(idx)} className="text-destructive h-9"><X className="w-4 h-4" /></Button>
-                  </div>
-                ))}
-                <datalist id="entity-list">{entities.map(e => <option key={e.id} value={e.name} />)}</datalist>
-              </div>
-              <div className="flex gap-2 items-end pt-2 border-t">
-                <div className="w-48 space-y-1">
-                  <Label className="text-[10px]">Default Commission (fallback)</Label>
-                  <Input type="number" step="0.01" placeholder="e.g. 5" value={formulaForm.defaultAmount} onChange={e => setFormulaForm({ ...formulaForm, defaultAmount: e.target.value })} />
+                <div>
+                  <Label className="text-sm font-bold">Price Ranges & Commission</Label>
+                  <p className="text-[11px] text-muted-foreground">Each range has 2 rates: Outlet (all shop/branch entities) and Head Office (head office + warehouse + others).</p>
                 </div>
-                <p className="text-[11px] text-muted-foreground">Used when an entity name is not listed above.</p>
+                <Button type="button" variant="outline" size="sm" onClick={addFormulaRange}><Plus className="w-3 h-3 mr-1" />Add Range</Button>
+              </div>
+              <div className="border rounded-md overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-primary text-primary-foreground">
+                    <tr>
+                      <th className="px-2 py-2 text-center w-10 text-[11px] uppercase">#</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase">Price From</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase">Price To</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase">Outlet Commission<br/><span className="text-[9px] normal-case">(per unit, all outlets)</span></th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase">Head Office Commission<br/><span className="text-[9px] normal-case">(per unit, HO+warehouse+others)</span></th>
+                      <th className="px-2 py-2 w-10"></th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {formulaForm.ranges.map((r, idx) => (
+                      <tr key={idx} className="border-t">
+                        <td className="px-2 py-2 text-center text-muted-foreground text-xs">{idx + 1}</td>
+                        <td className="px-2 py-2"><Input type="number" step="0.01" placeholder="e.g. 700" value={r.priceFrom} onChange={e => updateFormulaRange(idx, 'priceFrom', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
+                        <td className="px-2 py-2"><Input type="number" step="0.01" placeholder="e.g. 1200" value={r.priceTo} onChange={e => updateFormulaRange(idx, 'priceTo', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
+                        <td className="px-2 py-2"><Input type="number" step="0.01" placeholder="e.g. 10" value={r.outletCommission} onChange={e => updateFormulaRange(idx, 'outletCommission', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
+                        <td className="px-2 py-2"><Input type="number" step="0.01" placeholder="e.g. 5" value={r.headOfficeCommission} onChange={e => updateFormulaRange(idx, 'headOfficeCommission', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
+                        <td className="px-2 py-2 text-center">{formulaForm.ranges.length > 1 && <Button type="button" variant="ghost" size="sm" onClick={() => removeFormulaRange(idx)} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button>}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
 
             <Separator />
 
-            {/* Items assigned to this formula */}
+            {/* Items */}
             <div className="space-y-2">
-              <Label className="text-xs font-semibold">Items covered by this formula ({formulaForm.itemIds.length})</Label>
-              <p className="text-[11px] text-muted-foreground">Search and select items. When these items are sold within the price range, incentives are auto-generated.</p>
+              <Label className="text-sm font-bold">Items covered by this formula ({formulaForm.itemIds.length})</Label>
+              <p className="text-[11px] text-muted-foreground">Search and select items. When these items are sold within a range, incentives auto-generate.</p>
               <div className="flex gap-2">
                 <Input placeholder="Search item to add..." value={formulaItemSearch} onChange={e => setFormulaItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleFormulaItemSearch())} className="flex-1" />
                 <Button type="button" variant="outline" onClick={handleFormulaItemSearch}><Search className="w-4 h-4" /></Button>
@@ -4386,7 +4399,7 @@ export default function Home() {
                     const isSelected = formulaForm.itemIds.includes(item.id)
                     return (
                       <button key={item.id || idx} type="button" onClick={() => toggleFormulaItem(item.id)} className={`w-full text-left px-3 py-2 text-sm border-b last:border-0 transition-colors ${isSelected ? 'bg-green-50 text-green-700' : 'hover:bg-muted'}`}>
-                        {isSelected ? '✓ ' : ''}{item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''} {item.itemCode ? `• ${item.itemCode}` : ''}
+                        {isSelected ? '✓ ' : ''}{item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
                       </button>
                     )
                   })}
@@ -4396,7 +4409,6 @@ export default function Home() {
                 <div className="flex gap-1 flex-wrap pt-1">
                   {formulaForm.itemIds.map(id => {
                     const item = formulaItemResults.find((r: any) => r.id === id)
-                    // Also look it up from already-loaded items if needed
                     const name = item?.itemName || `Item ${id.slice(-6)}`
                     return (
                       <Badge key={id} variant="outline" className="text-xs bg-blue-50 text-blue-800 gap-1">
@@ -4411,13 +4423,13 @@ export default function Home() {
 
             <div className="space-y-1"><Label className="text-xs">Notes</Label><Input value={formulaForm.notes} onChange={e => setFormulaForm({ ...formulaForm, notes: e.target.value })} placeholder="Optional notes" /></div>
 
-            <DialogFooter className="pt-4">
-              <Button type="button" variant="outline" onClick={() => { setShowFormulaDialog(false); resetFormulaForm() }}><X className="w-4 h-4 mr-2" />Cancel</Button>
-              <Button type="submit"><Save className="w-4 h-4 mr-2" />{editingFormulaId ? 'Update Formula' : 'Create Formula'}</Button>
-            </DialogFooter>
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" size="lg"><Save className="w-4 h-4 mr-2" />{editingFormulaId ? 'Update Formula' : 'Create Formula'}</Button>
+              <Button type="button" variant="outline" size="lg" onClick={() => { resetFormulaForm(); setCurrentView('incentive') }}>Cancel</Button>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
     </div>
   )
 
@@ -5526,6 +5538,8 @@ export default function Home() {
       case 'newBooking': return renderNewBookingPage()
       case 'bookingReasons': return renderBookingReasonsPage()
       case 'incentive': return renderIncentivePage()
+      case 'newFormula': return renderNewFormulaPage()
+      case 'cogsPage': return renderCogsPage()
       case 'reports': return renderReportsPage()
       case 'tailors': return renderTailorsPage()
       case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
