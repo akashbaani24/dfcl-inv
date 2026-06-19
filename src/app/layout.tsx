@@ -17,12 +17,15 @@ export const metadata: Metadata = {
   title: "Akash Inventory System",
   description: "Akash Inventory System — comprehensive inventory, sales, purchase, and incentive management with multi-entity support.",
   manifest: "/manifest.json",
-  themeColor: "#1e3a8a",
   appleWebApp: {
     capable: true,
     statusBarStyle: "default",
     title: "Akash Inventory",
   },
+};
+
+export const viewport = {
+  themeColor: "#1e3a8a",
 };
 
 export default function RootLayout({

@@ -1,51 +1,29 @@
 // Service Worker for Akash Inventory System — PWA offline support
-const CACHE_NAME = 'akash-inv-v53';
-const STATIC_ASSETS = ['/', '/manifest.json'];
+const CACHE_NAME = 'akash-inv-v55';
+const STATIC_ASSETS = ['/manifest.json'];
 
-// Install — cache static assets
+// Install — skip caching static assets, just activate immediately
 self.addEventListener('install', (event) => {
-  event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS)).catch(() => {})
-  );
   self.skipWaiting();
 });
 
-// Activate — clean up old caches
+// Activate — clean up ALL old caches immediately
 self.addEventListener('activate', (event) => {
   event.waitUntil(
-    caches.keys().then((keys) => Promise.all(keys.filter(k => k !== CACHE_NAME).map(k => caches.delete(k))))
+    caches.keys().then((keys) => Promise.all(keys.map(k => caches.delete(k))))
   );
   self.clients.claim();
 });
 
-// Fetch — network-first for API, cache-first for static assets
+// Fetch — network-first for everything (only fall back to cache if offline)
 self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url);
-  // Skip non-GET requests
   if (event.request.method !== 'GET') return;
-  // Skip API requests (always go to network)
   if (url.pathname.startsWith('/api/')) return;
-  // Skip chrome-extension requests
   if (url.protocol === 'chrome-extension:') return;
 
-  // For navigation requests, try network first, fall back to cached app shell
-  if (event.request.mode === 'navigate') {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match('/'))
-    );
-    return;
-  }
-
-  // For static assets, cache-first
+  // Network-first — always try network, only use cache if offline
   event.respondWith(
-    caches.match(event.request).then((cached) => {
-      return cached || fetch(event.request).then((response) => {
-        if (response.ok && url.origin === self.location.origin) {
-          const clone = response.clone();
-          caches.open(CACHE_NAME).then(cache => cache.put(event.request, clone));
-        }
-        return response;
-      }).catch(() => cached);
-    })
+    fetch(event.request).catch(() => caches.match(event.request))
   );
 });
