@@ -4,14 +4,14 @@ import { getCurrentUser } from '@/lib/auth';
 import { createClient } from '@libsql/client';
 
 // POST /api/admin/backfill-barcodes
-// One-time maintenance endpoint to backfill barcode/itemCode on existing items
-// whose barcode/itemCode fields are empty.
+// One-time maintenance endpoint to backfill barcode/itemCode on existing items.
 //
 // Strategy: for each item with empty barcode, check if its itemName looks like a
 // barcode (all digits) or an item code (alphanumeric with dashes) and set the
-// appropriate field. Uses batch SQL for speed (handles 22k+ items in seconds).
+// appropriate field. Uses direct libsql batch for speed.
 //
 // Auth: admin only.
+// Body: { limit?: number } — max items to scan in this call (default 5000)
 export async function POST(request: NextRequest) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -19,90 +19,92 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Admin only' }, { status: 403 });
     }
 
-    // Find all items where barcode is null/empty AND itemCode is null/empty
-    // (only consider items that need both fields filled — skip items that already have one)
-    const itemsNeedingBackfill = await db.item.findMany({
-      where: {
-        AND: [
-          { OR: [{ barcode: null }, { barcode: '' }] },
-          { OR: [{ itemCode: null }, { itemCode: '' }] },
-        ],
-      },
-      select: { id: true, itemName: true, barcode: true, itemCode: true },
-    });
+    let body: any = {};
+    try { body = await request.json(); } catch { /* empty body is fine */ }
+    const LIMIT = Math.min(body.limit || 5000, 5000);
 
-    // Use direct libsql for batch updates (much faster than Prisma's per-row update)
+    // Use direct libsql for everything — much faster than Prisma for bulk operations
     const tursoUrl = process.env.TURSO_DATABASE_URL;
     const tursoToken = process.env.TURSO_AUTH_TOKEN;
 
-    let updated = 0;
+    if (!tursoUrl || !tursoToken) {
+      return NextResponse.json({ error: 'Turso not configured' }, { status: 500 });
+    }
+
+    const libsql = createClient({ url: tursoUrl, authToken: tursoToken });
+
+    // Find items needing backfill — direct SQL, limited
+    const result = await libsql.execute({
+      sql: `SELECT "id", "itemName" FROM "Item"
+            WHERE ("barcode" IS NULL OR "barcode" = '')
+              AND ("itemCode" IS NULL OR "itemCode" = '')
+            LIMIT ?`,
+      args: [LIMIT],
+    });
+
+    const items = result.rows as Array<{ id: string; itemName: string }>;
+
+    // Build UPDATE statements
+    const stmts: Array<{ sql: string; args: string[] }> = [];
     const sampleUpdates: Array<{ id: string; itemName: string; field: string; value: string }> = [];
 
-    if (tursoUrl && tursoToken) {
-      const libsql = createClient({ url: tursoUrl, authToken: tursoToken });
-      const stmts: Array<{ sql: string; args: (string)[] }> = [];
+    for (const item of items) {
+      const name = (item.itemName || '').trim();
+      if (!name) continue;
+      let field: 'barcode' | 'itemCode' | null = null;
 
-      for (const item of itemsNeedingBackfill) {
-        const name = item.itemName.trim();
-        let field: 'barcode' | 'itemCode' | null = null;
-
-        // Heuristic 1: if itemName is all digits (and length >= 6), treat as barcode
-        if (/^\d{6,}$/.test(name)) {
-          field = 'barcode';
-        }
-        // Heuristic 2: if itemName has a dash and looks like an item code
-        else if (/-/.test(name) && /^[A-Za-z0-9\-]+$/.test(name)) {
-          field = 'itemCode';
-        }
-
-        if (field) {
-          stmts.push({
-            sql: `UPDATE "Item" SET "${field}" = ? WHERE "id" = ? AND ("${field}" IS NULL OR "${field}" = '')`,
-            args: [name, item.id],
-          });
-          if (sampleUpdates.length < 50) {
-            sampleUpdates.push({ id: item.id, itemName: name, field, value: name });
-          }
-        }
+      // Heuristic 1: all digits, length >= 6 → barcode
+      if (/^\d{6,}$/.test(name)) {
+        field = 'barcode';
+      }
+      // Heuristic 2: has dash, alphanumeric → itemCode
+      else if (/-/.test(name) && /^[A-Za-z0-9\-]+$/.test(name)) {
+        field = 'itemCode';
       }
 
-      // Execute in batches of 100 statements
-      const BATCH = 100;
-      for (let i = 0; i < stmts.length; i += BATCH) {
-        const batch = stmts.slice(i, i + BATCH);
-        try {
-          const results = await libsql.batch(batch, 'write');
-          for (const r of results) {
-            updated += r.rows_affected || 0;
-          }
-        } catch (e) {
-          // Continue on batch error — we'll report partial success
-          console.error('Batch update error:', String(e).slice(0, 200));
-        }
-      }
-    } else {
-      // Fallback: Prisma (for local dev without Turso)
-      for (const item of itemsNeedingBackfill) {
-        const name = item.itemName.trim();
-        const data: { barcode?: string; itemCode?: string } = {};
-        if (/^\d{6,}$/.test(name)) data.barcode = name;
-        else if (/-/.test(name) && /^[A-Za-z0-9\-]+$/.test(name)) data.itemCode = name;
-        if (Object.keys(data).length > 0) {
-          try {
-            await db.item.update({ where: { id: item.id }, data });
-            updated++;
-            if (sampleUpdates.length < 50) {
-              sampleUpdates.push({ id: item.id, itemName: name, field: Object.keys(data)[0] as 'barcode' | 'itemCode', value: name });
-            }
-          } catch {}
+      if (field) {
+        stmts.push({
+          sql: `UPDATE "Item" SET "${field}" = ? WHERE "id" = ? AND ("${field}" IS NULL OR "${field}" = '')`,
+          args: [name, item.id],
+        });
+        if (sampleUpdates.length < 50) {
+          sampleUpdates.push({ id: item.id, itemName: name, field, value: name });
         }
       }
     }
 
+    // Execute in batches of 50 statements (libsql batch limit safety)
+    let updated = 0;
+    const BATCH = 50;
+    for (let i = 0; i < stmts.length; i += BATCH) {
+      const batch = stmts.slice(i, i + BATCH);
+      try {
+        const results = await libsql.batch(batch, 'write');
+        for (const r of results) {
+          updated += (r as any).rows_affected || 0;
+        }
+      } catch (e) {
+        console.error('Batch error at offset', i, ':', String(e).slice(0, 200));
+      }
+    }
+
+    // Count remaining items needing backfill (for the user to know if they should run again)
+    const remainingResult = await libsql.execute(
+      `SELECT COUNT(*) as cnt FROM "Item"
+       WHERE ("barcode" IS NULL OR "barcode" = '')
+         AND ("itemCode" IS NULL OR "itemCode" = '')`
+    );
+    const remaining = (remainingResult.rows[0] as any)?.cnt || 0;
+
     return NextResponse.json({
       success: true,
-      scanned: itemsNeedingBackfill.length,
+      scanned: items.length,
       updated,
+      remaining,
+      hasMore: remaining > 0,
+      message: remaining > 0
+        ? `Backfilled ${updated} items. ${remaining} items still need backfill — call this endpoint again to process the next batch.`
+        : `Backfilled ${updated} items. No more items need backfill.`,
       updates: sampleUpdates,
     });
   } catch (error) {
