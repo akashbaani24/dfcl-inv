@@ -101,7 +101,7 @@ interface MakingInfoData { id: string; name: string; description: string; cost: 
 interface UoMData { id: string; name: string; description: string }
 interface SupplierData { id: string; name: string; phone: string; email: string; address: string; status: string; _count?: { items: number } }
 interface EmployeeData { id: string; name: string; phone: string; email: string; address: string; designation: string; roles: string; status: string; notes?: string | null; createdAt: string }
-interface CustomerData { id: string; name: string; phone: string; email: string; address: string; type: string; status: string }
+interface CustomerData { id: string; name: string; phone: string; email: string; address: string; type: string; status: string; createdByEntity?: { name: string } | null; createdAt?: string }
 
 interface ItemAdjustmentData { id: string; itemId: string; itemName: string; entityId: string; entityName: string; adjustmentType: string; quantity: number; reason: string; createdBy?: string; createdAt: string }
 interface TransferData { id: string; itemId: string; itemName: string; fromEntityId: string; fromEntityName: string; toEntityId: string; toEntityName: string; quantity: number; status: string; notes?: string; createdAt: string }
@@ -394,7 +394,7 @@ export default function Home() {
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
   // Item form state
-  const [itemForm, setItemForm] = useState({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS' })
+  const [itemForm, setItemForm] = useState({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' })
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
 
   // Users state
@@ -407,6 +407,10 @@ export default function Home() {
   const [columnAccessForm, setColumnAccessForm] = useState<ColumnAccess[]>([])
   const [showUserDialog, setShowUserDialog] = useState(false)
   const [showColumnDialog, setShowColumnDialog] = useState(false)
+  // ★ Password change dialog
+  const [showPasswordChangeDialog, setShowPasswordChangeDialog] = useState(false)
+  const [passwordChangeForm, setPasswordChangeForm] = useState({ currentPassword: '', newPassword: '', confirmPassword: '' })
+  const [passwordChanging, setPasswordChanging] = useState(false)
   const [selectedUserId, setSelectedUserId] = useState<string | null>(null)
 
   // Stock detail state
@@ -614,7 +618,7 @@ export default function Home() {
     try {
       const res = await authFetch('/api/items', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(itemForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Item created successfully' }); setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS' }); setCurrentView('items'); fetchItems() }
+      if (res.ok) { toast({ title: 'Success', description: 'Item created successfully' }); setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' }); setCurrentView('items'); fetchItems() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create item', variant: 'destructive' }) }
   }
@@ -625,7 +629,7 @@ export default function Home() {
     try {
       const res = await authFetch(`/api/items/${editingItemId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(itemForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Item updated' }); setEditingItemId(null); setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS' }); setCurrentView('items'); fetchItems() }
+      if (res.ok) { toast({ title: 'Success', description: 'Item updated' }); setEditingItemId(null); setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' }); setCurrentView('items'); fetchItems() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update item', variant: 'destructive' }) }
   }
@@ -641,7 +645,14 @@ export default function Home() {
 
   const handleEditItem = (item: ItemData) => {
     setEditingItemId(item.id || null)
-    setItemForm({ year: item.year || '', lcNo: item.lcNo || '', group: item.group || '', subGroup: item.subGroup || '', itemName: item.itemName || '', price: item.price?.toString() || '', uom: item.uom || 'PCS' })
+    setItemForm({
+      year: item.year || '', lcNo: item.lcNo || '', group: item.group || '', subGroup: item.subGroup || '',
+      itemName: item.itemName || '', price: item.price?.toString() || '', uom: item.uom || 'PCS',
+      barcode: (item as any).barcode || '', itemCode: (item as any).itemCode || '',
+      color: (item as any).color || '', pattern: (item as any).pattern || '',
+      supplierCode: (item as any).supplierCode || '', dimension: (item as any).dimension || '',
+      description: (item as any).description || '',
+    })
     setCurrentView('editItem')
   }
 
@@ -650,7 +661,7 @@ export default function Home() {
   const handleNavigate = (view: ViewType) => {
     if (view === 'newItem') {
       setEditingItemId(null)
-      setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS' })
+      setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' })
     }
     setCurrentView(view)
   }
@@ -1638,6 +1649,56 @@ export default function Home() {
     document.body.removeChild(link)
     URL.revokeObjectURL(url)
     toast({ title: 'Downloaded', description: 'stock-upload-format.csv' })
+  }
+
+  // ★ Password change handler
+  const handlePasswordChange = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (passwordChangeForm.newPassword !== passwordChangeForm.confirmPassword) {
+      toast({ title: 'Error', description: 'New passwords do not match', variant: 'destructive' })
+      return
+    }
+    if (passwordChangeForm.newPassword.length < 4) {
+      toast({ title: 'Error', description: 'Password must be at least 4 characters', variant: 'destructive' })
+      return
+    }
+    setPasswordChanging(true)
+    try {
+      const res = await authFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          currentPassword: passwordChangeForm.currentPassword,
+          newPassword: passwordChangeForm.newPassword,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Success', description: data.message || 'Password changed' })
+        setShowPasswordChangeDialog(false)
+        setPasswordChangeForm({ currentPassword: '', newPassword: '', confirmPassword: '' })
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+    finally { setPasswordChanging(false) }
+  }
+
+  // ★ Admin: change another user's password
+  const handleAdminPasswordChange = async (userId: string, username: string) => {
+    const newPass = prompt(`Enter new password for "${username}":`)
+    if (!newPass) return
+    if (newPass.length < 4) { toast({ title: 'Error', description: 'Password must be at least 4 characters', variant: 'destructive' }); return }
+    try {
+      const res = await authFetch('/api/auth/change-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId, newPassword: newPass }),
+      })
+      const data = await res.json()
+      if (res.ok) { toast({ title: 'Success', description: data.message }) }
+      else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
 
   // Entity handlers
@@ -5132,6 +5193,71 @@ export default function Home() {
     </div>
   )
 
+  // ★ Customers master data page — shows entity column + date
+  const renderCustomersPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Customer Database</h2>
+          <p className="text-sm text-muted-foreground">Global customers — accessible from all entities. "Created At" shows which entity first created this customer.</p>
+        </div>
+        <Button onClick={() => { setEditingCustomerId(null); setCustomerForm({ name: '', phone: '', email: '', address: '', type: 'regular', status: 'active' }); setShowCustomerDialog(true) }}><Plus className="w-4 h-4 mr-2" />New Customer</Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Name</TableHead>
+            <TableHead className="font-semibold">Phone</TableHead>
+            <TableHead className="font-semibold">Type</TableHead>
+            <TableHead className="font-semibold">Created At (Entity)</TableHead>
+            <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {customers.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No customers yet.</TableCell></TableRow>
+            : customers.map(c => (
+              <TableRow key={c.id} className="hover:bg-muted/30">
+                <TableCell className="font-medium">{c.name}{c.email ? <div className="text-[10px] text-muted-foreground">{c.email}</div> : null}</TableCell>
+                <TableCell className="text-sm">{c.phone || '—'}</TableCell>
+                <TableCell><Badge variant="outline" className="text-xs">{c.type}</Badge></TableCell>
+                <TableCell className="text-sm">{c.createdByEntity?.name || <span className="text-muted-foreground text-xs">—</span>}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">{c.createdAt ? new Date(c.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'}</TableCell>
+                <TableCell>{c.status === 'active' ? <Badge className="bg-green-100 text-green-800">Active</Badge> : <Badge variant="outline">Inactive</Badge>}</TableCell>
+                <TableCell className="text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditingCustomerId(c.id)
+                      setCustomerForm({ name: c.name, phone: c.phone, email: c.email, address: c.address, type: c.type, status: c.status })
+                      setShowCustomerDialog(true)
+                    }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteCustomer(c.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                  </div>
+                </TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={showCustomerDialog} onOpenChange={setShowCustomerDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{editingCustomerId ? 'Edit Customer' : 'New Customer'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveCustomer} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Name *</Label><Input value={customerForm.name} onChange={e => setCustomerForm({ ...customerForm, name: e.target.value })} required /></div>
+              <div className="space-y-1"><Label className="text-xs">Phone</Label><Input value={customerForm.phone} onChange={e => setCustomerForm({ ...customerForm, phone: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Email</Label><Input value={customerForm.email} onChange={e => setCustomerForm({ ...customerForm, email: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Type</Label><Select value={customerForm.type} onValueChange={v => setCustomerForm({ ...customerForm, type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="regular">Regular</SelectItem><SelectItem value="wholesale">Wholesale</SelectItem><SelectItem value="corporate">Corporate</SelectItem></SelectContent></Select></div>
+              <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={customerForm.status} onValueChange={v => setCustomerForm({ ...customerForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Address</Label><Input value={customerForm.address} onChange={e => setCustomerForm({ ...customerForm, address: e.target.value })} /></div>
+            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingCustomerId ? 'Update' : 'Create'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+
   // ★ Employees master data page
   const renderEmployeesPage = () => (
     <div className="space-y-4">
@@ -5406,7 +5532,7 @@ export default function Home() {
       case 'uom': return renderMasterDataPage<UoMData>('Unit of Measure (UoM)', uomList, ['name','description'], uomForm, setUomForm, editingUomId, setEditingUomId, showUomDialog, setShowUomDialog, handleSaveUom, handleDeleteUom, { name:{label:'UoM Name*',type:'text',placeholder:'e.g. PCS, KG, LTR'},description:{label:'Description',type:'text'} })
       case 'suppliers': return renderMasterDataPage<SupplierData>('Suppliers', suppliers, ['name','phone','email','address','status'], supplierForm, setSupplierForm, editingSupplierId, setEditingSupplierId, showSupplierDialog, setShowSupplierDialog, handleSaveSupplier, handleDeleteSupplier, { name:{label:'Supplier Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'employees': return renderEmployeesPage()
-      case 'customers': return renderMasterDataPage<CustomerData>('Customer Database', customers, ['name','phone','email','address','type','status'], customerForm, setCustomerForm, editingCustomerId, setEditingCustomerId, showCustomerDialog, setShowCustomerDialog, handleSaveCustomer, handleDeleteCustomer, { name:{label:'Customer Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},type:{label:'Type',type:'select',options:['regular','wholesale','corporate']},status:{label:'Status',type:'select',options:['active','inactive']} })
+      case 'customers': return renderCustomersPage()
       case 'groups': return renderGroupsPage()
       case 'subGroups': return renderSubGroupsPage()
       case 'users': return renderUserManagement()
@@ -5637,7 +5763,14 @@ export default function Home() {
             <div className="space-y-2 sm:col-span-2"><Label>Item Name *</Label><Input placeholder="e.g. Samsung Galaxy S23" value={itemForm.itemName} onChange={e => setItemForm({ ...itemForm, itemName: e.target.value })} required /></div>
             <div className="space-y-2"><Label>Price</Label><Input type="number" step="0.01" placeholder="0.00" value={itemForm.price} onChange={e => setItemForm({ ...itemForm, price: e.target.value })} /></div>
             <div className="space-y-2"><Label>UoM</Label><Select value={itemForm.uom} onValueChange={v => setItemForm({ ...itemForm, uom: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{['PCS','KG','LTR','MTR','BOX','SET','DOZ','PACK'].map(u => <SelectItem key={u} value={u}>{u}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Barcode</Label><Input placeholder="Optional" value={itemForm.barcode} onChange={e => setItemForm({ ...itemForm, barcode: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Item Code</Label><Input placeholder="Optional" value={itemForm.itemCode} onChange={e => setItemForm({ ...itemForm, itemCode: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Color</Label><Input placeholder="Optional" value={itemForm.color} onChange={e => setItemForm({ ...itemForm, color: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Pattern</Label><Input placeholder="Optional" value={itemForm.pattern} onChange={e => setItemForm({ ...itemForm, pattern: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Supplier Code</Label><Input placeholder="Optional" value={itemForm.supplierCode} onChange={e => setItemForm({ ...itemForm, supplierCode: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Dimension</Label><Input placeholder="e.g. 100x50x20 cm" value={itemForm.dimension} onChange={e => setItemForm({ ...itemForm, dimension: e.target.value })} /></div>
           </div>
+          <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional item description" value={itemForm.description} onChange={e => setItemForm({ ...itemForm, description: e.target.value })} /></div>
           <div className="flex gap-3 pt-4">
             <Button type="submit"><Save className="w-4 h-4 mr-2" />{isEdit ? 'Update Item' : 'Create Item'}</Button>
             <Button type="button" variant="outline" onClick={() => { setCurrentView('items'); setEditingItemId(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
@@ -6038,6 +6171,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="sm" onClick={() => openEditUserDialog(u)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                    {isAdmin && <Button variant="ghost" size="sm" onClick={() => handleAdminPasswordChange(u.id, u.username)} title="Reset Password"><Key className="w-4 h-4" /></Button>}
                     {u.username !== 'admin' && <Button variant="ghost" size="sm" onClick={() => handleDeleteUser(u.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>}
                   </div>
                 </TableCell>
@@ -6050,7 +6184,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
 
       {/* User Dialog */}
       <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
-        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Key className="w-5 h-5" />{editingUserId ? 'Edit User' : 'Create New User'}</DialogTitle></DialogHeader>
           <form onSubmit={editingUserId ? handleUpdateUser : handleCreateUser} className="space-y-4">
             <div className="space-y-2"><Label>Username *</Label><Input value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })} required disabled={!!editingUserId} /></div>
@@ -6227,6 +6361,20 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
         </DialogContent>
       </Dialog>
 
+      {/* Password Change Dialog */}
+      <Dialog open={showPasswordChangeDialog} onOpenChange={setShowPasswordChangeDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><Key className="w-5 h-5" />Change Password</DialogTitle></DialogHeader>
+          <form onSubmit={handlePasswordChange} className="space-y-3">
+            <div className="space-y-1"><Label className="text-xs">Current Password *</Label><Input type="password" value={passwordChangeForm.currentPassword} onChange={e => setPasswordChangeForm({ ...passwordChangeForm, currentPassword: e.target.value })} required /></div>
+            <div className="space-y-1"><Label className="text-xs">New Password *</Label><Input type="password" value={passwordChangeForm.newPassword} onChange={e => setPasswordChangeForm({ ...passwordChangeForm, newPassword: e.target.value })} required minLength={4} /></div>
+            <div className="space-y-1"><Label className="text-xs">Confirm New Password *</Label><Input type="password" value={passwordChangeForm.confirmPassword} onChange={e => setPasswordChangeForm({ ...passwordChangeForm, confirmPassword: e.target.value })} required minLength={4} /></div>
+            {passwordChangeForm.newPassword && passwordChangeForm.confirmPassword && passwordChangeForm.newPassword !== passwordChangeForm.confirmPassword && <p className="text-xs text-red-600">Passwords do not match</p>}
+            <DialogFooter><Button type="submit" disabled={passwordChanging}><Save className="w-4 h-4 mr-2" />{passwordChanging ? 'Changing...' : 'Change Password'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
       {/* Column Access Dialog */}
       <Dialog open={showColumnDialog} onOpenChange={setShowColumnDialog}>
         <DialogContent className="max-w-md">
@@ -6293,6 +6441,9 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
               <p className="text-xs text-muted-foreground truncate">@{user.username}</p>
               <Badge variant={user.role === 'admin' ? 'default' : user.role === 'manager' ? 'secondary' : 'outline'} className={`mt-1 text-[10px] ${user.role === 'manager' ? 'bg-blue-100 text-blue-800' : ''}`}>{user.role}</Badge>
             </div>
+            <Button variant="ghost" size="sm" className="w-full justify-start text-xs" onClick={() => setShowPasswordChangeDialog(true)}>
+              <Key className="w-3.5 h-3.5 mr-2" />Change Password
+            </Button>
           </div>
         </aside>
       ) : (
