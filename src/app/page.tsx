@@ -389,7 +389,7 @@ export default function Home() {
 
   // Entity state
   const [entities, setEntities] = useState<EntityData[]>([])
-  const [entityForm, setEntityForm] = useState({ name: '', description: '' })
+  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet' })
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
@@ -1645,7 +1645,7 @@ export default function Home() {
     try {
       const res = await authFetch('/api/entities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(false); fetchEntities() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create entity', variant: 'destructive' }) }
   }
@@ -1655,7 +1655,7 @@ export default function Home() {
     if (!editingEntityId) return
     try {
       const res = await authFetch(`/api/entities/${editingEntityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
-      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(false); fetchEntities() }
       else { const data = await res.json(); toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update entity', variant: 'destructive' }) }
   }
@@ -1670,11 +1670,11 @@ export default function Home() {
   }
 
   const openEditEntityDialog = (entity: EntityData) => {
-    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '' }); setShowEntityDialog(true)
+    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet' }); setShowEntityDialog(true)
   }
 
   const openNewEntityDialog = () => {
-    setEditingEntityId(null); setEntityForm({ name: '', description: '' }); setShowEntityDialog(true)
+    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(true)
   }
 
   // User handlers
@@ -4932,43 +4932,50 @@ export default function Home() {
   // Entity selection page
   const renderEntitySelection = () => {
     const availableEntities = isManagerOrAdmin ? entities : entities.filter(e => user.entityAccess.some(ea => ea.entityId === e.id))
+    const [entitySearch, setEntitySearch] = useState('')
+    const filteredEntities = entitySearch
+      ? availableEntities.filter(e => e.name.toLowerCase().includes(entitySearch.toLowerCase()) || (e.description || '').toLowerCase().includes(entitySearch.toLowerCase()))
+      : availableEntities
     return (
       <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
         <div className="w-full max-w-7xl mx-auto">
           <div className="mb-6">
             <div className="flex items-center gap-4 mb-4">
               <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shrink-0"><Package className="w-7 h-7 text-primary-foreground" /></div>
-              <div>
+              <div className="flex-1">
                 <h1 className="text-2xl md:text-3xl font-bold">Akash Inventory System</h1>
                 <p className="text-muted-foreground">Choose the entity you want to work with</p>
               </div>
             </div>
-            <p className="text-sm text-muted-foreground">Logged in as <span className="font-medium">{user.displayName}</span> ({user.role})</p>
+            <div className="flex items-center justify-between gap-4">
+              <p className="text-sm text-muted-foreground">Logged in as <span className="font-medium">{user.displayName}</span> ({user.role})</p>
+              <Input
+                placeholder="Search entity by name..."
+                value={entitySearch}
+                onChange={e => setEntitySearch(e.target.value)}
+                className="w-64"
+              />
+            </div>
           </div>
-          {availableEntities.length === 0 ? (
+          {filteredEntities.length === 0 ? (
             <Card>
               <CardContent className="text-center py-12">
                 <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-                <p className="text-lg font-medium">No Entity Available</p>
-                {isManagerOrAdmin ? (
-                  <p className="text-muted-foreground">No entities exist yet. An admin can create entities from Master Data → Entity.</p>
-                ) : (
-                  <p className="text-muted-foreground">Contact your administrator to get entity access.</p>
-                )}
+                <p className="text-lg font-medium">{entitySearch ? 'No entities match your search' : 'No Entity Available'}</p>
+                {entitySearch && <p className="text-muted-foreground">Try a different search term.</p>}
               </CardContent>
             </Card>
           ) : (
             <>
-              {/* ★ Row-based table layout — uses full page width, scales to any number of entities */}
               <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
                   <div>
-                    <h3 className="font-semibold text-sm">Entities ({availableEntities.length})</h3>
+                    <h3 className="font-semibold text-sm">Entities ({filteredEntities.length}{entitySearch ? ` of ${availableEntities.length}` : ''})</h3>
                     <p className="text-[11px] text-muted-foreground">Click any row to enter</p>
                   </div>
                 </div>
                 <div className="max-h-[70vh] overflow-y-auto">
-                  {availableEntities.map((entity, idx) => (
+                  {filteredEntities.map((entity, idx) => (
                     <button
                       key={entity.id}
                       onClick={() => { setWorkingEntity({ id: entity.id, name: entity.name }); setCurrentView('itemPrice') }}
@@ -4981,6 +4988,9 @@ export default function Home() {
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-xs text-muted-foreground font-mono w-8">#{String(idx + 1).padStart(2, '0')}</span>
                           <h3 className="font-semibold text-base truncate">{entity.name}</h3>
+                          {(entity as any).entityType && (entity as any).entityType !== 'outlet' && (
+                            <Badge variant="outline" className="text-xs bg-blue-50 text-blue-700 capitalize">{(entity as any).entityType.replace('_', ' ')}</Badge>
+                          )}
                         </div>
                         {entity.description && <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{entity.description}</p>}
                       </div>
@@ -4991,22 +5001,30 @@ export default function Home() {
               </div>
             </>
           )}
-
-          {/* Logout button at bottom */}
           <div className="mt-8 text-center">
             <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={handleLogout}>
               <LogOut className="w-4 h-4 mr-2" />Sign Out
             </Button>
           </div>
         </div>
-
-        {/* Entity Creation Dialog (kept here for navigation from Master Data → Entity page) */}
         <Dialog open={showEntityDialog} onOpenChange={setShowEntityDialog}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" />{editingEntityId ? 'Edit Entity' : 'Create New Entity'}</DialogTitle></DialogHeader>
             <form onSubmit={editingEntityId ? handleUpdateEntity : handleCreateEntity} className="space-y-4">
               <div className="space-y-2"><Label>Entity Name *</Label><Input placeholder="e.g. Dhaka Main Warehouse" value={entityForm.name} onChange={e => setEntityForm({ ...entityForm, name: e.target.value })} required /></div>
               <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
+              <div className="space-y-2">
+                <Label>Entity Type</Label>
+                <Select value={(entityForm as any).entityType || 'outlet'} onValueChange={v => setEntityForm({ ...entityForm, entityType: v } as any)}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="outlet">Outlet (Shop/Branch)</SelectItem>
+                    <SelectItem value="warehouse">Warehouse</SelectItem>
+                    <SelectItem value="head_office">Head Office</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-[11px] text-muted-foreground">Used by incentive formula: outlet → outletCommission, head_office/warehouse → headOfficeCommission</p>
+              </div>
               <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEntityId ? 'Update' : 'Create'}</Button></DialogFooter>
             </form>
           </DialogContent>
@@ -5664,15 +5682,14 @@ export default function Home() {
         <h2 className="text-xl font-semibold">Entity Management</h2>
         <Button onClick={openNewEntityDialog}><Plus className="w-4 h-4 mr-2" />New Entity</Button>
       </div>
-      <p className="text-sm text-muted-foreground">Entities represent warehouses, stores, branches or any location where stock is maintained.</p>
+      <p className="text-sm text-muted-foreground">Entities represent warehouses, stores, branches or any location where stock is maintained. Set the correct entity type — it determines which incentive commission rate applies (outlet vs head office).</p>
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader>
             <TableRow className="bg-muted/50">
               <TableHead className="font-semibold">Name</TableHead>
+              <TableHead className="font-semibold">Type</TableHead>
               <TableHead className="font-semibold">Description</TableHead>
-              <TableHead className="font-semibold text-center">Stock Entries</TableHead>
-              <TableHead className="font-semibold text-center">Users Assigned</TableHead>
               <TableHead className="font-semibold text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
@@ -5680,9 +5697,12 @@ export default function Home() {
             {entities.map(entity => (
               <TableRow key={entity.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{entity.name}</TableCell>
+                <TableCell>
+                  <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                    {((entity as any).entityType || 'outlet').replace('_', ' ')}
+                  </Badge>
+                </TableCell>
                 <TableCell className="text-muted-foreground">{entity.description || '-'}</TableCell>
-                <TableCell className="text-center"><Badge variant="secondary">{entity._count?.stocks || 0}</Badge></TableCell>
-                <TableCell className="text-center"><Badge variant="secondary">{entity._count?.userAccess || 0}</Badge></TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
@@ -5702,6 +5722,18 @@ export default function Home() {
           <form onSubmit={editingEntityId ? handleUpdateEntity : handleCreateEntity} className="space-y-4">
             <div className="space-y-2"><Label>Entity Name *</Label><Input placeholder="e.g. Dhaka Main Warehouse" value={entityForm.name} onChange={e => setEntityForm({ ...entityForm, name: e.target.value })} required /></div>
             <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
+            <div className="space-y-2">
+              <Label>Entity Type</Label>
+              <Select value={entityForm.entityType || 'outlet'} onValueChange={v => setEntityForm({ ...entityForm, entityType: v })}>
+                <SelectTrigger><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="outlet">Outlet (Shop/Branch)</SelectItem>
+                  <SelectItem value="warehouse">Warehouse</SelectItem>
+                  <SelectItem value="head_office">Head Office</SelectItem>
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Outlet → uses outletCommission from incentive formulas. Head Office & Warehouse → uses headOfficeCommission.</p>
+            </div>
             <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEntityId ? 'Update' : 'Create'}</Button></DialogFooter>
           </form>
         </DialogContent>
