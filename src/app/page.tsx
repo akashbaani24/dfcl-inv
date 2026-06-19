@@ -8,6 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Combobox, type ComboOption } from '@/components/ui/combobox'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -307,6 +308,21 @@ export default function Home() {
   })
   const [purchaseItemSearch, setPurchaseItemSearch] = useState('')
   const [purchaseItemResults, setPurchaseItemResults] = useState<any[]>([])
+  // ★ Debounced auto-search for purchase item — fires 300ms after user stops typing
+  useEffect(() => {
+    const q = purchaseItemSearch.trim()
+    if (!q) { setPurchaseItemResults([]); return }
+    const timer = setTimeout(async () => {
+      try {
+        const res = await authFetch(`/api/items?search=${encodeURIComponent(q)}&pageSize=20`)
+        if (res.ok) {
+          const data = await res.json()
+          setPurchaseItemResults(data.items || [])
+        }
+      } catch {}
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [purchaseItemSearch])
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
   const [showPurchaseDetailDialog, setShowPurchaseDetailDialog] = useState(false)
   // ★ COGS page state (full page, not dialog)
@@ -4071,25 +4087,25 @@ export default function Home() {
                 </div>
                 <div className="space-y-2">
                   <Label>Purchase For (Entity) *</Label>
-                  <Select value={purchaseForm.entityId} onValueChange={v => setPurchaseForm({ ...purchaseForm, entityId: v })}>
-                    <SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger>
-                    <SelectContent>
-                      {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={entities.map(e => ({ value: e.id, label: e.name, subLabel: e.entityType }))}
+                    value={purchaseForm.entityId}
+                    onChange={(v) => setPurchaseForm({ ...purchaseForm, entityId: v })}
+                    placeholder="Type to search entity..."
+                  />
                 </div>
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Supplier</Label>
-                  <Select value={purchaseForm.supplierId || '__none__'} onValueChange={v => setPurchaseForm({ ...purchaseForm, supplierId: v === '__none__' ? '' : v })}>
-                    <SelectTrigger><SelectValue placeholder="Select supplier (optional)" /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none__">— None —</SelectItem>
-                      {(suppliers || []).filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}{s.phone ? ` (${s.phone})` : ''}</SelectItem>)}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={(suppliers || []).filter(s => s.status === 'active').map(s => ({ value: s.id, label: s.name, subLabel: s.phone }))}
+                    value={purchaseForm.supplierId || ''}
+                    onChange={(v) => setPurchaseForm({ ...purchaseForm, supplierId: v })}
+                    placeholder="Type to search supplier (optional)..."
+                    clearable
+                  />
                   <p className="text-[11px] text-muted-foreground">Add new suppliers via Master Data → Suppliers</p>
                 </div>
                 <div className="space-y-2">
@@ -4108,19 +4124,41 @@ export default function Home() {
                 </div>
                 <div className="flex gap-2">
                   <Input
-                    placeholder="Search item to add..."
+                    placeholder="Type item name to search & add..."
                     value={purchaseItemSearch}
                     onChange={e => setPurchaseItemSearch(e.target.value)}
-                    onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handlePurchaseItemSearch())}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault()
+                        // Add first result on Enter
+                        if (purchaseItemResults.length > 0) {
+                          addPurchaseItem(purchaseItemResults[0])
+                        }
+                      } else if (e.key === 'Escape') {
+                        setPurchaseItemSearch('')
+                        setPurchaseItemResults([])
+                      }
+                    }}
                     className="flex-1"
+                    autoComplete="off"
                   />
-                  <Button type="button" variant="outline" onClick={handlePurchaseItemSearch}><Search className="w-4 h-4" /></Button>
+                  {purchaseItemSearch && (
+                    <Button type="button" variant="ghost" size="sm" onClick={() => { setPurchaseItemSearch(''); setPurchaseItemResults([]) }} title="Clear search">
+                      <X className="w-4 h-4" />
+                    </Button>
+                  )}
                 </div>
                 {purchaseItemResults.length > 0 && (
-                  <div className="border rounded-md max-h-40 overflow-y-auto bg-background shadow-lg relative z-[1000]">
+                  <div className="border rounded-md max-h-56 overflow-y-auto bg-background shadow-lg relative z-[1000]">
+                    <div className="px-3 py-1.5 text-[11px] text-muted-foreground bg-muted/30 border-b sticky top-0">
+                      {purchaseItemResults.length} item{purchaseItemResults.length !== 1 ? 's' : ''} found — click or press Enter to add
+                    </div>
                     {purchaseItemResults.map((item, idx) => (
                       <div key={item.id || idx} onClick={() => addPurchaseItem(item)} className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 cursor-pointer transition-colors">
-                        {item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''} {item.itemCode ? `• ${item.itemCode}` : ''}
+                        <div className="flex items-center justify-between gap-2">
+                          <span>{item.itemName || 'Unknown'}</span>
+                          <span className="text-xs opacity-75">{item.itemCode || item.year || ''}</span>
+                        </div>
                       </div>
                     ))}
                   </div>
