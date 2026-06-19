@@ -128,7 +128,6 @@ export async function getCurrentUserBasic(request?: NextRequest) {
           username: true,
           displayName: true,
           role: true,
-          entityId: true,
           canCreateItem: true,
           canModifyItem: true,
           entityAccess: { select: { entityId: true } },
