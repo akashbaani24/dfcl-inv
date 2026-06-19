@@ -2619,17 +2619,35 @@ export default function Home() {
     try {
     return (
       <div className="min-h-screen w-full bg-slate-100 flex flex-col lg:flex-row">
+        {/* === MOBILE BRANDING HEADER (top) — same gradient style as desktop branding panel === */}
+        <div className="lg:hidden relative overflow-hidden bg-gradient-to-br from-indigo-700 via-blue-800 to-slate-900">
+          <div className="absolute inset-0 opacity-20">
+            <div className="absolute -top-8 -right-8 w-48 h-48 bg-white/10 rounded-full blur-2xl" />
+            <div className="absolute bottom-0 left-1/4 w-40 h-40 bg-indigo-400/20 rounded-full blur-2xl" />
+          </div>
+          <div className="relative z-10 p-6 pb-5 text-white">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-12 h-12 bg-white/15 backdrop-blur-sm rounded-xl flex items-center justify-center border border-white/20 shrink-0">
+                <Package className="w-6 h-6 text-white" />
+              </div>
+              <div>
+                <p className="text-[10px] uppercase tracking-widest text-blue-200">Inventory &amp; Sales</p>
+                <p className="text-base font-semibold">DFCL</p>
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold leading-tight mb-2">Akash Inventory System</h1>
+            <p className="text-sm text-blue-100/90 leading-snug">Multi-entity inventory, sales, purchase, and incentive management.</p>
+            <div className="flex flex-wrap gap-1.5 mt-3">
+              {['Multi-Entity', 'Sales & POS', 'Purchase', 'Incentive', 'Delivery'].map(feature => (
+                <span key={feature} className="text-[10px] font-medium px-2.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">{feature}</span>
+              ))}
+            </div>
+          </div>
+        </div>
+
         {/* === LOGIN SIDE === */}
         <div className="flex-1 flex items-center justify-center p-6 sm:p-10 order-1 lg:order-1">
           <div className="w-full max-w-md">
-            {/* Mobile-only compact header (branding panel is hidden on small screens below) */}
-            <div className="lg:hidden flex flex-col items-center mb-8 text-center">
-              <div className="w-14 h-14 bg-gradient-to-br from-indigo-600 to-blue-700 rounded-2xl flex items-center justify-center mb-3 shadow-lg shadow-indigo-500/30">
-                <Package className="w-7 h-7 text-white" />
-              </div>
-              <h1 className="text-xl font-bold text-slate-800">Akash Inventory System</h1>
-            </div>
-
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-7 sm:p-9">
               <div className="mb-7">
                 <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
@@ -2726,7 +2744,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* === BRANDING SIDE === */}
+        {/* === BRANDING SIDE (desktop only — same as before) === */}
         <div className="hidden lg:flex lg:flex-1 relative overflow-hidden bg-gradient-to-br from-indigo-700 via-blue-800 to-slate-900 order-2 lg:order-2">
           {/* Decorative geometric shapes */}
           <div className="absolute inset-0 opacity-20">
