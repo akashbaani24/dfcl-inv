@@ -122,6 +122,7 @@ export const MENU_ITEMS = [
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
+  { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ] as const;
 

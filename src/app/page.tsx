@@ -164,7 +164,7 @@ type ViewType =
   | 'itemAdjustment' | 'transfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
-  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'reports'
+  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -207,6 +207,7 @@ const ALL_MENU_ITEMS = [
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
+  { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ]
 
@@ -2103,6 +2104,7 @@ export default function Home() {
     { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
     { key: 'damage' as ViewType, label: 'Damage/Wastage', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
+    { key: 'newsTicker' as ViewType, label: 'News Ticker', icon: FileText },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
   ].filter(item => {
     // Filter top-level items: show if item itself is visible OR any child is visible
@@ -4723,6 +4725,68 @@ export default function Home() {
     )
   }
 
+  // ★ News Ticker management page
+  const renderNewsTickerPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">News Ticker</h2>
+          <p className="text-sm text-muted-foreground">Broadcast messages shown as scrolling text at the top of the app. Visible to all users.</p>
+        </div>
+        {isManagerOrAdmin && (
+          <Button onClick={() => setShowTickerInput(!showTickerInput)}><Plus className="w-4 h-4 mr-2" />New Message</Button>
+        )}
+      </div>
+      {showTickerInput && isManagerOrAdmin && (
+        <Card>
+          <CardContent className="pt-4">
+            <div className="flex gap-2">
+              <Input placeholder="Type your broadcast message..." value={tickerInput} onChange={e => setTickerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && postTickerMessage()} className="flex-1" />
+              <Button onClick={postTickerMessage}><Save className="w-4 h-4 mr-2" />Post</Button>
+              <Button variant="outline" onClick={() => { setShowTickerInput(false); setTickerInput('') }}>Cancel</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Message</TableHead>
+            <TableHead className="font-semibold">Date</TableHead>
+            {isManagerOrAdmin && <TableHead className="font-semibold text-center">Actions</TableHead>}
+          </TableRow></TableHeader>
+          <TableBody>
+            {tickerMessages.length === 0 ? <TableRow><TableCell colSpan={3} className="text-center py-8 text-muted-foreground">No ticker messages yet.</TableCell></TableRow>
+            : tickerMessages.map((msg, i) => (
+              <TableRow key={i} className="hover:bg-muted/30">
+                <TableCell className="font-medium">📢 {msg}</TableCell>
+                <TableCell className="text-xs text-muted-foreground">—</TableCell>
+                {isManagerOrAdmin && (
+                  <TableCell className="text-center">
+                    <Button variant="ghost" size="sm" className="text-destructive hover:text-destructive" onClick={async () => {
+                      try {
+                        const res = await authFetch(`/api/news-ticker`, { method: 'GET' })
+                        if (res.ok) {
+                          const d = await res.json()
+                          const msgObj = d.messages?.find((m: any) => m.message === msg)
+                          if (msgObj) {
+                            await authFetch(`/api/news-ticker/${msgObj.id}`, { method: 'DELETE' })
+                            fetchTickerMessages()
+                            toast({ title: 'Deleted', description: 'Ticker message removed' })
+                          }
+                        }
+                      } catch {}
+                    }} title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                  </TableCell>
+                )}
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+
   // ---- Reports page helpers ----
   const fmtMoney = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n || 0)
   const fmtNum = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
@@ -5833,6 +5897,7 @@ export default function Home() {
       case 'supplierPayments': return renderSupplierPaymentsPage()
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
+      case 'newsTicker': return renderNewsTickerPage()
       case 'reports': return renderReportsPage()
       case 'tailors': return renderTailorsPage()
       case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
@@ -6716,8 +6781,8 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
     <div className="min-h-screen flex flex-col bg-background">
       {/* ★ News Ticker — scrolling text at top, right-to-left */}
       {tickerMessages.length > 0 && (
-        <div className="bg-primary text-primary-foreground py-1 overflow-hidden relative shrink-0">
-          <div className="ticker-track whitespace-nowrap text-xs font-medium">
+        <div className="bg-primary text-primary-foreground py-2 overflow-hidden relative shrink-0">
+          <div className="ticker-track whitespace-nowrap text-sm font-semibold">
             {tickerMessages.map((msg, i) => (
               <span key={i} className="inline-block px-8">📢 {msg}</span>
             ))}
