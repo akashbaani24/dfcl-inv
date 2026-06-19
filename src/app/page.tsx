@@ -61,6 +61,8 @@ import {
   Receipt,
   CheckCircle2,
   Printer,
+  Phone,
+  Mail,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -2183,9 +2185,28 @@ export default function Home() {
             </div>
 
             {/* Mobile-only developer credit (under the form) */}
-            <p className="lg:hidden text-center text-xs text-slate-400 mt-6">
-              Developed by <span className="font-semibold text-slate-600">Abdur Rahman Akash</span>
-            </p>
+            <div className="lg:hidden mt-6 space-y-2 text-center">
+              <p className="text-xs text-slate-400">
+                Developed by <span className="font-semibold text-slate-600">Abdur Rahman Akash</span>
+              </p>
+              <a
+                href="tel:+8801534955065"
+                className="inline-flex items-center gap-1.5 text-xs text-slate-500 hover:text-indigo-600 transition-colors"
+              >
+                <Phone className="w-3 h-3" />
+                <span className="font-mono">+8801534955065</span>
+              </a>
+              <div className="flex flex-col gap-0.5 text-xs text-slate-500">
+                <a href="mailto:akashbaani3@gmail.com" className="inline-flex items-center justify-center gap-1.5 hover:text-indigo-600 transition-colors">
+                  <Mail className="w-3 h-3" />
+                  akashbaani3@gmail.com
+                </a>
+                <a href="mailto:akashbaani24@gmail.com" className="inline-flex items-center justify-center gap-1.5 hover:text-indigo-600 transition-colors">
+                  <Mail className="w-3 h-3" />
+                  akashbaani24@gmail.com
+                </a>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -2243,14 +2264,39 @@ export default function Home() {
               </div>
             </div>
 
-            {/* Bottom: developer credit */}
-            <div className="flex items-center gap-3 pt-6 border-t border-white/10">
-              <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-lg">
-                A
+            {/* Bottom: developer credit + contact */}
+            <div className="pt-6 border-t border-white/10 space-y-4">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-full bg-gradient-to-br from-amber-400 to-orange-500 flex items-center justify-center font-bold text-white shadow-lg shrink-0">
+                  A
+                </div>
+                <div>
+                  <p className="text-xs text-blue-200 uppercase tracking-wider">Developed by</p>
+                  <p className="text-sm font-semibold text-white">Abdur Rahman Akash</p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs text-blue-200 uppercase tracking-wider">Developed by</p>
-                <p className="text-sm font-semibold text-white">Abdur Rahman Akash</p>
+
+              <div className="grid grid-cols-1 gap-2 text-sm">
+                <a
+                  href="tel:+8801534955065"
+                  className="flex items-center gap-2.5 text-blue-100 hover:text-white transition-colors group"
+                >
+                  <span className="w-7 h-7 rounded-lg bg-white/10 group-hover:bg-white/20 flex items-center justify-center shrink-0">
+                    <Phone className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="font-mono text-xs">+8801534955065</span>
+                </a>
+                <a
+                  href="mailto:akashbaani3@gmail.com,akashbaani24@gmail.com"
+                  className="flex items-center gap-2.5 text-blue-100 hover:text-white transition-colors group"
+                >
+                  <span className="w-7 h-7 rounded-lg bg-white/10 group-hover:bg-white/20 flex items-center justify-center shrink-0">
+                    <Mail className="w-3.5 h-3.5" />
+                  </span>
+                  <span className="text-xs">
+                    akashbaani3@gmail.com, akashbaani24@gmail.com
+                  </span>
+                </a>
               </div>
             </div>
           </div>
