@@ -7053,6 +7053,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
                 <>
                   <button onClick={() => { setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">←</button>
                   {entities.find(e => e.id === chatPartnerId)?.name || 'Chat'}
+                  {chatPartnerId === workingEntity?.id && <Badge variant="outline" className="ml-1 text-[9px] bg-blue-50 text-blue-600">Me</Badge>}
                 </>
               ) : (
                 <>💬 Entity Chat — {workingEntity?.name}</>
@@ -7067,11 +7068,12 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
               /* Partner list */
               <div className="p-2 space-y-1">
                 <p className="text-xs text-muted-foreground px-2 py-1">Select an entity to chat with:</p>
-                {entities.filter(e => e.id !== workingEntity?.id).map(e => {
+                {entities.map(e => {
+                  const isSelf = e.id === workingEntity?.id
                   const partner = chatPartners.find(p => p.partnerId === e.id)
                   return (
                     <button key={e.id} onClick={() => { setChatPartnerId(e.id); fetchChatMessages(e.id); fetchMentionUsers(e.id) }} className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm flex items-center justify-between">
-                      <span>{e.name}</span>
+                      <span>{e.name} {isSelf && <Badge variant="outline" className="ml-1 text-[9px] bg-blue-50 text-blue-600">Me</Badge>}</span>
                       {partner && partner.unread > 0 && <Badge className="bg-red-500 text-white text-[10px]">{partner.unread}</Badge>}
                     </button>
                   )
