@@ -100,6 +100,7 @@ interface TailorData { id: string; name: string; phone: string; address: string;
 interface MakingInfoData { id: string; name: string; description: string; cost: number; unit: string; status: string }
 interface UoMData { id: string; name: string; description: string }
 interface SupplierData { id: string; name: string; phone: string; email: string; address: string; status: string; _count?: { items: number } }
+interface EmployeeData { id: string; name: string; phone: string; email: string; address: string; designation: string; roles: string; status: string; notes?: string | null; createdAt: string }
 interface CustomerData { id: string; name: string; phone: string; email: string; address: string; type: string; status: string }
 
 interface ItemAdjustmentData { id: string; itemId: string; itemName: string; entityId: string; entityName: string; adjustmentType: string; quantity: number; reason: string; createdBy?: string; createdAt: string }
@@ -166,7 +167,7 @@ type ViewType =
   | 'booking' | 'incentive' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
-  | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers'
+  | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
   | 'groups' | 'subGroups'
   | 'bookingReasons'
   | 'stockDetail' | 'stockEntry' | 'stockUpload'
@@ -222,6 +223,7 @@ const ALL_MASTER_DATA_ITEMS = [
   { key: 'uom', label: 'UoM' },
   { key: 'suppliers', label: 'Suppliers' },
   { key: 'customers', label: 'Customer Database' },
+  { key: 'employees', label: 'Employees' },
 ]
 
 // Auth-aware fetch helper: always sends token via Authorization header + credentials
@@ -302,7 +304,7 @@ export default function Home() {
 
   const [salesOrders, setSalesOrders] = useState<Array<any>>([])
   const [salesOrderForm, setSalesOrderForm] = useState({
-    customerId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '',
+    customerId: '', salesPersonId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '',
     items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; makingEntries: Array<{ name: string; unitPrice: string; quantity: string }> }>,
     payments: [] as Array<{ amount: string; paymentType: string; paymentMode: string; paymentDate: string; chequeNo: string; bankName: string; notes: string }>,
     newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
@@ -423,6 +425,12 @@ export default function Home() {
   const [editingSupplierId, setEditingSupplierId] = useState<string | null>(null)
   const [showSupplierDialog, setShowSupplierDialog] = useState(false)
 
+  // ★ Employee master data state
+  const [employees, setEmployees] = useState<EmployeeData[]>([])
+  const [employeeForm, setEmployeeForm] = useState({ name: '', phone: '', email: '', address: '', designation: '', roles: [] as string[], status: 'active', notes: '' })
+  const [editingEmployeeId, setEditingEmployeeId] = useState<string | null>(null)
+  const [showEmployeeDialog, setShowEmployeeDialog] = useState(false)
+
   const [customers, setCustomers] = useState<CustomerData[]>([])
   const [customerForm, setCustomerForm] = useState({ name: '', phone: '', email: '', address: '', type: 'regular', status: 'active' })
   const [editingCustomerId, setEditingCustomerId] = useState<string | null>(null)
@@ -450,8 +458,11 @@ export default function Home() {
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
   const [reportTab, setReportTab] = useState<'overview' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive'>('overview')
-  const [reportRange, setReportRange] = useState<'7' | '30' | '90' | '365' | 'all'>('30')
+  const [reportRange, setReportRange] = useState<'7' | '30' | '90' | '365' | 'all' | 'custom'>('30')
   const [reportEntity, setReportEntity] = useState<string>('__all__') // '__all__' = all my entities
+  const [reportCustomFrom, setReportCustomFrom] = useState('') // YYYY-MM-DD
+  const [reportCustomTo, setReportCustomTo] = useState('') // YYYY-MM-DD
+  const [reportExporting, setReportExporting] = useState(false)
 
   const { toast } = useToast()
 
@@ -717,6 +728,7 @@ export default function Home() {
   const fetchMakingInfo = async () => { try { const res = await authFetch('/api/making-info'); if (res.ok) { const d = await res.json(); setMakingInfoList(d.makingInfo) } } catch {} }
   const fetchUom = async () => { try { const res = await authFetch('/api/uom'); if (res.ok) { const d = await res.json(); setUomList(d.uomList) } } catch {} }
   const fetchSuppliers = async () => { try { const res = await authFetch('/api/suppliers'); if (res.ok) { const d = await res.json(); setSuppliers(d.suppliers) } } catch {} }
+  const fetchEmployees = async () => { try { const res = await authFetch('/api/employees'); if (res.ok) { const d = await res.json(); setEmployees(d.employees) } } catch {} }
   const fetchCustomers = async () => { try { const res = await authFetch('/api/customers'); if (res.ok) { const d = await res.json(); setCustomers(d.customers) } } catch {} }
 
   // Transaction fetch handlers
@@ -853,7 +865,7 @@ export default function Home() {
 
   // Sales order handlers
   const resetSalesOrderForm = () => {
-    setSalesOrderForm({ customerId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
+    setSalesOrderForm({ customerId: '', salesPersonId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
     setEditingSalesOrderId(null); setSalesCustomerMode('existing'); setSalesCustomerSearch(''); setSalesItemSearch(''); setSalesItemResults([])
   }
 
@@ -914,6 +926,7 @@ export default function Home() {
       }
       const payload = {
         entityId: workingEntity.id, customerId,
+        salesPersonId: salesOrderForm.salesPersonId || undefined,
         orderDate: salesOrderForm.orderDate, deliveryDate: salesOrderForm.deliveryDate || undefined,
         status: salesOrderForm.status, notes: salesOrderForm.notes,
         items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseInt(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseInt(me.quantity) || 1 })) })),
@@ -1156,6 +1169,7 @@ export default function Home() {
   useEffect(() => { if (currentView === 'makingInfo') fetchMakingInfo() }, [currentView])
   useEffect(() => { if (currentView === 'uom') fetchUom() }, [currentView])
   useEffect(() => { if (currentView === 'suppliers') fetchSuppliers() }, [currentView])
+  useEffect(() => { if (currentView === 'employees') fetchEmployees() }, [currentView])
   useEffect(() => { if (currentView === 'customers') fetchCustomers() }, [currentView])
   useEffect(() => { if (currentView === 'groups') fetchGroups() }, [currentView])
   useEffect(() => { if (currentView === 'subGroups') { fetchSubGroups(); fetchGroups() } }, [currentView])
@@ -1201,7 +1215,15 @@ export default function Home() {
       const params = new URLSearchParams()
       const entityId = reportEntity === '__all__' ? '' : reportEntity
       if (entityId) params.set('entityId', entityId)
-      if (reportRange !== 'all') {
+      if (reportRange === 'custom') {
+        if (!reportCustomFrom || !reportCustomTo) {
+          toast({ title: 'Select dates', description: 'Please pick From and To dates for custom range', variant: 'destructive' })
+          setReportLoading(false)
+          return
+        }
+        params.set('from', new Date(reportCustomFrom + 'T00:00:00').toISOString())
+        params.set('to', new Date(reportCustomTo + 'T23:59:59').toISOString())
+      } else if (reportRange !== 'all') {
         const days = parseInt(reportRange)
         const to = new Date()
         const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000)
@@ -1217,9 +1239,44 @@ export default function Home() {
       }
     } catch { toast({ title: 'Error', description: 'Failed to load reports', variant: 'destructive' }) }
     finally { setReportLoading(false) }
-  }, [reportEntity, reportRange, toast])
+  }, [reportEntity, reportRange, reportCustomFrom, reportCustomTo, toast])
 
-  useEffect(() => { if (currentView === 'reports' && user) fetchReports() }, [currentView, user, reportRange, reportEntity])
+  useEffect(() => { if (currentView === 'reports' && user) fetchReports() }, [currentView, user, reportRange, reportEntity, reportCustomFrom, reportCustomTo])
+
+  // ★ Reports Excel export
+  const handleExportReports = async () => {
+    if (!reportData) return
+    setReportExporting(true)
+    try {
+      // Build the same query string as fetchReports
+      const params = new URLSearchParams()
+      const entityId = reportEntity === '__all__' ? '' : reportEntity
+      if (entityId) params.set('entityId', entityId)
+      if (reportRange === 'custom') {
+        params.set('from', new Date(reportCustomFrom + 'T00:00:00').toISOString())
+        params.set('to', new Date(reportCustomTo + 'T23:59:59').toISOString())
+      } else if (reportRange !== 'all') {
+        const days = parseInt(reportRange)
+        const to = new Date()
+        const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000)
+        params.set('from', from.toISOString())
+        params.set('to', to.toISOString())
+      }
+      params.set('format', 'xlsx')
+      params.set('tab', reportTab)
+      const res = await authFetch(`/api/reports/export?${params.toString()}`)
+      if (!res.ok) { toast({ title: 'Error', description: 'Export failed', variant: 'destructive' }); return }
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const today = new Date().toISOString().split('T')[0]
+      a.download = `report-${reportTab}-${today}.xlsx`
+      document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+      toast({ title: 'Downloaded', description: a.download })
+    } catch { toast({ title: 'Error', description: 'Export failed', variant: 'destructive' }) }
+    finally { setReportExporting(false) }
+  }
 
   const handleSaveTailor = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1268,6 +1325,55 @@ export default function Home() {
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
   const handleDeleteSupplier = async (id: string) => { if (!confirm('Delete?')) return; try { const res = await authFetch(`/api/suppliers/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchSuppliers() } } catch {} }
+
+  // ★ Employee handlers
+  const handleSaveEmployee = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const payload = { ...employeeForm, roles: employeeForm.roles.join(',') }
+      const res = editingEmployeeId
+        ? await authFetch(`/api/employees/${editingEmployeeId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        : await authFetch('/api/employees', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (res.ok) {
+        toast({ title: 'Success', description: editingEmployeeId ? 'Employee updated' : 'Employee created' })
+        setShowEmployeeDialog(false)
+        setEmployeeForm({ name: '', phone: '', email: '', address: '', designation: '', roles: [], status: 'active', notes: '' })
+        setEditingEmployeeId(null)
+        fetchEmployees()
+      } else {
+        const d = await res.json()
+        toast({ title: 'Error', description: d.error, variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteEmployee = async (id: string) => {
+    if (!confirm('Delete this employee? Sales orders linked to them will have salesPerson cleared.')) return
+    try {
+      const res = await authFetch(`/api/employees/${id}`, { method: 'DELETE' })
+      if (res.ok) { toast({ title: 'Deleted' }); fetchEmployees() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch {}
+  }
+  const openNewEmployeeDialog = () => {
+    setEditingEmployeeId(null)
+    setEmployeeForm({ name: '', phone: '', email: '', address: '', designation: '', roles: [], status: 'active', notes: '' })
+    setShowEmployeeDialog(true)
+  }
+  const openEditEmployeeDialog = (emp: EmployeeData) => {
+    setEditingEmployeeId(emp.id)
+    setEmployeeForm({
+      name: emp.name, phone: emp.phone, email: emp.email, address: emp.address,
+      designation: emp.designation, roles: (emp.roles || '').split(',').filter(Boolean),
+      status: emp.status, notes: emp.notes || '',
+    })
+    setShowEmployeeDialog(true)
+  }
+  const toggleEmployeeRole = (role: string) => {
+    setEmployeeForm(f => ({
+      ...f,
+      roles: f.roles.includes(role) ? f.roles.filter(r => r !== role) : [...f.roles, role],
+    }))
+  }
 
   const handleSaveCustomer = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1732,6 +1838,7 @@ export default function Home() {
     { key: 'uom' as ViewType, label: 'UoM', icon: Package, perm: hasMasterDataAccess('uom') },
     { key: 'suppliers' as ViewType, label: 'Suppliers', icon: Truck, perm: hasMasterDataAccess('suppliers') },
     { key: 'customers' as ViewType, label: 'Customer Database', icon: UserCircle, perm: hasMasterDataAccess('customers') },
+    { key: 'employees' as ViewType, label: 'Employees', icon: Users, perm: hasMasterDataAccess('employees') },
   ]
 
   const visibleMasterDataItems = masterDataItems.filter(item => item.perm === undefined || item.perm)
@@ -2307,7 +2414,7 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Sales Order - {workingEntity?.name}</h2>
         <div className="flex gap-2">
-          <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); setCurrentView('newSalesOrder') }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
+          <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); fetchEmployees(); setCurrentView('newSalesOrder') }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
         </div>
       </div>
       <div className="border rounded-lg overflow-hidden">
@@ -2729,9 +2836,19 @@ export default function Home() {
             </div>
 
             {/* Order Meta */}
-            <div className="bg-card rounded-lg border p-4 grid grid-cols-3 gap-3">
+            <div className="bg-card rounded-lg border p-4 grid grid-cols-2 md:grid-cols-4 gap-3">
               <div className="space-y-1"><Label className="text-xs">Order Date</Label><Input type="date" value={salesOrderForm.orderDate} onChange={e => setSalesOrderForm({...salesOrderForm, orderDate: e.target.value})} className="h-9" /></div>
               <div className="space-y-1"><Label className="text-xs">Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm({...salesOrderForm, deliveryDate: e.target.value})} className="h-9" /></div>
+              <div className="space-y-1">
+                <Label className="text-xs">Sales Person</Label>
+                <Select value={salesOrderForm.salesPersonId || '__none__'} onValueChange={v => setSalesOrderForm({...salesOrderForm, salesPersonId: v === '__none__' ? '' : v})}>
+                  <SelectTrigger className="h-9"><SelectValue placeholder="Select" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    {employees.filter(e => e.status === 'active' && (e.roles || '').split(',').map(r => r.trim()).includes('sales')).map(e => <SelectItem key={e.id} value={e.id}>{e.name}{e.designation ? ` (${e.designation})` : ''}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
               <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={salesOrderForm.status} onValueChange={v => setSalesOrderForm({...salesOrderForm, status: v})}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
             </div>
 
@@ -3881,9 +3998,21 @@ export default function Home() {
                 <SelectItem value="90">Last 90 days</SelectItem>
                 <SelectItem value="365">Last 12 months</SelectItem>
                 <SelectItem value="all">All time</SelectItem>
+                <SelectItem value="custom">Custom range</SelectItem>
               </SelectContent>
             </Select>
+            {reportRange === 'custom' && (
+              <>
+                <Input type="date" value={reportCustomFrom} onChange={e => setReportCustomFrom(e.target.value)} className="w-[150px]" placeholder="From" />
+                <span className="text-xs text-muted-foreground">→</span>
+                <Input type="date" value={reportCustomTo} onChange={e => setReportCustomTo(e.target.value)} className="w-[150px]" placeholder="To" />
+                <Button variant="default" size="sm" onClick={() => fetchReports()} disabled={reportLoading}>Apply</Button>
+              </>
+            )}
             <Button variant="outline" size="icon" onClick={() => fetchReports()} title="Refresh"><RefreshCw className={`w-4 h-4 ${reportLoading ? 'animate-spin' : ''}`} /></Button>
+            <Button variant="outline" size="sm" onClick={handleExportReports} disabled={reportExporting || !reportData} title="Download current tab as Excel" style={{ display: hasPermission('menu', 'reports', 'export') ? '' : 'none' }}>
+              {reportExporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}Excel
+            </Button>
           </div>
         </div>
 
@@ -4363,7 +4492,7 @@ export default function Home() {
     const availableEntities = isManagerOrAdmin ? entities : entities.filter(e => user.entityAccess.some(ea => ea.entityId === e.id))
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <div className="w-full max-w-3xl">
+        <div className="w-full max-w-5xl">
           <div className="text-center mb-8">
             <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4"><Package className="w-8 h-8 text-primary-foreground" /></div>
             <h1 className="text-2xl font-bold">Select Entity</h1>
@@ -4389,24 +4518,41 @@ export default function Home() {
             </Card>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {availableEntities.map(entity => (
-                  <Card key={entity.id} className="hover:shadow-lg transition-all cursor-pointer hover:border-primary group" onClick={() => { setWorkingEntity({ id: entity.id, name: entity.name }); setCurrentView('itemPrice') }}>
-                    <CardContent className="pt-6 text-center">
-                      <div className="w-14 h-14 bg-primary/10 rounded-xl flex items-center justify-center mx-auto mb-3 group-hover:bg-primary/20 transition-colors"><Building2 className="w-7 h-7 text-primary" /></div>
-                      <h3 className="font-semibold text-lg">{entity.name}</h3>
-                      {entity.description && <p className="text-sm text-muted-foreground mt-1">{entity.description}</p>}
-                    </CardContent>
-                  </Card>
-                ))}
-              </div>
-              {isManagerOrAdmin && (
-                <div className="mt-6 text-center">
-                  <Button variant="outline" onClick={openNewEntityDialog} className="gap-2">
-                    <Plus className="w-4 h-4" />Create New Entity
-                  </Button>
+              {/* ★ Row-based table layout — scales to any number of entities */}
+              <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
+                <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
+                  <div>
+                    <h3 className="font-semibold text-sm">Entities ({availableEntities.length})</h3>
+                    <p className="text-[11px] text-muted-foreground">Click any row to enter</p>
+                  </div>
+                  {isManagerOrAdmin && (
+                    <Button variant="outline" size="sm" onClick={openNewEntityDialog} className="gap-2">
+                      <Plus className="w-4 h-4" />New Entity
+                    </Button>
+                  )}
                 </div>
-              )}
+                <div className="max-h-[60vh] overflow-y-auto">
+                  {availableEntities.map((entity, idx) => (
+                    <button
+                      key={entity.id}
+                      onClick={() => { setWorkingEntity({ id: entity.id, name: entity.name }); setCurrentView('itemPrice') }}
+                      className="w-full text-left px-4 py-3.5 flex items-center gap-4 hover:bg-primary/5 border-b last:border-0 transition-colors group"
+                    >
+                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                        <Building2 className="w-5 h-5 text-primary" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs text-muted-foreground font-mono">#{String(idx + 1).padStart(2, '0')}</span>
+                          <h3 className="font-semibold text-sm truncate">{entity.name}</h3>
+                        </div>
+                        {entity.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{entity.description}</p>}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                    </button>
+                  ))}
+                </div>
+              </div>
             </>
           )}
 
@@ -4432,6 +4578,98 @@ export default function Home() {
       </div>
     )
   }
+
+  // ★ Employees master data page
+  const renderEmployeesPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Employees</h2>
+          <p className="text-sm text-muted-foreground">Track staff and their functional roles (Sales / Accounts / Inventory). Sales persons appear in the New Sales form dropdown.</p>
+        </div>
+        <Button onClick={openNewEmployeeDialog} className="gap-2"><Plus className="w-4 h-4" />New Employee</Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Name</TableHead>
+            <TableHead className="font-semibold">Designation</TableHead>
+            <TableHead className="font-semibold">Phone</TableHead>
+            <TableHead className="font-semibold">Roles</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {employees.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No employees yet.</TableCell></TableRow>
+            : employees.map(emp => {
+              const roles = (emp.roles || '').split(',').filter(Boolean)
+              return (
+                <TableRow key={emp.id} className="hover:bg-muted/30">
+                  <TableCell className="font-medium">{emp.name}{emp.email ? <div className="text-[10px] text-muted-foreground">{emp.email}</div> : null}</TableCell>
+                  <TableCell className="text-sm">{emp.designation || '—'}</TableCell>
+                  <TableCell className="text-sm">{emp.phone || '—'}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1 flex-wrap">
+                      {roles.length === 0 ? <span className="text-xs text-muted-foreground">—</span> :
+                        roles.map(r => {
+                          const color = r === 'sales' ? 'bg-green-100 text-green-800' : r === 'accounts' ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'
+                          return <Badge key={r} variant="outline" className={`text-xs ${color}`}>{r}</Badge>
+                        })
+                      }
+                    </div>
+                  </TableCell>
+                  <TableCell>{emp.status === 'active' ? <Badge className="bg-green-100 text-green-800">Active</Badge> : <Badge variant="outline">Inactive</Badge>}</TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => openEditEmployeeDialog(emp)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteEmployee(emp.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={showEmployeeDialog} onOpenChange={setShowEmployeeDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{editingEmployeeId ? 'Edit Employee' : 'New Employee'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveEmployee} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Name *</Label><Input value={employeeForm.name} onChange={e => setEmployeeForm({ ...employeeForm, name: e.target.value })} required /></div>
+              <div className="space-y-1"><Label className="text-xs">Designation</Label><Input placeholder="e.g. Sales Executive" value={employeeForm.designation} onChange={e => setEmployeeForm({ ...employeeForm, designation: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Phone</Label><Input value={employeeForm.phone} onChange={e => setEmployeeForm({ ...employeeForm, phone: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Email</Label><Input value={employeeForm.email} onChange={e => setEmployeeForm({ ...employeeForm, email: e.target.value })} /></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Address</Label><Input value={employeeForm.address} onChange={e => setEmployeeForm({ ...employeeForm, address: e.target.value })} /></div>
+            <div className="space-y-1">
+              <Label className="text-xs">Functional Roles</Label>
+              <p className="text-[11px] text-muted-foreground">Tick all that apply. Sales persons will appear in the New Sales form dropdown.</p>
+              <div className="flex gap-2 flex-wrap pt-1">
+                {[
+                  { key: 'sales', label: 'Sales Person', color: 'bg-green-100 text-green-800 border-green-300' },
+                  { key: 'accounts', label: 'Accounts', color: 'bg-blue-100 text-blue-800 border-blue-300' },
+                  { key: 'inventory', label: 'Inventory', color: 'bg-purple-100 text-purple-800 border-purple-300' },
+                ].map(r => (
+                  <button
+                    key={r.key}
+                    type="button"
+                    onClick={() => toggleEmployeeRole(r.key)}
+                    className={`px-3 py-1.5 rounded-md text-xs font-medium border transition-colors ${employeeForm.roles.includes(r.key) ? r.color : 'bg-background text-muted-foreground border-border hover:bg-muted'}`}
+                  >
+                    {employeeForm.roles.includes(r.key) ? '✓ ' : ''}{r.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={employeeForm.status} onValueChange={v => setEmployeeForm({ ...employeeForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            <div className="space-y-1"><Label className="text-xs">Notes</Label><Input value={employeeForm.notes} onChange={e => setEmployeeForm({ ...employeeForm, notes: e.target.value })} placeholder="Optional notes" /></div>
+            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEmployeeId ? 'Update' : 'Create'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
 
   // Groups page
   const renderGroupsPage = () => (
@@ -4613,6 +4851,7 @@ export default function Home() {
       case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'uom': return renderMasterDataPage<UoMData>('Unit of Measure (UoM)', uomList, ['name','description'], uomForm, setUomForm, editingUomId, setEditingUomId, showUomDialog, setShowUomDialog, handleSaveUom, handleDeleteUom, { name:{label:'UoM Name*',type:'text',placeholder:'e.g. PCS, KG, LTR'},description:{label:'Description',type:'text'} })
       case 'suppliers': return renderMasterDataPage<SupplierData>('Suppliers', suppliers, ['name','phone','email','address','status'], supplierForm, setSupplierForm, editingSupplierId, setEditingSupplierId, showSupplierDialog, setShowSupplierDialog, handleSaveSupplier, handleDeleteSupplier, { name:{label:'Supplier Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},status:{label:'Status',type:'select',options:['active','inactive']} })
+      case 'employees': return renderEmployeesPage()
       case 'customers': return renderMasterDataPage<CustomerData>('Customer Database', customers, ['name','phone','email','address','type','status'], customerForm, setCustomerForm, editingCustomerId, setEditingCustomerId, showCustomerDialog, setShowCustomerDialog, handleSaveCustomer, handleDeleteCustomer, { name:{label:'Customer Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},type:{label:'Type',type:'select',options:['regular','wholesale','corporate']},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'groups': return renderGroupsPage()
       case 'subGroups': return renderSubGroupsPage()

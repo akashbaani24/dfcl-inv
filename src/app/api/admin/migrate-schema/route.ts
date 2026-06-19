@@ -166,6 +166,47 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `PurchaseItem_itemId_idx` ON `PurchaseItem`(`itemId`)',
     description: 'Index on PurchaseItem.itemId',
   },
+  // v47: Add salesPersonId column to SalesOrder (nullable FK to Employee)
+  {
+    id: '2026_06_19_sales_person',
+    sql: 'ALTER TABLE SalesOrder ADD COLUMN salesPersonId TEXT',
+    description: 'Add salesPersonId column to SalesOrder (nullable FK to Employee)',
+  },
+  // v47: Create Employee table
+  {
+    id: '2026_06_19_create_Employee',
+    sql: `CREATE TABLE IF NOT EXISTS "Employee" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "name" TEXT NOT NULL,
+      "phone" TEXT NOT NULL DEFAULT '',
+      "email" TEXT NOT NULL DEFAULT '',
+      "address" TEXT NOT NULL DEFAULT '',
+      "designation" TEXT NOT NULL DEFAULT '',
+      "roles" TEXT NOT NULL DEFAULT '',
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "notes" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+    description: 'Create Employee table',
+  },
+  // v47: Indexes for Employee
+  {
+    id: '2026_06_19_emp_idx_roles',
+    sql: 'CREATE INDEX IF NOT EXISTS `Employee_roles_idx` ON `Employee`(`roles`)',
+    description: 'Index on Employee.roles',
+  },
+  {
+    id: '2026_06_19_emp_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `Employee_status_idx` ON `Employee`(`status`)',
+    description: 'Index on Employee.status',
+  },
+  // v47: Index for SalesOrder.salesPersonId
+  {
+    id: '2026_06_19_so_idx_salesperson',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_salesPersonId_idx` ON `SalesOrder`(`salesPersonId`)',
+    description: 'Index on SalesOrder.salesPersonId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -42,7 +42,7 @@ export async function POST(request: NextRequest) {
     if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const body = await request.json();
-    const { entityId, customerId, orderDate, deliveryDate, status, notes, items, payments } = body;
+    const { entityId, customerId, salesPersonId, orderDate, deliveryDate, status, notes, items, payments } = body;
 
     if (!entityId) return NextResponse.json({ error: 'Entity is required' }, { status: 400 });
     if (!customerId) return NextResponse.json({ error: 'Customer is required' }, { status: 400 });
@@ -62,6 +62,7 @@ export async function POST(request: NextRequest) {
         salesNo,
         entityId,
         customerId,
+        salesPersonId: salesPersonId || null,
         orderDate: orderDate ? new Date(orderDate) : new Date(),
         deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
         status: status || 'pending',

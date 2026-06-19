@@ -248,6 +248,29 @@ model Supplier {
   purchases Purchase[]
 }
 
+// ★ Employee master data — used to track staff and their functional roles
+// (sales person, accounts, inventory). Linked from SalesOrder.salesPersonId.
+model Employee {
+  id          String   @id @default(cuid())
+  name        String
+  phone       String   @default("")
+  email       String   @default("")
+  address     String   @default("")
+  designation String   @default("")  // e.g. "Sales Executive", "Accountant"
+  // Role tags — a single employee can hold multiple roles (stored as comma-separated)
+  // e.g. "sales,accounts" or "inventory" or "sales,inventory,accounts"
+  roles       String   @default("")  // comma-separated: "sales", "accounts", "inventory"
+  status      String   @default("active")  // "active" or "inactive"
+  notes       String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  salesOrders SalesOrder[]  // sales orders where this employee was the sales person
+
+  @@index([roles])
+  @@index([status])
+}
+
 // ★ Purchase module — for tracking inventory purchases from suppliers
 // Flow:
 //   1. User creates a Purchase (status="pending") with multiple items
@@ -371,6 +394,7 @@ model SalesOrder {
   salesNo       String         @unique
   entityId      String
   customerId    String
+  salesPersonId String?  // ★ optional link to Employee who made the sale
   orderDate     DateTime       @default(now())
   deliveryDate  DateTime?
   status        String         @default("pending")
@@ -379,9 +403,10 @@ model SalesOrder {
   createdAt     DateTime       @default(now())
   updatedAt     DateTime       @updatedAt
 
-  entity     Entity          @relation(fields: [entityId], references: [id], onDelete: Cascade)
-  customer   Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
-  items      SalesOrderItem[]
+  entity      Entity          @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  customer    Customer        @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  salesPerson Employee?       @relation(fields: [salesPersonId], references: [id], onDelete: SetNull)
+  items       SalesOrderItem[]
   payments   SalesPayment[]
   returns    SalesReturn[]
 }
