@@ -164,7 +164,7 @@ type ViewType =
   | 'itemAdjustment' | 'transfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
-  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'reports'
+  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -227,6 +227,7 @@ const ALL_MASTER_DATA_ITEMS = [
   { key: 'suppliers', label: 'Suppliers' },
   { key: 'customers', label: 'Customer Database' },
   { key: 'employees', label: 'Employees' },
+  { key: 'bookingReasons', label: 'Booking Reasons' },
 ]
 
 // Auth-aware fetch helper: always sends token via Authorization header + credentials
@@ -272,6 +273,7 @@ export default function Home() {
   const [stockViewOpen, setStockViewOpen] = useState(false)
   const [salesOpen, setSalesOpen] = useState(false)
   const [purchaseOpen, setPurchaseOpen] = useState(false)
+  const [inventoryOpen, setInventoryOpen] = useState(false)
 
   // Working entity (selected after login)
   const [workingEntity, setWorkingEntity] = useState<{ id: string; name: string } | null>(null)
@@ -1996,26 +1998,30 @@ export default function Home() {
 
   // Function menu items (main working area, shown after entity selection)
   const functionItems = [
-    { key: 'itemPrice' as ViewType, label: 'Item Price', icon: TrendingUp },
-    { key: 'stockView' as ViewType, label: 'Stock View', icon: BarChart3, isParent: true, children: [
+    // ★ Master Data at top
+    { key: 'masterData' as ViewType, label: 'Master Data', icon: Database, isParent: true, children: [] },
+    // ★ Inventory tab
+    { key: 'inventory' as ViewType, label: 'Inventory', icon: Package, isParent: true, children: [
+      { key: 'itemPrice' as ViewType, label: 'Item Price', icon: TrendingUp },
       { key: 'myEntityStock' as ViewType, label: 'My Entity Stock', icon: Warehouse },
       { key: 'allEntityStock' as ViewType, label: 'All Entity Stock', icon: BarChart3 },
+      { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', icon: Settings2 },
+      { key: 'transfer' as ViewType, label: 'Transfer', icon: ArrowRightLeft },
+      { key: 'receive' as ViewType, label: 'Receive', icon: ArrowDownToLine },
+      { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
     ]},
-    { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', icon: Settings2 },
-    { key: 'transfer' as ViewType, label: 'Transfer', icon: ArrowRightLeft },
-    { key: 'receive' as ViewType, label: 'Receive', icon: ArrowDownToLine },
+    // ★ Purchase tab
     { key: 'purchase' as ViewType, label: 'Purchase', icon: ShoppingCart, isParent: true, children: [
       { key: 'purchase' as ViewType, label: 'Purchase List', icon: ClipboardList },
       { key: 'purchaseApproval' as ViewType, label: 'Purchase Approval', icon: CheckCircle2 },
       { key: 'supplierPayments' as ViewType, label: 'Supplier Payments', icon: DollarSign },
     ]},
+    // ★ Sales tab
     { key: 'sales' as ViewType, label: 'Sales', icon: ShoppingCart, isParent: true, children: [
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
       { key: 'delivery' as ViewType, label: 'Delivery', icon: Truck },
     ]},
-    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
-    { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText },
     { key: 'damage' as ViewType, label: 'Damage/Wastage', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
@@ -2056,6 +2062,7 @@ export default function Home() {
     { key: 'suppliers' as ViewType, label: 'Suppliers', icon: Truck, perm: hasMasterDataAccess('suppliers') },
     { key: 'customers' as ViewType, label: 'Customer Database', icon: UserCircle, perm: hasMasterDataAccess('customers') },
     { key: 'employees' as ViewType, label: 'Employees', icon: Users, perm: hasMasterDataAccess('employees') },
+    { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText, perm: hasMasterDataAccess('bookingReasons') },
   ]
 
   const visibleMasterDataItems = masterDataItems.filter(item => item.perm === undefined || item.perm)
@@ -2094,29 +2101,46 @@ export default function Home() {
     <div className="space-y-0.5">
       {functionItems.map(item => {
         if (item.isParent && item.children) {
-          // Each parent menu has its own open state and active check
+          // ★ Master Data parent — uses visibleMasterDataItems as children
+          if (item.key === 'masterData') {
+            const mdItems = visibleMasterDataItems.map(mi => ({
+              key: mi.key as ViewType,
+              label: mi.label,
+              icon: mi.icon,
+            }))
+            if (mdItems.length === 0) return null
+            return (
+              <div key={item.key}>
+                <button onClick={() => setMasterDataOpen(!masterDataOpen)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isMasterDataActive ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
+                  <item.icon className="w-4 h-4 shrink-0" /><span className="flex-1 text-left">{item.label}</span><ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${masterDataOpen ? 'rotate-180' : ''}`} />
+                </button>
+                {masterDataOpen && (
+                  <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
+                    {mdItems.map(child => (
+                      <button key={child.key} onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(child.key) } else { setCurrentView(child.key); onNavigate?.() } }} onContextMenu={(e) => handleContextMenu(e, child.key)} onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(child.key) } }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === child.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
+                        <child.icon className="w-3.5 h-3.5 shrink-0" />{child.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )
+          }
+
+          // ★ Other parent items (inventory, purchase, sales)
           let isOpen: boolean
           let isActive: boolean
           let toggleOpen: () => void
-          if (item.key === 'stockView') {
-            isOpen = stockViewOpen
-            isActive = isStockViewActive
-            toggleOpen = () => setStockViewOpen(!stockViewOpen)
+          if (item.key === 'inventory') {
+            isOpen = inventoryOpen; isActive = ['itemPrice','myEntityStock','allEntityStock','itemAdjustment','transfer','receive','booking'].includes(currentView); toggleOpen = () => setInventoryOpen(!inventoryOpen)
           } else if (item.key === 'purchase') {
-            isOpen = purchaseOpen
-            isActive = isPurchaseActive
-            toggleOpen = () => setPurchaseOpen(!purchaseOpen)
+            isOpen = purchaseOpen; isActive = isPurchaseActive; toggleOpen = () => setPurchaseOpen(!purchaseOpen)
           } else {
-            // sales (and any future parent)
-            isOpen = salesOpen
-            isActive = isSalesActive
-            toggleOpen = () => setSalesOpen(!salesOpen)
+            isOpen = salesOpen; isActive = isSalesActive; toggleOpen = () => setSalesOpen(!salesOpen)
           }
-          // Auto-open if active (so user sees which parent they're under)
           if (isActive && !isOpen) {
-            // schedule open without causing render loop
             setTimeout(() => {
-              if (item.key === 'stockView') setStockViewOpen(true)
+              if (item.key === 'inventory') setInventoryOpen(true)
               else if (item.key === 'purchase') setPurchaseOpen(true)
               else setSalesOpen(true)
             }, 0)
@@ -2952,6 +2976,15 @@ export default function Home() {
                 <div className="flex flex-wrap gap-2 pt-3 border-t">
                   <Button variant="default" size="sm" onClick={() => printSalesInvoice(so)}><FileText className="w-4 h-4 mr-2" />Print Invoice</Button>
                   <Button variant="outline" size="sm" onClick={() => { setEditingSalesOrderId(so.id); setShowAddPaymentDialog(true) }}><DollarSign className="w-4 h-4 mr-2" />Add Payment</Button>
+                  {so.status !== 'delivered' && so.status !== 'cancelled' && (
+                    <Button variant="outline" size="sm" className="text-green-700 hover:text-green-800" onClick={async () => {
+                      try {
+                        const res = await authFetch(`/api/sales-orders/${so.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'delivered' }) })
+                        if (res.ok) { toast({ title: 'Success', description: 'Order marked as Delivered/Complete' }); setShowSalesDetailDialog(false); fetchSalesOrders() }
+                        else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+                      } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+                    }}><CheckCircle2 className="w-4 h-4 mr-2" />Mark Complete</Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => setShowSalesDetailDialog(false)}><X className="w-4 h-4 mr-2" />Close</Button>
                 </div>
               </div>
@@ -4469,36 +4502,38 @@ export default function Home() {
     </div>
   )
 
+  // ★ Supplier Payments state (top-level, not inside render function)
+  const [spPayments, setSpPayments] = useState<any[]>([])
+  const [spLoading, setSpLoading] = useState(false)
+  const [showSpDialog, setShowSpDialog] = useState(false)
+  const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
+  const [spSearch, setSpSearch] = useState('')
+
+  const fetchSupplierPayments = async () => {
+    if (!workingEntity) return
+    setSpLoading(true)
+    try {
+      const params = new URLSearchParams()
+      if (workingEntity.id) params.set('entityId', workingEntity.id)
+      const res = await authFetch(`/api/supplier-payments?${params}`)
+      if (res.ok) { const d = await res.json(); setSpPayments(d.payments || []) }
+    } catch {} finally { setSpLoading(false) }
+  }
+
+  useEffect(() => { if (currentView === 'supplierPayments') fetchSupplierPayments() }, [currentView, workingEntity?.id])
+
+  const handleSaveSp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = await authFetch('/api/supplier-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...spForm, entityId: workingEntity?.id, amount: parseFloat(spForm.amount) }) })
+      if (res.ok) { toast({ title: 'Success', description: 'Payment recorded' }); setShowSpDialog(false); setSpForm({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' }); fetchSupplierPayments() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+
   // ★ Supplier Payments page
   const renderSupplierPaymentsPage = () => {
-    const [spSearch, setSpSearch] = useState('')
-    const [payments, setPayments] = useState<any[]>([])
-    const [spLoading, setSpLoading] = useState(false)
-    const [showSpDialog, setShowSpDialog] = useState(false)
-    const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
-
-    useEffect(() => {
-      const fetch = async () => {
-        setSpLoading(true)
-        try {
-          const params = new URLSearchParams()
-          if (workingEntity?.id) params.set('entityId', workingEntity.id)
-          const res = await authFetch(`/api/supplier-payments?${params}`)
-          if (res.ok) { const d = await res.json(); setPayments(d.payments || []) }
-        } catch {} finally { setSpLoading(false) }
-      }
-      fetch()
-    }, [workingEntity?.id])
-
-    const handleSaveSp = async (e: React.FormEvent) => {
-      e.preventDefault()
-      try {
-        const res = await authFetch('/api/supplier-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...spForm, entityId: workingEntity?.id, amount: parseFloat(spForm.amount) }) })
-        if (res.ok) { toast({ title: 'Success', description: 'Payment recorded' }); setShowSpDialog(false); setSpForm({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' }); const params = new URLSearchParams(); if (workingEntity?.id) params.set('entityId', workingEntity.id); const r = await authFetch(`/api/supplier-payments?${params}`); if (r.ok) { const d = await r.json(); setPayments(d.payments || []) } } else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
-      } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
-    }
-
-    const filtered = spSearch ? payments.filter(p => (p.supplier?.name || '').toLowerCase().includes(spSearch.toLowerCase())) : payments
+    const filtered = spSearch ? spPayments.filter(p => (p.supplier?.name || '').toLowerCase().includes(spSearch.toLowerCase())) : spPayments
     const totalPaid = filtered.reduce((s, p) => s + p.amount, 0)
 
     return (
@@ -4540,7 +4575,7 @@ export default function Home() {
         <Dialog open={showSpDialog} onOpenChange={setShowSpDialog}>
           <DialogContent><DialogHeader><DialogTitle>New Supplier Payment</DialogTitle></DialogHeader>
             <form onSubmit={handleSaveSp} className="space-y-3">
-              <div className="space-y-1"><Label className="text-xs">Supplier *</Label><Select value={spForm.supplierId || '__none__'} onValueChange={v => setSpForm({ ...spForm, supplierId: v === '__none__' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger><SelectContent><SelectItem value="__none__">— None —</SelectItem>{suppliers.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-1"><Label className="text-xs">Supplier *</Label><Select value={spForm.supplierId || '__none__'} onValueChange={v => setSpForm({ ...spForm, supplierId: v === '__none__' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger><SelectContent><SelectItem value="__none__">— None —</SelectItem>{(suppliers || []).filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="space-y-1"><Label className="text-xs">Amount *</Label><Input type="number" step="0.01" value={spForm.amount} onChange={e => setSpForm({ ...spForm, amount: e.target.value })} required /></div>
                 <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={spForm.paymentDate} onChange={e => setSpForm({ ...spForm, paymentDate: e.target.value })} /></div>
@@ -4558,7 +4593,8 @@ export default function Home() {
 
   // ★ Delivery Management page
   const renderDeliveryPage = () => {
-    const deliveryOrders = salesOrders.filter((s: any) => s.status === 'delivered' || s.status === 'processing' || (s as any).deliveryStatus === 'out_for_delivery')
+    useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [])
+    const deliveryOrders = (salesOrders || []).filter((s: any) => s.status === 'delivered' || s.status === 'processing' || (s as any).deliveryStatus === 'out_for_delivery')
     const updateDeliveryStatus = async (id: string, status: string) => {
       try {
         await authFetch(`/api/sales-orders/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deliveryStatus: status }) })
@@ -4619,7 +4655,7 @@ export default function Home() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Damage/Wastage Tracking - {workingEntity?.name}</h2>
-          <Button onClick={() => { setShowAdjustmentDialog(true); setTxItemSearch(''); setTxItemResults([]) }}><Plus className="w-4 h-4 mr-2" />Record Damage</Button>
+          <Button onClick={() => { setTxItemSearch(''); setTxItemResults([]); setCurrentView('itemAdjustment') }}><Plus className="w-4 h-4 mr-2" />Record Damage</Button>
         </div>
         <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-900">
           <p className="font-semibold">⚠️ How to record damage:</p>

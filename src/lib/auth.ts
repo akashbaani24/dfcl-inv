@@ -144,6 +144,7 @@ export const MASTER_DATA_ITEMS = [
   { key: 'suppliers', label: 'Suppliers', adminOnly: false },
   { key: 'customers', label: 'Customer Database', adminOnly: false },
   { key: 'employees', label: 'Employees', adminOnly: false },
+  { key: 'bookingReasons', label: 'Booking Reasons', adminOnly: false },
 ] as const;
 
 export type MasterDataKey = typeof MASTER_DATA_ITEMS[number]['key'];
