@@ -9,6 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Combobox, type ComboOption } from '@/components/ui/combobox'
+import { useConfirmAction } from '@/hooks/use-confirm-action'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -266,6 +267,9 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 }
 
 export default function Home() {
+  // ★ Global confirmation dialog for Create/Submit/Approve actions
+  const { confirm, ConfirmHost } = useConfirmAction()
+
   const [user, setUser] = useState<UserData | null>(null)
   const [loginUsername, setLoginUsername] = useState('')
   const [loginPassword, setLoginPassword] = useState('')
@@ -966,6 +970,12 @@ export default function Home() {
     e.preventDefault()
     if (bookingForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
     if (!bookingForm.forEntityId) { toast({ title: 'Error', description: 'Please select For Entity', variant: 'destructive' }); return }
+    const ok = await confirm({
+      title: editingBookingId ? 'Update Booking?' : 'Create Booking?',
+      message: `This will ${editingBookingId ? 'update' : 'create'} a booking with ${bookingForm.items.length} item line(s). The booking will reserve stock for the selected items until the booking expires or is cancelled. Regular users will not be able to modify this booking afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: editingBookingId ? 'Update Booking' : 'Create Booking',
+    })
+    if (!ok) return
     try {
       let customerId = bookingForm.customerId
 
@@ -1080,6 +1090,12 @@ export default function Home() {
   const handleSaveAdjustment = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!workingEntity || !adjustmentForm.itemId || !adjustmentForm.quantity) return
+    const ok = await confirm({
+      title: 'Save Item Adjustment?',
+      message: `This will ${adjustmentForm.adjustmentType} stock by ${adjustmentForm.quantity} units${workingEntity ? ` at ${workingEntity.name}` : ''}. The adjustment will be recorded and stock will be updated immediately. Regular users will not be able to modify this afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Save Adjustment',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/item-adjustments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...adjustmentForm, entityId: workingEntity.id, quantity: parseInt(adjustmentForm.quantity) }) })
       if (res.ok) { toast({ title: 'Success', description: 'Adjustment saved' }); setShowAdjustmentDialog(false); setAdjustmentForm({ itemId: '', adjustmentType: 'increase', quantity: '', reason: '' }); setCurrentView('itemAdjustment'); fetchAdjustments() }
@@ -1090,6 +1106,13 @@ export default function Home() {
   const handleSaveTransfer = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!workingEntity || !transferForm.itemId || !transferForm.toEntityId || !transferForm.quantity) return
+    const targetEntity = entities.find(en => en.id === transferForm.toEntityId)
+    const ok = await confirm({
+      title: 'Create Transfer?',
+      message: `This will transfer ${transferForm.quantity} unit(s) from "${workingEntity?.name}" to "${targetEntity?.name || 'another entity'}". The transfer will be created as "pending" and the destination entity will need to receive it. Regular users will not be able to modify this transfer afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Create Transfer',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/transfers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...transferForm, fromEntityId: workingEntity.id, quantity: parseInt(transferForm.quantity) }) })
       if (res.ok) { toast({ title: 'Success', description: 'Transfer created' }); setShowTransferDialog(false); setTransferForm({ itemId: '', toEntityId: '', quantity: '', notes: '' }); fetchTransfers() }
@@ -1100,6 +1123,12 @@ export default function Home() {
   const handleSaveReceive = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!workingEntity || !receiveForm.itemId || !receiveForm.quantity) return
+    const ok = await confirm({
+      title: 'Save Receive?',
+      message: `This will receive ${receiveForm.quantity} unit(s) into "${workingEntity?.name}"${receiveForm.sourceEntityId ? ` from the selected source entity (source entity's stock will be decremented)` : ''}. The receive will be recorded and stock will be updated immediately. Regular users will not be able to modify this afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Save Receive',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/receives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...receiveForm, entityId: workingEntity.id, quantity: parseInt(receiveForm.quantity), sourceEntityId: receiveForm.sourceEntityId || undefined }) })
       if (res.ok) { toast({ title: 'Success', description: 'Receive saved' }); setShowReceiveDialog(false); setReceiveForm({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' }); fetchReceives() }
@@ -1160,6 +1189,15 @@ export default function Home() {
     e.preventDefault()
     if (!workingEntity) return
     if (salesOrderForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
+    const itemCount = salesOrderForm.items.length
+    const totalQty = salesOrderForm.items.reduce((s, it: any) => s + (parseInt(it.quantity) || 0), 0)
+    const totalAmount = salesOrderForm.items.reduce((s, it: any) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0) - (parseFloat(salesOrderForm.discount) || 0)
+    const ok = await confirm({
+      title: editingSalesOrderId ? 'Update Sales Order?' : 'Create Sales Order?',
+      message: `This will ${editingSalesOrderId ? 'update' : 'create'} a sales order with ${itemCount} item line(s), ${totalQty} unit(s) total, and a net amount of ${totalAmount.toFixed(2)}. Stock will be reduced and incentives will be auto-calculated. Regular users will not be able to modify this order afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: editingSalesOrderId ? 'Update Order' : 'Create Order',
+    })
+    if (!ok) return
     try {
       let customerId = salesOrderForm.customerId
       if (salesCustomerMode === 'new') {
@@ -1396,6 +1434,12 @@ export default function Home() {
   const handleSaveSalesReturn = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!workingEntity || !salesReturnForm.itemId || !salesReturnForm.customerId || !salesReturnForm.quantity) return
+    const ok = await confirm({
+      title: 'Create Sales Return?',
+      message: `This will create a sales return for ${salesReturnForm.quantity} unit(s) at price ${salesReturnForm.price}. When approved, the stock will be increased. Regular users will not be able to modify this return afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Create Return',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/sales-returns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...salesReturnForm, entityId: workingEntity.id, quantity: parseInt(salesReturnForm.quantity), price: parseFloat(salesReturnForm.price), salesOrderId: salesReturnForm.salesOrderId || undefined }) })
       if (res.ok) { toast({ title: 'Success', description: 'Sales return created' }); setShowSalesReturnDialog(false); setSalesReturnForm({ itemId: '', customerId: '', salesOrderId: '', quantity: '', price: '', reason: '' }); fetchSalesReturns() }
@@ -1459,6 +1503,12 @@ export default function Home() {
       toast({ title: 'Error', description: 'All required fields must be filled', variant: 'destructive' })
       return
     }
+    const ok = await confirm({
+      title: 'Save Tailor Payment?',
+      message: `This will record a payment of ${parseFloat(tailorPaymentForm.amount).toFixed(2)} to the selected tailor for the selected sales order. The payment will be recorded permanently and used in the tailor's payment history. Regular users will not be able to modify this payment afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Save Payment',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/tailor-payments', {
         method: 'POST',
@@ -2135,6 +2185,12 @@ export default function Home() {
   // User handlers
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault()
+    const ok = await confirm({
+      title: 'Create User?',
+      message: `This will create a new user "${userForm.username}" with role "${userForm.role}". The user's permissions will be applied as configured above. Regular users will not be able to modify this user afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Create User',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, masterDataAccess: userMasterDataAccess, columnAccess: columnAccessForm }) })
       const data = await res.json()
@@ -2146,6 +2202,12 @@ export default function Home() {
   const handleUpdateUser = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!editingUserId) return
+    const ok = await confirm({
+      title: 'Update User?',
+      message: `This will update user "${userForm.username || ''}" with the new permissions and settings. The changes will be applied immediately and the user will need to log in again for some changes to take effect. Regular users will not be able to modify this user afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Update User',
+    })
+    if (!ok) return
     try {
       const updateData: Record<string, unknown> = { ...userForm, entityIds: userEntityIds, menuAccess: userMenuAccess, masterDataAccess: userMasterDataAccess, columnAccess: columnAccessForm }
       if (!updateData.password) delete updateData.password
@@ -4056,6 +4118,13 @@ export default function Home() {
       toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' })
       return
     }
+    const grandTotal = purchaseForm.items.reduce((s, it) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0)
+    const ok = await confirm({
+      title: 'Create Purchase?',
+      message: `This will create a purchase with ${purchaseForm.items.length} item line(s) and a grand total of ${grandTotal.toFixed(2)}. The purchase will be created as "pending" and will need approval before stock is added. Regular users will not be able to modify this purchase afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Create Purchase',
+    })
+    if (!ok) return
     try {
       const payload = {
         purchaseDate: purchaseForm.purchaseDate,
@@ -4091,7 +4160,13 @@ export default function Home() {
   }
 
   const handleApprovePurchase = async (id: string) => {
-    if (!confirm('Approve this purchase? This will create Receive entries and add stock to the destination entity.')) return
+    const ok = await confirm({
+      title: 'Approve Purchase?',
+      message: 'This will approve the purchase, create Receive entries, and add stock to the destination entity. Once approved, the purchase cannot be un-approved by regular users. (Admins can still edit.) Do you want to continue?',
+      confirmLabel: 'Approve Purchase',
+      confirmVariant: 'default',
+    })
+    if (!ok) return
     try {
       const res = await authFetch(`/api/purchases/${id}/approve`, { method: 'POST' })
       const data = await res.json()
@@ -5493,6 +5568,12 @@ export default function Home() {
 
   const handleSaveSp = async (e: React.FormEvent) => {
     e.preventDefault()
+    const ok = await confirm({
+      title: 'Save Supplier Payment?',
+      message: `This will record a payment of ${parseFloat(spForm.amount || '0').toFixed(2)} to the selected supplier${spForm.purchaseId ? ' for the selected purchase' : ''}. The payment will be recorded permanently. Regular users will not be able to modify this payment afterwards. (Admins can still edit.) Do you want to continue?`,
+      confirmLabel: 'Save Payment',
+    })
+    if (!ok) return
     try {
       const res = await authFetch('/api/supplier-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...spForm, entityId: workingEntity?.id, amount: parseFloat(spForm.amount) }) })
       if (res.ok) { toast({ title: 'Success', description: 'Payment recorded' }); setShowSpDialog(false); setSpForm({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' }); fetchSupplierPayments() }
@@ -7547,6 +7628,31 @@ Wool Pant,Head Office,75,PCS`}</pre>
                     <div><span className="opacity-70">Skipped:</span> <strong className="text-amber-700">{stockUploadResult.skipped}</strong></div>
                     <div><span className="opacity-70">Wrong entity:</span> <strong className="text-red-700">{stockUploadResult.wrongEntity || 0}</strong></div>
                   </div>
+
+                  {/* ★ Special panel: "items not found" guidance — surfaces when every row was skipped */}
+                  {stockUploadResult.upserted === 0 && stockUploadResult.skipped > 0 && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-300 rounded-md">
+                      <p className="font-semibold text-amber-900 mb-1">⚠ No items were uploaded</p>
+                      <p className="text-xs text-amber-800">
+                        All rows were skipped because the items in your CSV are not in the Item Information master table yet.
+                        Stock upload only updates quantities for items that <strong>already exist</strong>.
+                      </p>
+                      <p className="text-xs text-amber-800 mt-1">
+                        <strong>How to fix:</strong> First upload the items via <strong>Master Data → Upload CSV</strong>
+                        (use the <code>barcode</code> and <code>itemCode</code> columns), then come back here to upload their stock.
+                      </p>
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant="outline"
+                        className="mt-2 h-7 text-xs"
+                        onClick={() => { setUploadResult(null); setCurrentView('upload') }}
+                      >
+                        Go to Items Upload →
+                      </Button>
+                    </div>
+                  )}
+
                   {stockUploadResult.errors && stockUploadResult.errors.length > 0 && (
                     <details className="mt-2">
                       <summary className="cursor-pointer text-xs font-medium">First {stockUploadResult.errors.length} warning(s) — click to expand</summary>
@@ -8342,6 +8448,8 @@ Wool Pant,Head Office,75,PCS`}</pre>
         )}
       </button>
     )}
+    {/* ★ Global confirmation dialog host — renders the AlertDialog when confirm() is called */}
+    {ConfirmHost}
     </>
   )
 }

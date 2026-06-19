@@ -167,21 +167,31 @@ export async function POST(request: NextRequest) {
 
         // Match item: barcode → itemCode → itemName
         let item: typeof items[0] | undefined;
+        let rowFailureReasons: string[] = []; // collect all reasons for this row's failure
         if (barcode) {
           item = itemByBarcode.get(barcode.toLowerCase());
-          if (!item && errors.length < 5) errors.push(`Row ${i + 1}: no item with barcode "${barcode}"`);
+          if (!item) rowFailureReasons.push(`barcode "${barcode}"`);
         }
         if (!item && itemCode) {
           item = itemByCode.get(itemCode.toLowerCase());
-          if (!item && errors.length < 5) errors.push(`Row ${i + 1}: no item with itemCode "${itemCode}"`);
+          if (!item) rowFailureReasons.push(`itemCode "${itemCode}"`);
         }
         if (!item && itemName && itemName !== 'N/A') {
           item = itemByName.get(itemName.toLowerCase());
-          if (!item && errors.length < 5) errors.push(`Row ${i + 1}: no item with name "${itemName}"`);
+          if (!item) rowFailureReasons.push(`itemName "${itemName}"`);
         }
 
         if (!item) {
           skipped++;
+          // ★ Helpful message: tell the user the items don't exist yet
+          if (errors.length < 5) {
+            const attempts = rowFailureReasons.length > 0 ? rowFailureReasons.join(' / ') : 'no identifier';
+            errors.push(
+              `Row ${i + 1}: no matching item found in the Item Information master table (tried: ${attempts}). ` +
+              `You must first upload these items via "Master Data → Upload CSV" before uploading their stock. ` +
+              `The stock upload only updates quantities for items that already exist in the system.`
+            );
+          }
           continue;
         }
 
