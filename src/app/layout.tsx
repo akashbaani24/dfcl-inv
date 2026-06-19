@@ -16,12 +16,6 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "Akash Inventory System",
   description: "Akash Inventory System — comprehensive inventory, sales, purchase, and incentive management with multi-entity support.",
-  manifest: "/manifest.json",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Akash Inventory",
-  },
 };
 
 export const viewport = {
@@ -40,17 +34,6 @@ export default function RootLayout({
       >
         {children}
         <Toaster />
-        <script
-          dangerouslySetInnerHTML={{
-            __html: `
-              if ('serviceWorker' in navigator) {
-                window.addEventListener('load', () => {
-                  navigator.serviceWorker.register('/sw.js').catch(() => {});
-                });
-              }
-            `,
-          }}
-        />
       </body>
     </html>
   );
