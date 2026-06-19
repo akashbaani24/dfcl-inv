@@ -519,8 +519,10 @@ export default function Home() {
 
   // ★ News Ticker state (top-level)
   const [tickerMessages, setTickerMessages] = useState<string[]>([])
+  const [tickerSettings, setTickerSettings] = useState({ speed: 30, bgColor: '#1e3a8a', textColor: '#ffffff', fontSize: 'sm' })
   const [showTickerInput, setShowTickerInput] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
+  const [showTickerSettings, setShowTickerSettings] = useState(false)
 
   const { toast } = useToast()
 
@@ -6781,26 +6783,55 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
     <div className="min-h-screen flex flex-col bg-background">
       {/* ★ News Ticker — scrolling text at top, right-to-left */}
       {tickerMessages.length > 0 && (
-        <div className="bg-primary text-primary-foreground py-2 overflow-hidden relative shrink-0">
-          <div className="ticker-track whitespace-nowrap text-sm font-semibold">
+        <div className="py-2 overflow-hidden relative shrink-0" style={{ backgroundColor: tickerSettings.bgColor, color: tickerSettings.textColor }}>
+          <div className="ticker-track whitespace-nowrap font-semibold" style={{ animationDuration: `${tickerSettings.speed}s`, fontSize: tickerSettings.fontSize === 'lg' ? '16px' : tickerSettings.fontSize === 'sm' ? '13px' : '14px' }}>
             {tickerMessages.map((msg, i) => (
               <span key={i} className="inline-block px-8">📢 {msg}</span>
             ))}
-            {/* Duplicate for seamless scroll */}
             {tickerMessages.map((msg, i) => (
               <span key={`d-${i}`} className="inline-block px-8">📢 {msg}</span>
             ))}
           </div>
-          {/* Admin/Manager: add new ticker message */}
+          {/* Admin/Manager controls */}
           {isManagerOrAdmin && (
-            <button onClick={() => setShowTickerInput(!showTickerInput)} className="absolute right-2 top-1/2 -translate-y-1/2 text-primary-foreground/80 hover:text-primary-foreground text-xs">
-              {showTickerInput ? '✕' : '+ Add'}
-            </button>
+            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
+              <button onClick={() => setShowTickerSettings(!showTickerSettings)} className="text-xs opacity-80 hover:opacity-100 px-1" title="Settings">⚙️</button>
+              <button onClick={() => { setShowTickerInput(!showTickerInput); setShowTickerSettings(false) }} className="text-xs opacity-80 hover:opacity-100 px-1" title="Add message">+ Add</button>
+            </div>
           )}
           {showTickerInput && (
-            <div className="absolute right-2 top-7 z-50 bg-card border rounded-md shadow-lg p-2 flex gap-1">
+            <div className="absolute right-2 top-8 z-50 bg-card border rounded-md shadow-lg p-2 flex gap-1">
               <Input placeholder="Type ticker message..." value={tickerInput} onChange={e => setTickerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && postTickerMessage()} className="h-7 text-xs w-64" />
               <Button size="sm" className="h-7 text-xs" onClick={postTickerMessage}>Post</Button>
+            </div>
+          )}
+          {showTickerSettings && (
+            <div className="absolute right-2 top-8 z-50 bg-card border rounded-md shadow-lg p-3 space-y-2 w-56 text-foreground">
+              <p className="text-xs font-bold">Ticker Settings</p>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Speed (seconds)</Label>
+                <Input type="number" min="5" max="120" value={tickerSettings.speed} onChange={e => setTickerSettings({ ...tickerSettings, speed: parseInt(e.target.value) || 30 })} className="h-7 w-16 text-xs text-right" />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Background</Label>
+                <input type="color" value={tickerSettings.bgColor} onChange={e => setTickerSettings({ ...tickerSettings, bgColor: e.target.value })} className="h-7 w-12 border rounded" />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Text Color</Label>
+                <input type="color" value={tickerSettings.textColor} onChange={e => setTickerSettings({ ...tickerSettings, textColor: e.target.value })} className="h-7 w-12 border rounded" />
+              </div>
+              <div className="flex items-center justify-between">
+                <Label className="text-xs">Font Size</Label>
+                <Select value={tickerSettings.fontSize} onValueChange={v => setTickerSettings({ ...tickerSettings, fontSize: v })}>
+                  <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sm">Small</SelectItem>
+                    <SelectItem value="md">Medium</SelectItem>
+                    <SelectItem value="lg">Large</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <Button size="sm" className="w-full h-7 text-xs" onClick={() => setShowTickerSettings(false)}>Done</Button>
             </div>
           )}
         </div>
