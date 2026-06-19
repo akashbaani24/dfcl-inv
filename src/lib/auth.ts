@@ -120,7 +120,6 @@ export const MENU_ITEMS = [
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
-  { key: 'bookingReasons', label: 'Booking Reasons', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
