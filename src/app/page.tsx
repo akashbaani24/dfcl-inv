@@ -4333,16 +4333,16 @@ export default function Home() {
                 <div className="flex flex-wrap gap-2 pt-3 border-t">
                   <Button variant="default" size="sm" onClick={() => printSalesInvoice(so)}><FileText className="w-4 h-4 mr-2" />Print Invoice</Button>
                   <Button variant="outline" size="sm" onClick={() => { setEditingSalesOrderId(so.id); setShowAddPaymentDialog(true) }}><DollarSign className="w-4 h-4 mr-2" />Add Payment</Button>
-                  {so.deliveryStatus === 'delivered' || so.status === 'delivered' ? (
+                  {so.deliveryStatus === 'delivered' && so.status === 'delivered' ? (
                     <Badge variant="outline" className="bg-green-100 text-green-800 self-center px-3 py-1.5">
-                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Delivered — Locked
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Completed — Locked
                     </Badge>
                   ) : so.status !== 'cancelled' && (
                     <Button variant="outline" size="sm" className="text-green-700 hover:text-green-800" onClick={async () => {
                       try {
                         const res = await authFetch(`/api/sales-orders/${so.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'delivered' }) })
-                        if (res.ok) { toast({ title: 'Success', description: 'Order marked as Delivered/Complete' }); setShowSalesDetailDialog(false); fetchSalesOrders() }
-                        else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+                        if (res.ok) { toast({ title: 'Success', description: 'Order marked as Complete' }); setShowSalesDetailDialog(false); fetchSalesOrders() }
+                        else { const d = await res.json(); toast({ title: 'Cannot Complete', description: d.error, variant: 'destructive' }) }
                       } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
                     }}><CheckCircle2 className="w-4 h-4 mr-2" />Mark Complete</Button>
                   )}
@@ -6232,17 +6232,31 @@ export default function Home() {
     // When user selects an order, show its items for picking
     const selectOrder = (order: any) => {
       setDeliverySelectedOrder(order)
-      // Pre-populate the picked items list with all order items (deliverQty = orderedQty)
-      setDeliveryPickedItems((order.items || []).map((si: any) => ({
-        salesOrderItemId: si.id,
-        itemId: si.itemId,
-        itemName: si.item?.itemName || '—',
-        barcode: si.item?.barcode || '',
-        itemCode: si.item?.itemCode || '',
-        uom: si.item?.uom || 'PCS',
-        orderedQty: si.quantity,
-        deliverQty: '', // empty until user scans barcode
-      })))
+      // ★ Compute already-delivered qty per sales order item (from existing deliveries)
+      const alreadyDelivered = new Map<string, number>()
+      for (const d of (order.deliveries || [])) {
+        for (const di of (d.items || [])) {
+          alreadyDelivered.set(di.salesOrderItemId, (alreadyDelivered.get(di.salesOrderItemId) || 0) + di.quantity)
+        }
+      }
+      // Pre-populate the picked items list with all order items
+      // deliverQty = empty (user must scan to deliver)
+      // Each item also tracks: alreadyDeliveredQty, remainingQty
+      setDeliveryPickedItems((order.items || []).map((si: any) => {
+        const already = alreadyDelivered.get(si.id) || 0
+        return {
+          salesOrderItemId: si.id,
+          itemId: si.itemId,
+          itemName: si.item?.itemName || '—',
+          barcode: si.item?.barcode || '',
+          itemCode: si.item?.itemCode || '',
+          uom: si.item?.uom || 'PCS',
+          orderedQty: si.quantity,
+          alreadyDeliveredQty: already,
+          remainingQty: si.quantity - already,
+          deliverQty: '', // empty until user scans barcode
+        }
+      }))
       setDeliveryBarcodeInput('')
     }
 
@@ -6250,25 +6264,43 @@ export default function Home() {
     const handleBarcodeScan = () => {
       const bc = deliveryBarcodeInput.trim()
       if (!bc) return
-      // Find a picked item matching this barcode (or itemCode or itemName)
-      const match = deliveryPickedItems.find(p =>
-        (p.barcode && p.barcode.toLowerCase() === bc.toLowerCase()) ||
-        (p.itemCode && p.itemCode.toLowerCase() === bc.toLowerCase()) ||
-        (p.itemName && p.itemName.toLowerCase() === bc.toLowerCase())
+      // Find a picked item matching this barcode (or itemCode or itemName) that still has remaining qty
+      const match = deliveryPickedItems.find((p: any) =>
+        ((p.barcode && p.barcode.toLowerCase() === bc.toLowerCase()) ||
+         (p.itemCode && p.itemCode.toLowerCase() === bc.toLowerCase()) ||
+         (p.itemName && p.itemName.toLowerCase() === bc.toLowerCase()))
+        && (p.remainingQty || (p.orderedQty - (p.alreadyDeliveredQty || 0))) > 0
       )
       if (!match) {
-        toast({ title: 'Not found', description: `No item in this sales order matches "${bc}".`, variant: 'destructive' })
+        // Check if the item matches but is fully delivered
+        const fullMatch = deliveryPickedItems.find((p: any) =>
+          (p.barcode && p.barcode.toLowerCase() === bc.toLowerCase()) ||
+          (p.itemCode && p.itemCode.toLowerCase() === bc.toLowerCase()) ||
+          (p.itemName && p.itemName.toLowerCase() === bc.toLowerCase())
+        )
+        if (fullMatch) {
+          toast({ title: 'Already fully delivered', description: `${fullMatch.itemName} has no remaining quantity to deliver.`, variant: 'destructive' })
+        } else {
+          toast({ title: 'Not found', description: `No item in this sales order matches "${bc}".`, variant: 'destructive' })
+        }
         setDeliveryBarcodeInput('')
         return
       }
-      // Increment the deliverQty for this item
+      // Increment the deliverQty for this item (capped at remaining)
+      const currentQty = parseInt(match.deliverQty) || 0
+      const remaining = match.remainingQty || (match.orderedQty - (match.alreadyDeliveredQty || 0))
+      if (currentQty >= remaining) {
+        toast({ title: 'Max reached', description: `${match.itemName}: already at max ${remaining} for this delivery.`, variant: 'destructive' })
+        setDeliveryBarcodeInput('')
+        return
+      }
       setDeliveryPickedItems(items =>
-        items.map(p => p.itemId === match.itemId
+        items.map((p: any) => p.itemId === match.itemId
           ? { ...p, deliverQty: String((parseInt(p.deliverQty) || 0) + 1) }
           : p
         )
       )
-      toast({ title: '✓ Added', description: `${match.itemName}: ${parseInt(match.deliverQty) + 1} of ${match.orderedQty}` })
+      toast({ title: '✓ Added', description: `${match.itemName}: ${currentQty + 1} of ${remaining} remaining` })
       setDeliveryBarcodeInput('')
     }
 
@@ -6303,13 +6335,27 @@ export default function Home() {
         })
         const data = await res.json()
         if (res.ok) {
-          toast({ title: '✓ Delivered', description: data.allItemsDelivered ? 'All items delivered. Sales order marked as delivered.' : 'Partial delivery completed.' })
-          setDeliverySelectedOrder(null)
-          setDeliveryPickedItems([])
+          toast({ title: '✓ Delivered', description: data.message || `Delivery ${data.deliveryNo} created.` })
+          // Refresh sales orders + re-select this order to show updated delivery history
+          await fetchSalesOrders()
+          // Re-fetch the order to get the new delivery in its deliveries array
+          try {
+            const refetch = await authFetch(`/api/sales-orders?entityId=${workingEntity?.id}`)
+            if (refetch.ok) {
+              const d2 = await refetch.json()
+              const updated = (d2.salesOrders || []).find((so: any) => so.id === deliverySelectedOrder.id)
+              if (updated) {
+                setDeliverySelectedOrder(updated)
+                selectOrder(updated)
+              } else {
+                setDeliverySelectedOrder(null)
+                setDeliveryPickedItems([])
+              }
+            }
+          } catch {}
           setDeliveryBarcodeInput('')
           setDeliveryPerson('')
           setDeliveryNotes('')
-          fetchSalesOrders()
         } else {
           toast({ title: 'Error', description: data.error || 'Delivery failed', variant: 'destructive' })
         }
@@ -6385,29 +6431,36 @@ export default function Home() {
                       <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
                       <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-32">Barcode</th>
                       <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Ordered</th>
-                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-24">Deliver Qty</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Delivered</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Remaining</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-24">Deliver Now</th>
                       <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-16">UoM</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {deliveryPickedItems.map((p, i) => {
+                    {deliveryPickedItems.map((p: any, i) => {
                       const qty = parseInt(p.deliverQty) || 0
                       const isPicked = qty > 0
-                      const isComplete = qty >= p.orderedQty
+                      const isComplete = (p.alreadyDeliveredQty || 0) + qty >= p.orderedQty
+                      const already = p.alreadyDeliveredQty || 0
+                      const remaining = p.remainingQty || (p.orderedQty - already)
                       return (
-                        <tr key={p.itemId} className={`border-t ${isComplete ? 'bg-green-50/50' : isPicked ? 'bg-blue-50/40' : ''}`}>
+                        <tr key={p.itemId} className={`border-t ${isComplete ? 'bg-green-50/50' : isPicked ? 'bg-blue-50/40' : already > 0 ? 'bg-amber-50/30' : ''}`}>
                           <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
                           <td className="px-2 py-2 font-medium">{p.itemName}</td>
                           <td className="px-2 py-2 font-mono text-xs">{p.barcode || p.itemCode || '—'}</td>
                           <td className="px-2 py-2 text-right">{p.orderedQty}</td>
+                          <td className="px-2 py-2 text-right text-blue-700">{already}</td>
+                          <td className="px-2 py-2 text-right font-semibold">{remaining}</td>
                           <td className="px-2 py-2 text-right">
                             <Input
                               type="number"
                               min="0"
-                              max={p.orderedQty}
+                              max={remaining}
                               value={p.deliverQty}
-                              onChange={e => setDeliveryPickedItems(items => items.map(x => x.itemId === p.itemId ? { ...x, deliverQty: e.target.value } : x))}
+                              onChange={e => setDeliveryPickedItems(items => items.map((x: any) => x.itemId === p.itemId ? { ...x, deliverQty: e.target.value } : x))}
                               className={`h-8 text-right text-sm w-full min-w-[70px] ${isComplete ? 'border-green-500' : ''}`}
+                              disabled={remaining <= 0}
                             />
                           </td>
                           <td className="px-2 py-2">{p.uom}</td>
@@ -6417,6 +6470,47 @@ export default function Home() {
                   </tbody>
                 </table>
               </div>
+
+              {/* Previous deliveries history */}
+              {deliverySelectedOrder.deliveries && deliverySelectedOrder.deliveries.length > 0 && (
+                <div className="rounded-md border border-blue-200 bg-blue-50/30 p-3">
+                  <p className="font-semibold text-sm text-blue-900 mb-2">
+                    📦 Delivery History ({deliverySelectedOrder.deliveries.length} deliver{deliverySelectedOrder.deliveries.length === 1 ? 'y' : 'ies'} so far)
+                  </p>
+                  <div className="space-y-1.5">
+                    {deliverySelectedOrder.deliveries.map((d: any) => (
+                      <div key={d.id} className="flex items-center justify-between bg-white rounded border p-2 text-xs">
+                        <div>
+                          <span className="font-mono font-semibold">{d.deliveryNo}</span>
+                          <span className="ml-2 text-muted-foreground">{bdDate(new Date(d.deliveryDate))}</span>
+                          {d.deliveryPerson && <span className="ml-2">• {d.deliveryPerson}</span>}
+                          <span className="ml-2">• {d.items?.length || 0} item(s)</span>
+                        </div>
+                        <div className="flex gap-1">
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            className="h-7 text-xs"
+                            onClick={() => {
+                              const token = localStorage.getItem('auth_token') || ''
+                              fetch(`/api/deliveries/${d.id}/challan`, { headers: { 'Authorization': `Bearer ${token}` } })
+                                .then(r => r.text())
+                                .then(html => {
+                                  const w = window.open('', '_blank')
+                                  if (!w) { toast({ title: 'Popup blocked', variant: 'destructive' }); return }
+                                  w.document.write(html); w.document.close()
+                                })
+                            }}
+                          >
+                            <Printer className="w-3.5 h-3.5 mr-1" />Challan
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Delivery person + notes */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">

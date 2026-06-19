@@ -40,6 +40,13 @@ export async function GET(request: NextRequest) {
         payments: { select: { id: true, amount: true, paymentType: true, paymentMode: true, receiptNo: true, paymentDate: true, chequeNo: true, bankName: true } },
         // ★ Include tailor payments so the list page can show "fully paid" badges
         tailorPayments: { select: { id: true, amount: true, tailorId: true, paymentDate: true } },
+        // ★ Include deliveries + delivery items so the UI can compute delivered vs ordered per item
+        deliveries: {
+          orderBy: { deliveryDate: 'desc' },
+          include: {
+            items: { select: { id: true, salesOrderItemId: true, itemId: true, quantity: true, uom: true } },
+          },
+        },
       },
     });
 

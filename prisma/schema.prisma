@@ -132,6 +132,7 @@ model Entity {
   customersCreatedBy Customer[] @relation("CustomerCreatedByEntity")
   supplierPayments SupplierPayment[]
   tailorPayments   TailorPayment[]
+  deliveries       Delivery[]
   sentMessages     ChatMessage[]   @relation("ChatFromEntity")
   receivedMessages ChatMessage[]   @relation("ChatToEntity")
 }
@@ -300,6 +301,47 @@ model TailorPayment {
   @@index([tailorId])
   @@index([entityId])
   @@index([paymentDate])
+}
+
+// ★ Delivery — each partial/full delivery for a sales order gets its own record + challan.
+// A sales order can have multiple deliveries over time (e.g. some items today, more tomorrow).
+// Each delivery decrements stock at creation time (atomic with stock guard).
+// A delivery, once created, cannot be modified by regular users (admin can reverse).
+model Delivery {
+  id             String   @id @default(cuid())
+  deliveryNo     String   @unique  // DL-YYYYMMDD-XXXX
+  salesOrderId   String
+  entityId       String
+  deliveryDate   DateTime @default(now())
+  deliveryPerson String?
+  deliveryNotes  String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  salesOrder SalesOrder     @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  entity     Entity         @relation(fields: [entityId], references: [id], onDelete: Cascade)
+  items      DeliveryItem[]
+
+  @@index([salesOrderId])
+  @@index([entityId])
+  @@index([deliveryDate])
+}
+
+// Each line item in a delivery — links back to the sales order item it fulfills.
+model DeliveryItem {
+  id               String  @id @default(cuid())
+  deliveryId       String
+  salesOrderItemId String
+  itemId           String
+  quantity         Int
+  uom              String?
+
+  delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
+
+  @@index([deliveryId])
+  @@index([salesOrderItemId])
+  @@index([itemId])
 }
 
 model MakingInfo {
@@ -542,6 +584,7 @@ model SalesOrder {
   payments   SalesPayment[]
   returns    SalesReturn[]
   tailorPayments TailorPayment[]
+  deliveries    Delivery[]
 
   @@index([entityId])
   @@index([customerId])

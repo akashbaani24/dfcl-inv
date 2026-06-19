@@ -661,6 +661,68 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `Purchase_entityId_status_idx` ON `Purchase`(`entityId`, `status`)',
     description: 'Composite index on Purchase(entityId, status)',
   },
+  // ★ v59: Delivery + DeliveryItem tables (multi-delivery per sales order)
+  {
+    id: '2026_06_19_delivery_table',
+    sql: `CREATE TABLE IF NOT EXISTS "Delivery" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "deliveryNo" TEXT NOT NULL UNIQUE,
+      "salesOrderId" TEXT NOT NULL,
+      "entityId" TEXT NOT NULL,
+      "deliveryDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "deliveryPerson" TEXT,
+      "deliveryNotes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      FOREIGN KEY ("salesOrderId") REFERENCES "SalesOrder"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("entityId") REFERENCES "Entity"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create Delivery table',
+  },
+  {
+    id: '2026_06_19_delivery_idx_salesorder',
+    sql: 'CREATE INDEX IF NOT EXISTS `Delivery_salesOrderId_idx` ON `Delivery`(`salesOrderId`)',
+    description: 'Index on Delivery.salesOrderId',
+  },
+  {
+    id: '2026_06_19_delivery_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `Delivery_entityId_idx` ON `Delivery`(`entityId`)',
+    description: 'Index on Delivery.entityId',
+  },
+  {
+    id: '2026_06_19_delivery_idx_date',
+    sql: 'CREATE INDEX IF NOT EXISTS `Delivery_deliveryDate_idx` ON `Delivery`(`deliveryDate`)',
+    description: 'Index on Delivery.deliveryDate',
+  },
+  {
+    id: '2026_06_19_deliveryitem_table',
+    sql: `CREATE TABLE IF NOT EXISTS "DeliveryItem" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "deliveryId" TEXT NOT NULL,
+      "salesOrderItemId" TEXT NOT NULL,
+      "itemId" TEXT NOT NULL,
+      "quantity" INTEGER NOT NULL,
+      "uom" TEXT,
+      FOREIGN KEY ("deliveryId") REFERENCES "Delivery"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create DeliveryItem table',
+  },
+  {
+    id: '2026_06_19_deliveryitem_idx_delivery',
+    sql: 'CREATE INDEX IF NOT EXISTS `DeliveryItem_deliveryId_idx` ON `DeliveryItem`(`deliveryId`)',
+    description: 'Index on DeliveryItem.deliveryId',
+  },
+  {
+    id: '2026_06_19_deliveryitem_idx_soitem',
+    sql: 'CREATE INDEX IF NOT EXISTS `DeliveryItem_salesOrderItemId_idx` ON `DeliveryItem`(`salesOrderItemId`)',
+    description: 'Index on DeliveryItem.salesOrderItemId',
+  },
+  {
+    id: '2026_06_19_deliveryitem_idx_item',
+    sql: 'CREATE INDEX IF NOT EXISTS `DeliveryItem_itemId_idx` ON `DeliveryItem`(`itemId`)',
+    description: 'Index on DeliveryItem.itemId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -62,6 +62,50 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
 
     // Handle status update
     if (body.status) {
+      // ★ Block "Mark Complete" if not all items delivered AND payment not cleared
+      if (body.status === 'delivered' || body.status === 'completed') {
+        const fullOrder = await db.salesOrder.findUnique({
+          where: { id },
+          include: {
+            items: { select: { id: true, quantity: true, item: { select: { itemName: true } } } },
+            payments: { select: { amount: true } },
+            deliveries: { include: { items: { select: { salesOrderItemId: true, quantity: true } } } },
+          },
+        });
+        if (fullOrder) {
+          // Check delivery: sum delivered per sales order item
+          const delivered = new Map<string, number>();
+          for (const d of fullOrder.deliveries) {
+            for (const di of d.items) {
+              delivered.set(di.salesOrderItemId, (delivered.get(di.salesOrderItemId) || 0) + di.quantity);
+            }
+          }
+          const allDelivered = fullOrder.items.every(si => (delivered.get(si.id) || 0) >= si.quantity);
+          // Check payment
+          const subTotal = fullOrder.items.reduce((s, si) => s + si.quantity * 0, 0); // placeholder
+          const totalPaid = fullOrder.payments.reduce((s, p) => s + p.amount, 0);
+          // Compute grand total (need items' unit price + making entries)
+          const fullItems = await db.salesOrderItem.findMany({
+            where: { salesOrderId: id },
+            include: { makingEntries: true },
+          });
+          const grandTotal = fullItems.reduce((s, si) => s + si.quantity * si.unitPrice + (si.makingEntries.reduce((m, me) => m + me.quantity * me.unitPrice, 0)), 0);
+          const paymentCleared = totalPaid >= grandTotal;
+
+          if (!allDelivered) {
+            return NextResponse.json(
+              { error: 'Cannot mark as complete — not all items have been fully delivered yet. Complete all deliveries first.' },
+              { status: 400 }
+            );
+          }
+          if (!paymentCleared) {
+            return NextResponse.json(
+              { error: `Cannot mark as complete — payment not cleared. Total: ${grandTotal.toFixed(2)}, paid: ${totalPaid.toFixed(2)}, due: ${(grandTotal - totalPaid).toFixed(2)}. Collect the due amount first.` },
+              { status: 400 }
+            );
+          }
+        }
+      }
       const salesOrder = await db.salesOrder.update({
         where: { id },
         data: { status: body.status },
