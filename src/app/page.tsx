@@ -2292,7 +2292,7 @@ export default function Home() {
             {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '' })))}
             <div className="space-y-2"><Label>Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={receiveForm.quantity} onChange={e => setReceiveForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
-            <div className="space-y-2"><Label>Source Entity</Label><Select value={receiveForm.sourceEntityId} onValueChange={v => setReceiveForm(f => ({ ...f, sourceEntityId: v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="">None</SelectItem>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Source Entity</Label><Select value={receiveForm.sourceEntityId || '__none__'} onValueChange={v => setReceiveForm(f => ({ ...f, sourceEntityId: v === '__none__' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
             <div className="space-y-2"><Label>Reference No</Label><Input value={receiveForm.referenceNo} onChange={e => setReceiveForm(f => ({ ...f, referenceNo: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Notes</Label><Input value={receiveForm.notes} onChange={e => setReceiveForm(f => ({ ...f, notes: e.target.value }))} /></div>
             <DialogFooter><Button type="submit">Save Receive</Button></DialogFooter>
@@ -3232,10 +3232,10 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Supplier</Label>
-                  <Select value={purchaseForm.supplierId} onValueChange={v => setPurchaseForm({ ...purchaseForm, supplierId: v })}>
+                  <Select value={purchaseForm.supplierId || '__none__'} onValueChange={v => setPurchaseForm({ ...purchaseForm, supplierId: v === '__none__' ? '' : v })}>
                     <SelectTrigger><SelectValue placeholder="Select supplier (optional)" /></SelectTrigger>
                     <SelectContent>
-                      <SelectItem value="">— None —</SelectItem>
+                      <SelectItem value="__none__">— None —</SelectItem>
                       {(suppliers || []).filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}{s.phone ? ` (${s.phone})` : ''}</SelectItem>)}
                     </SelectContent>
                   </Select>
@@ -3788,7 +3788,7 @@ export default function Home() {
           <form onSubmit={handleSaveIncentive} className="space-y-4">
             {renderItemSearchField(incentiveForm.itemId, (item) => setIncentiveForm(f => ({ ...f, itemId: item.id || '' })))}
             <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Tailor</Label><Select value={incentiveForm.tailorId} onValueChange={v => setIncentiveForm(f => ({ ...f, tailorId: v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="">None</SelectItem>{tailors.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2"><Label>Tailor</Label><Select value={incentiveForm.tailorId || '__none__'} onValueChange={v => setIncentiveForm(f => ({ ...f, tailorId: v === '__none__' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{tailors.map(t => <SelectItem key={t.id} value={t.id}>{t.name}</SelectItem>)}</SelectContent></Select></div>
               <div className="space-y-2"><Label>Type*</Label><Select value={incentiveForm.type} onValueChange={v => setIncentiveForm(f => ({ ...f, type: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="tailor">Tailor</SelectItem><SelectItem value="sales">Sales</SelectItem><SelectItem value="bonus">Bonus</SelectItem></SelectContent></Select></div>
             </div>
             <div className="space-y-2"><Label>Amount*</Label><Input type="number" step="0.01" value={incentiveForm.amount} onChange={e => setIncentiveForm(f => ({ ...f, amount: e.target.value }))} required /></div>
