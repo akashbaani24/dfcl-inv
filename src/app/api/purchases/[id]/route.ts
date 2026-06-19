@@ -55,6 +55,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       const itemsData = items.map((it: any) => {
         const qty = parseInt(it.quantity) || 1;
         const price = parseFloat(it.unitPrice) || 0;
+        const cogsPerUnit = parseFloat(it.cogsPerUnit) || 0;
         return {
           purchaseId: id,
           itemId: it.itemId,
@@ -62,6 +63,9 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           unitPrice: price,
           uom: it.uom || 'PCS',
           total: qty * price,
+          cogsPerUnit,
+          cogsNotes: it.cogsNotes || null,
+          landedCostPerUnit: price + cogsPerUnit,
         };
       });
       await db.purchaseItem.createMany({ data: itemsData });

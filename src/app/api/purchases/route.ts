@@ -82,16 +82,20 @@ export async function POST(request: NextRequest) {
     const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
     const purchaseNo = `PUR-${dateStr}-${randomStr}`;
 
-    // Build items with computed total
+    // Build items with computed total + optional COGS
     const itemsData = items.map((it: any) => {
       const qty = parseInt(it.quantity) || 1;
       const price = parseFloat(it.unitPrice) || 0;
+      const cogsPerUnit = parseFloat(it.cogsPerUnit) || 0;
       return {
         itemId: it.itemId,
         quantity: qty,
         unitPrice: price,
         uom: it.uom || 'PCS',
         total: qty * price,
+        cogsPerUnit,
+        cogsNotes: it.cogsNotes || null,
+        landedCostPerUnit: price + cogsPerUnit,
       };
     });
 

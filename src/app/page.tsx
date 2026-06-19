@@ -96,7 +96,7 @@ interface ItemData {
 
 interface StockDetail { id: string; entityId: string; entityName: string; quantity: number }
 
-interface TailorData { id: string; name: string; phone: string; address: string; specialization: string; status: string }
+interface TailorData { id: string; name: string; phone: string; address: string; specialization: string; status: string; entityIds?: string }
 interface MakingInfoData { id: string; name: string; description: string; cost: number; unit: string; status: string }
 interface UoMData { id: string; name: string; description: string }
 interface SupplierData { id: string; name: string; phone: string; email: string; address: string; status: string; _count?: { items: number } }
@@ -164,7 +164,7 @@ type ViewType =
   | 'itemAdjustment' | 'transfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
-  | 'booking' | 'incentive' | 'reports'
+  | 'booking' | 'newBooking' | 'incentive' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -301,6 +301,11 @@ export default function Home() {
   const [purchaseItemResults, setPurchaseItemResults] = useState<any[]>([])
   const [selectedPurchase, setSelectedPurchase] = useState<any>(null)
   const [showPurchaseDetailDialog, setShowPurchaseDetailDialog] = useState(false)
+  // ★ COGS dialog state
+  const [showCogsDialog, setShowCogsDialog] = useState(false)
+  const [cogsPurchase, setCogsPurchase] = useState<any>(null)
+  const [cogsItems, setCogsItems] = useState<Array<{ id: string; itemId: string; itemName: string; quantity: number; unitPrice: number; cogsPerUnit: string; cogsNotes: string; landedCostPerUnit: number }>>([])
+  const [cogsSaving, setCogsSaving] = useState(false)
 
   const [salesOrders, setSalesOrders] = useState<Array<any>>([])
   const [salesOrderForm, setSalesOrderForm] = useState({
@@ -421,7 +426,7 @@ export default function Home() {
 
   // Master Data state
   const [tailors, setTailors] = useState<TailorData[]>([])
-  const [tailorForm, setTailorForm] = useState({ name: '', phone: '', address: '', specialization: '', status: 'active' })
+  const [tailorForm, setTailorForm] = useState({ name: '', phone: '', address: '', specialization: '', status: 'active', entityIds: [] as string[] })
   const [editingTailorId, setEditingTailorId] = useState<string | null>(null)
   const [showTailorDialog, setShowTailorDialog] = useState(false)
 
@@ -739,7 +744,13 @@ export default function Home() {
   }
 
   // Master Data fetch & handlers
-  const fetchTailors = async () => { try { const res = await authFetch('/api/tailors'); if (res.ok) { const d = await res.json(); setTailors(d.tailors) } } catch {} }
+  const fetchTailors = async (entityId?: string) => {
+    try {
+      const url = entityId ? `/api/tailors?entityId=${entityId}` : '/api/tailors'
+      const res = await authFetch(url)
+      if (res.ok) { const d = await res.json(); setTailors(d.tailors) }
+    } catch {}
+  }
   const fetchMakingInfo = async () => { try { const res = await authFetch('/api/making-info'); if (res.ok) { const d = await res.json(); setMakingInfoList(d.makingInfo) } } catch {} }
   const fetchUom = async () => { try { const res = await authFetch('/api/uom'); if (res.ok) { const d = await res.json(); setUomList(d.uomList) } } catch {} }
   const fetchSuppliers = async () => { try { const res = await authFetch('/api/suppliers'); if (res.ok) { const d = await res.json(); setSuppliers(d.suppliers) } } catch {} }
@@ -790,7 +801,7 @@ export default function Home() {
         const data = await res.json()
         const msg = editingBookingId ? 'Booking updated' : `Booking created! ID: ${data.booking?.bookingNo || ''}`
         toast({ title: 'Success', description: msg })
-        setShowBookingDialog(false); resetBookingForm(); fetchBookings()
+        setShowBookingDialog(false); setEditingBookingId(null); resetBookingForm(); setCurrentView('booking'); fetchBookings()
       }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
@@ -1404,7 +1415,7 @@ export default function Home() {
       const res = editingTailorId
         ? await authFetch(`/api/tailors/${editingTailorId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tailorForm) })
         : await authFetch('/api/tailors', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(tailorForm) })
-      if (res.ok) { toast({ title: 'Success', description: editingTailorId ? 'Tailor updated' : 'Tailor created' }); setShowTailorDialog(false); setTailorForm({ name: '', phone: '', address: '', specialization: '', status: 'active' }); setEditingTailorId(null); fetchTailors() }
+      if (res.ok) { toast({ title: 'Success', description: editingTailorId ? 'Tailor updated' : 'Tailor created' }); setShowTailorDialog(false); setTailorForm({ name: '', phone: '', address: '', specialization: '', status: 'active', entityIds: [] }); setEditingTailorId(null); fetchTailors() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -3261,6 +3272,55 @@ export default function Home() {
     }
   }
 
+  // ★ Open COGS dialog for a purchase — fetches current COGS values
+  const openCogsDialog = async (purchase: any) => {
+    try {
+      const res = await authFetch(`/api/purchases/${purchase.id}/cogs`)
+      if (res.ok) {
+        const data = await res.json()
+        setCogsPurchase(purchase)
+        setCogsItems((data.items || []).map((it: any) => ({
+          id: it.id, itemId: it.itemId, itemName: it.itemName, quantity: it.quantity,
+          unitPrice: it.unitPrice, cogsPerUnit: String(it.cogsPerUnit || 0),
+          cogsNotes: it.cogsNotes || '', landedCostPerUnit: it.landedCostPerUnit || 0,
+        })))
+        setShowCogsDialog(true)
+      } else {
+        toast({ title: 'Error', description: 'Failed to load COGS', variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed to load COGS', variant: 'destructive' }) }
+  }
+
+  // ★ Save COGS for a purchase
+  const handleSaveCogs = async () => {
+    if (!cogsPurchase) return
+    setCogsSaving(true)
+    try {
+      const payload = {
+        items: cogsItems.map(it => ({
+          id: it.id,
+          cogsPerUnit: parseFloat(it.cogsPerUnit) || 0,
+          cogsNotes: it.cogsNotes || null,
+        })),
+      }
+      const res = await authFetch(`/api/purchases/${cogsPurchase.id}/cogs`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Success', description: data.message || 'COGS updated' })
+        setShowCogsDialog(false)
+        setCogsPurchase(null)
+        fetchPurchases()
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+    finally { setCogsSaving(false) }
+  }
+
   // Print barcodes for all items in a purchase (called from Receive page when receive is linked to a purchase)
   const printPurchaseBarcodes = (purchaseId: string, purchaseNo: string, items: any[]) => {
     const win = window.open('', '_blank', 'width=800,height=600')
@@ -3358,6 +3418,7 @@ export default function Home() {
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="sm" onClick={() => { setSelectedPurchase(p); setShowPurchaseDetailDialog(true) }} title="View Details"><Eye className="w-4 h-4" /></Button>
+                    <Button variant="ghost" size="sm" onClick={() => openCogsDialog(p)} title="Edit COGS"><DollarSign className="w-4 h-4" /></Button>
                     {p.status === 'pending' && hasPermission('menu', 'purchase', 'delete') && (
                       <Button variant="ghost" size="sm" onClick={() => handleDeletePurchase(p.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
                     )}
@@ -3422,6 +3483,75 @@ export default function Home() {
               </div>
             </>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* COGS Dialog */}
+      <Dialog open={showCogsDialog} onOpenChange={setShowCogsDialog}>
+        <DialogContent className="max-w-4xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader><DialogTitle className="flex items-center gap-2"><DollarSign className="w-5 h-5" />Edit COGS — {cogsPurchase?.purchaseNo}</DialogTitle></DialogHeader>
+          <div className="space-y-3">
+            <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900">
+              <p className="font-semibold mb-1">💰 COGS = Cost of Goods Sold</p>
+              <p>Additional per-unit costs beyond the purchase unit price (transport, customs, duties, etc.). Landed Cost = Unit Price + COGS per unit. Used for accurate profit/margin reporting.</p>
+            </div>
+            <div className="border rounded-md overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-primary text-primary-foreground">
+                  <tr>
+                    <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
+                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Qty</th>
+                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Unit Price</th>
+                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">COGS / Unit</th>
+                    <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">COGS Notes</th>
+                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Landed / Unit</th>
+                    <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide">Total Landed</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {cogsItems.map((it, idx) => {
+                    const cogsPerUnit = parseFloat(it.cogsPerUnit) || 0
+                    const landed = it.unitPrice + cogsPerUnit
+                    const totalLanded = landed * it.quantity
+                    return (
+                      <tr key={it.id} className="border-t hover:bg-muted/20">
+                        <td className="px-2 py-2 font-medium text-xs">{it.itemName}</td>
+                        <td className="px-2 py-2 text-right text-xs">{it.quantity}</td>
+                        <td className="px-2 py-2 text-right text-xs">{it.unitPrice.toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right">
+                          <Input type="number" step="0.01" value={it.cogsPerUnit} onChange={e => {
+                            const val = e.target.value
+                            setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsPerUnit: val } : x))
+                          }} className="h-8 text-right text-sm w-24" />
+                        </td>
+                        <td className="px-2 py-2">
+                          <Input placeholder="e.g. Transport from Ctg" value={it.cogsNotes} onChange={e => {
+                            const val = e.target.value
+                            setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsNotes: val } : x))
+                          }} className="h-8 text-xs w-full min-w-[140px]" />
+                        </td>
+                        <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{landed.toFixed(2)}</td>
+                        <td className="px-2 py-2 text-right text-xs font-bold">{totalLanded.toFixed(2)}</td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+                <tfoot>
+                  <tr className="bg-muted/30 border-t-2">
+                    <td colSpan={3} className="px-2 py-2 text-right text-xs font-semibold">Totals:</td>
+                    <td className="px-2 py-2 text-right text-xs font-semibold">{cogsItems.reduce((s, it) => s + (parseFloat(it.cogsPerUnit) || 0) * it.quantity, 0).toFixed(2)}</td>
+                    <td></td>
+                    <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{cogsItems.reduce((s, it) => s + (it.unitPrice + (parseFloat(it.cogsPerUnit) || 0)) * it.quantity, 0).toFixed(2)}</td>
+                    <td></td>
+                  </tr>
+                </tfoot>
+              </table>
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <Button variant="outline" onClick={() => { setShowCogsDialog(false); setCogsPurchase(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+              <Button onClick={handleSaveCogs} disabled={cogsSaving}><Save className="w-4 h-4 mr-2" />{cogsSaving ? 'Saving...' : 'Save COGS'}</Button>
+            </div>
+          </div>
         </DialogContent>
       </Dialog>
     </div>
@@ -3700,7 +3830,7 @@ export default function Home() {
           <Button variant="outline" size="sm" onClick={handleExportBookings} disabled={exporting} style={{ display: hasPermission('menu', 'booking', 'export') ? '' : 'none' }}>
             {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}Excel
           </Button>
-          <Button onClick={() => { resetBookingForm(); setShowBookingDialog(true) }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
+          <Button onClick={() => { resetBookingForm(); fetchCustomers(); setCurrentView('newBooking') }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
         </div>
       </div>
       <div className="border rounded-lg overflow-hidden">
@@ -3747,7 +3877,8 @@ export default function Home() {
                       newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
                     })
                     setBookingCustomerMode('existing')
-                    setShowBookingDialog(true)
+                    fetchCustomers()
+                    setCurrentView('newBooking')
                   }} title="Edit"><Edit className="w-4 h-4" /></Button>
                   <Button variant="ghost" size="sm" onClick={() => handleDeleteBooking(b.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
                 </TableCell>
@@ -3756,9 +3887,20 @@ export default function Home() {
           </TableBody>
         </Table>
       </div>
-      <Dialog open={showBookingDialog} onOpenChange={setShowBookingDialog}>
-        <DialogContent className="max-w-3xl max-h-[90vh] overflow-y-auto">
-          <DialogHeader><DialogTitle>{editingBookingId ? 'Edit Booking' : 'New Booking'}</DialogTitle></DialogHeader>
+      {/* Booking form is now a full page — see renderNewBookingPage() */}
+    </div>
+    )
+  }
+
+  // ★ New Booking — full page (not dialog)
+  const renderNewBookingPage = () => (
+    <div className="space-y-4 max-w-5xl mx-auto">
+      <div className="flex items-center justify-between">
+        <h2 className="text-xl font-bold">{editingBookingId ? 'Edit Booking' : 'New Booking'}</h2>
+        <Button variant="outline" onClick={() => { resetBookingForm(); setEditingBookingId(null); setCurrentView('booking') }}><X className="w-4 h-4 mr-2" />Back to List</Button>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
           <form onSubmit={handleSaveBooking} className="space-y-4">
             {/* Customer: Existing vs New toggle */}
             <div className="space-y-2">
@@ -3864,16 +4006,15 @@ export default function Home() {
             </div>
 
             <div className="space-y-2"><Label>Notes</Label><Input value={bookingForm.notes} onChange={e => setBookingForm({ ...bookingForm, notes: e.target.value })} /></div>
-            <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => { setShowBookingDialog(false); resetBookingForm() }}><X className="w-4 h-4 mr-2" />Cancel</Button>
-              <Button type="submit"><Save className="w-4 h-4 mr-2" />{editingBookingId ? 'Update' : 'Create Booking'}</Button>
-            </DialogFooter>
+            <div className="flex gap-3 pt-2">
+              <Button type="submit" size="lg"><Save className="w-4 h-4 mr-2" />{editingBookingId ? 'Update Booking' : 'Create Booking'}</Button>
+              <Button type="button" variant="outline" size="lg" onClick={() => { resetBookingForm(); setEditingBookingId(null); setCurrentView('booking') }}>Cancel</Button>
+            </div>
           </form>
-        </DialogContent>
-      </Dialog>
+        </CardContent>
+      </Card>
     </div>
-    )
-  }
+  )
 
   // Print booking — opens a new window with printable HTML
   const printBooking = (b: any) => {
@@ -4874,6 +5015,105 @@ export default function Home() {
     )
   }
 
+  // ★ Tailors master data page — with entity assignment
+  const renderTailorsPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl font-bold">Tailors</h2>
+          <p className="text-sm text-muted-foreground">Assign tailors to specific entities. When creating a sales order, only tailors assigned to the current working entity (or with no assignment = available to all) appear in the dropdown.</p>
+        </div>
+        <Button onClick={() => { setEditingTailorId(null); setTailorForm({ name: '', phone: '', address: '', specialization: '', status: 'active', entityIds: [] }); setShowTailorDialog(true) }}><Plus className="w-4 h-4 mr-2" />New Tailor</Button>
+      </div>
+      <div className="border rounded-lg overflow-hidden">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Name</TableHead>
+            <TableHead className="font-semibold">Specialization</TableHead>
+            <TableHead className="font-semibold">Phone</TableHead>
+            <TableHead className="font-semibold">Assigned Entities</TableHead>
+            <TableHead className="font-semibold">Status</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {tailors.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No tailors yet.</TableCell></TableRow>
+            : tailors.map(t => {
+              const assignedIds = (t.entityIds || '').split(',').map(s => s.trim()).filter(Boolean)
+              const assignedEntities = assignedIds.map(id => entities.find(e => e.id === id)?.name).filter(Boolean)
+              return (
+                <TableRow key={t.id} className="hover:bg-muted/30">
+                  <TableCell className="font-medium">{t.name}</TableCell>
+                  <TableCell className="text-sm">{t.specialization || '—'}</TableCell>
+                  <TableCell className="text-sm">{t.phone || '—'}</TableCell>
+                  <TableCell>
+                    <div className="flex gap-1 flex-wrap">
+                      {assignedEntities.length === 0 ? <Badge variant="outline" className="text-xs bg-gray-100">All entities</Badge> :
+                        assignedEntities.map(name => <Badge key={name} variant="outline" className="text-xs bg-blue-50 text-blue-700">{name}</Badge>)
+                      }
+                    </div>
+                  </TableCell>
+                  <TableCell>{t.status === 'active' ? <Badge className="bg-green-100 text-green-800">Active</Badge> : <Badge variant="outline">Inactive</Badge>}</TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => {
+                        setEditingTailorId(t.id)
+                        setTailorForm({
+                          name: t.name, phone: t.phone, address: t.address,
+                          specialization: t.specialization, status: t.status,
+                          entityIds: (t.entityIds || '').split(',').map(s => s.trim()).filter(Boolean),
+                        })
+                        setShowTailorDialog(true)
+                      }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                      <Button variant="ghost" size="sm" onClick={() => handleDeleteTailor(t.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      </div>
+      <Dialog open={showTailorDialog} onOpenChange={setShowTailorDialog}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader><DialogTitle>{editingTailorId ? 'Edit Tailor' : 'New Tailor'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveTailor} className="space-y-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Name *</Label><Input value={tailorForm.name} onChange={e => setTailorForm({ ...tailorForm, name: e.target.value })} required /></div>
+              <div className="space-y-1"><Label className="text-xs">Phone</Label><Input value={tailorForm.phone} onChange={e => setTailorForm({ ...tailorForm, phone: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Specialization</Label><Input placeholder="e.g. Shirt, Pant, Suit" value={tailorForm.specialization} onChange={e => setTailorForm({ ...tailorForm, specialization: e.target.value })} /></div>
+              <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={tailorForm.status} onValueChange={v => setTailorForm({ ...tailorForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Address</Label><Input value={tailorForm.address} onChange={e => setTailorForm({ ...tailorForm, address: e.target.value })} /></div>
+            <div className="space-y-1">
+              <Label className="text-xs">Assigned Entities</Label>
+              <p className="text-[11px] text-muted-foreground">Tick entities this tailor works for. Leave empty = available to all entities.</p>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto border rounded-md p-2">
+                {entities.length === 0 ? <p className="text-xs text-muted-foreground">No entities created yet.</p> :
+                  entities.map(e => (
+                    <label key={e.id} className="flex items-center gap-2 text-sm cursor-pointer hover:bg-muted/30 rounded px-1 py-0.5">
+                      <Checkbox
+                        checked={tailorForm.entityIds.includes(e.id)}
+                        onCheckedChange={v => {
+                          setTailorForm(f => ({
+                            ...f,
+                            entityIds: v ? [...f.entityIds, e.id] : f.entityIds.filter(id => id !== e.id),
+                          }))
+                        }}
+                      />
+                      <span>{e.name}</span>
+                    </label>
+                  ))
+                }
+              </div>
+              {tailorForm.entityIds.length === 0 && <p className="text-[10px] text-amber-700">⚠ Will be available to ALL entities.</p>}
+            </div>
+            <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingTailorId ? 'Update' : 'Create'}</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  )
+
   // ★ Employees master data page
   const renderEmployeesPage = () => (
     <div className="space-y-4">
@@ -5139,10 +5379,11 @@ export default function Home() {
       case 'newSalesOrder': return renderNewSalesOrderPage()
       case 'salesReturn': return renderSalesReturnPage()
       case 'booking': return renderBookingPage()
+      case 'newBooking': return renderNewBookingPage()
       case 'bookingReasons': return renderBookingReasonsPage()
       case 'incentive': return renderIncentivePage()
       case 'reports': return renderReportsPage()
-      case 'tailors': return renderMasterDataPage<TailorData>('Tailors', tailors, ['name','phone','address','specialization','status'], tailorForm, setTailorForm, editingTailorId, setEditingTailorId, showTailorDialog, setShowTailorDialog, handleSaveTailor, handleDeleteTailor, { name:{label:'Name*',type:'text'},phone:{label:'Phone',type:'text'},address:{label:'Address',type:'text'},specialization:{label:'Specialization',type:'text',placeholder:'e.g. Shirt, Pant, Suit'},status:{label:'Status',type:'select',options:['active','inactive']} })
+      case 'tailors': return renderTailorsPage()
       case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'uom': return renderMasterDataPage<UoMData>('Unit of Measure (UoM)', uomList, ['name','description'], uomForm, setUomForm, editingUomId, setEditingUomId, showUomDialog, setShowUomDialog, handleSaveUom, handleDeleteUom, { name:{label:'UoM Name*',type:'text',placeholder:'e.g. PCS, KG, LTR'},description:{label:'Description',type:'text'} })
       case 'suppliers': return renderMasterDataPage<SupplierData>('Suppliers', suppliers, ['name','phone','email','address','status'], supplierForm, setSupplierForm, editingSupplierId, setEditingSupplierId, showSupplierDialog, setShowSupplierDialog, handleSaveSupplier, handleDeleteSupplier, { name:{label:'Supplier Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},status:{label:'Status',type:'select',options:['active','inactive']} })

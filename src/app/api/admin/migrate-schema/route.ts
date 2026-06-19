@@ -286,6 +286,49 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE UNIQUE INDEX IF NOT EXISTS `IncentiveFormulaItem_formulaId_itemId_key` ON `IncentiveFormulaItem`(`formulaId`, `itemId`)',
     description: 'Unique index on IncentiveFormulaItem(formulaId, itemId)',
   },
+  // v49: Customer — global + createdByEntity tracking
+  {
+    id: '2026_06_19_customer_createdByEntityId',
+    sql: 'ALTER TABLE Customer ADD COLUMN createdByEntityId TEXT',
+    description: 'Add createdByEntityId column to Customer',
+  },
+  {
+    id: '2026_06_19_customer_createdBy',
+    sql: 'ALTER TABLE Customer ADD COLUMN createdBy TEXT',
+    description: 'Add createdBy column to Customer',
+  },
+  {
+    id: '2026_06_19_customer_idx_createdByEntity',
+    sql: 'CREATE INDEX IF NOT EXISTS `Customer_createdByEntityId_idx` ON `Customer`(`createdByEntityId`)',
+    description: 'Index on Customer.createdByEntityId',
+  },
+  // v49: Tailor — entity assignment
+  {
+    id: '2026_06_19_tailor_entityIds',
+    sql: 'ALTER TABLE Tailor ADD COLUMN entityIds TEXT NOT NULL DEFAULT \'\'',
+    description: 'Add entityIds column to Tailor (comma-separated)',
+  },
+  {
+    id: '2026_06_19_tailor_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `Tailor_status_idx` ON `Tailor`(`status`)',
+    description: 'Index on Tailor.status',
+  },
+  // v49: PurchaseItem — COGS fields
+  {
+    id: '2026_06_19_pitem_cogsPerUnit',
+    sql: 'ALTER TABLE PurchaseItem ADD COLUMN cogsPerUnit REAL NOT NULL DEFAULT 0',
+    description: 'Add cogsPerUnit column to PurchaseItem',
+  },
+  {
+    id: '2026_06_19_pitem_cogsNotes',
+    sql: 'ALTER TABLE PurchaseItem ADD COLUMN cogsNotes TEXT',
+    description: 'Add cogsNotes column to PurchaseItem',
+  },
+  {
+    id: '2026_06_19_pitem_landedCostPerUnit',
+    sql: 'ALTER TABLE PurchaseItem ADD COLUMN landedCostPerUnit REAL NOT NULL DEFAULT 0',
+    description: 'Add landedCostPerUnit column to PurchaseItem',
+  },
 ];
 
 export async function POST(request: NextRequest) {

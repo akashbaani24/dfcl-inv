@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
-// PUT update tailor
+// PUT update tailor — accepts entityIds (array) and stores as comma-separated string
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {
     const currentUser = await getCurrentUser(request);
@@ -11,11 +11,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { name, phone, address, specialization, status } = await request.json();
+    const { name, phone, address, specialization, status, entityIds } = await request.json();
 
     if (!name) {
       return NextResponse.json({ error: 'Tailor name is required' }, { status: 400 });
     }
+
+    const entityIdsStr = Array.isArray(entityIds)
+      ? entityIds.filter(Boolean).join(',')
+      : entityIds !== undefined ? String(entityIds || '') : undefined;
 
     const tailor = await db.tailor.update({
       where: { id },
@@ -25,6 +29,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         address: address || '',
         specialization: specialization || '',
         status: status || 'active',
+        ...(entityIdsStr !== undefined && { entityIds: entityIdsStr }),
       },
     });
 

@@ -123,6 +123,7 @@ model Entity {
   bookingFromItems BookingItem[] @relation("BookingFromEntity")
   salesOrderItems SalesOrderItem[] @relation("SalesOrderEntity")
   purchases       Purchase[]
+  customersCreatedBy Customer[] @relation("CustomerCreatedByEntity")
 }
 
 model Item {
@@ -210,10 +211,17 @@ model Tailor {
   address        String   @default("")
   specialization String   @default("")  // e.g. "Shirt", "Pant", "Suit"
   status         String   @default("active") // "active" or "inactive"
+  // ★ Comma-separated list of entity IDs this tailor is assigned to.
+  // Empty string = available to all entities (back-compat).
+  // When creating a sales order making entry, only tailors assigned to the
+  // current working entity (or with empty entityIds) appear in the dropdown.
+  entityIds      String   @default("")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
   incentives Incentive[]
+
+  @@index([status])
 }
 
 model MakingInfo {
@@ -313,6 +321,12 @@ model PurchaseItem {
   unitPrice   Float
   uom         String  @default("PCS")
   total       Float   // quantity * unitPrice (denormalized for fast reporting)
+  // ★ COGS (Cost of Goods Sold) — additional per-unit costs like transport, customs, etc.
+  // Default 0. Total COGS for this line = cogsPerUnit * quantity.
+  cogsPerUnit Float   @default(0)
+  cogsNotes   String?  // optional note explaining the COGS (e.g. "Transport from Chittagong")
+  // Landed cost per unit = unitPrice + cogsPerUnit (denormalized for reporting)
+  landedCostPerUnit Float @default(0)
 
   purchase Purchase @relation(fields: [purchaseId], references: [id], onDelete: Cascade)
   item     Item     @relation(fields: [itemId], references: [id], onDelete: Cascade)
@@ -329,12 +343,19 @@ model Customer {
   address   String   @default("")
   type      String   @default("regular") // "regular", "wholesale", "corporate"
   status    String   @default("active") // "active" or "inactive"
+  // ★ Customer is now GLOBAL — accessible from any entity.
+  // createdByEntityId tracks which entity first created this customer (for audit only).
+  createdByEntityId String?
+  createdBy         String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  createdByEntity Entity? @relation("CustomerCreatedByEntity", fields: [createdByEntityId], references: [id], onDelete: SetNull)
   salesOrders  SalesOrder[]
   salesReturns SalesReturn[]
   bookings     Booking[]
+
+  @@index([createdByEntityId])
 }
 
 // ---- Transaction Models (Entity-level) ----
