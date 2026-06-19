@@ -378,6 +378,14 @@ export default function Home() {
   const [salesCustomerSearch, setSalesCustomerSearch] = useState('')
   const [salesItemSearch, setSalesItemSearch] = useState('')
   const [salesItemResults, setSalesItemResults] = useState<ItemData[]>([])
+  // ★ Delivery page state — sales order search + barcode picking
+  const [deliverySalesSearch, setDeliverySalesSearch] = useState('')
+  const [deliverySelectedOrder, setDeliverySelectedOrder] = useState<any>(null)
+  const [deliveryBarcodeInput, setDeliveryBarcodeInput] = useState('')
+  const [deliveryPickedItems, setDeliveryPickedItems] = useState<Array<{ salesOrderItemId: string; itemId: string; itemName: string; barcode: string; itemCode: string; uom: string; orderedQty: number; deliverQty: string }>>([])
+  const [deliveryPerson, setDeliveryPerson] = useState('')
+  const [deliveryNotes, setDeliveryNotes] = useState('')
+  const [delivering, setDelivering] = useState(false)
   const [showSalesDetailDialog, setShowSalesDetailDialog] = useState(false)
   const [selectedSalesOrder, setSelectedSalesOrder] = useState<any>(null)
   const [addPaymentForm, setAddPaymentForm] = useState({ amount: '', paymentType: 'cash', paymentMode: 'collection', paymentDate: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', notes: '' })
@@ -6208,55 +6216,282 @@ export default function Home() {
 
   // ★ Delivery Management page
   const renderDeliveryPage = () => {
-    const deliveryOrders = (salesOrders || []).filter((s: any) => s.status === 'delivered' || s.status === 'processing' || (s as any).deliveryStatus === 'out_for_delivery')
-    const updateDeliveryStatus = async (id: string, status: string) => {
-      try {
-        await authFetch(`/api/sales-orders/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deliveryStatus: status }) })
-        toast({ title: 'Updated', description: `Delivery status: ${status}` })
-        fetchSalesOrders()
-      } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+    // Filter sales orders by search term (sales number or customer name)
+    const matchingOrders = (salesOrders || []).filter((s: any) => {
+      if (!deliverySalesSearch) return true
+      const q = deliverySalesSearch.toLowerCase()
+      return (s.salesNo || '').toLowerCase().includes(q) ||
+             (s.customer?.name || '').toLowerCase().includes(q) ||
+             (s.customer?.phone || '').includes(q)
+    }).filter((s: any) => s.status !== 'delivered') // hide fully-delivered orders
+
+    // When user selects an order, show its items for picking
+    const selectOrder = (order: any) => {
+      setDeliverySelectedOrder(order)
+      // Pre-populate the picked items list with all order items (deliverQty = orderedQty)
+      setDeliveryPickedItems((order.items || []).map((si: any) => ({
+        salesOrderItemId: si.id,
+        itemId: si.itemId,
+        itemName: si.item?.itemName || '—',
+        barcode: si.item?.barcode || '',
+        itemCode: si.item?.itemCode || '',
+        uom: si.item?.uom || 'PCS',
+        orderedQty: si.quantity,
+        deliverQty: '', // empty until user scans barcode
+      })))
+      setDeliveryBarcodeInput('')
     }
+
+    // When user scans/types a barcode, find the matching item in the order
+    const handleBarcodeScan = () => {
+      const bc = deliveryBarcodeInput.trim()
+      if (!bc) return
+      // Find a picked item matching this barcode (or itemCode or itemName)
+      const match = deliveryPickedItems.find(p =>
+        (p.barcode && p.barcode.toLowerCase() === bc.toLowerCase()) ||
+        (p.itemCode && p.itemCode.toLowerCase() === bc.toLowerCase()) ||
+        (p.itemName && p.itemName.toLowerCase() === bc.toLowerCase())
+      )
+      if (!match) {
+        toast({ title: 'Not found', description: `No item in this sales order matches "${bc}".`, variant: 'destructive' })
+        setDeliveryBarcodeInput('')
+        return
+      }
+      // Increment the deliverQty for this item
+      setDeliveryPickedItems(items =>
+        items.map(p => p.itemId === match.itemId
+          ? { ...p, deliverQty: String((parseInt(p.deliverQty) || 0) + 1) }
+          : p
+        )
+      )
+      toast({ title: '✓ Added', description: `${match.itemName}: ${parseInt(match.deliverQty) + 1} of ${match.orderedQty}` })
+      setDeliveryBarcodeInput('')
+    }
+
+    // Submit delivery — calls POST /api/sales-orders/[id]/deliver
+    const handleSubmitDelivery = async () => {
+      if (!deliverySelectedOrder) return
+      const itemsToDeliver = deliveryPickedItems.filter(p => parseInt(p.deliverQty) > 0)
+      if (itemsToDeliver.length === 0) {
+        toast({ title: 'Error', description: 'Scan at least one barcode to deliver items.', variant: 'destructive' })
+        return
+      }
+      const ok = await confirm({
+        title: 'Confirm Delivery?',
+        message: `This will deliver ${itemsToDeliver.length} item line(s) and decrement stock from "${deliverySelectedOrder.entity?.name || 'this entity'}". This action cannot be undone by regular users (admin can). Do you want to continue?`,
+        confirmLabel: 'Confirm Delivery',
+      })
+      if (!ok) return
+      setDelivering(true)
+      try {
+        const res = await authFetch(`/api/sales-orders/${deliverySelectedOrder.id}/deliver`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            items: itemsToDeliver.map(p => ({
+              salesOrderItemId: p.salesOrderItemId,
+              itemId: p.itemId,
+              quantity: parseInt(p.deliverQty),
+            })),
+            deliveryPerson,
+            deliveryNotes,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          toast({ title: '✓ Delivered', description: data.allItemsDelivered ? 'All items delivered. Sales order marked as delivered.' : 'Partial delivery completed.' })
+          setDeliverySelectedOrder(null)
+          setDeliveryPickedItems([])
+          setDeliveryBarcodeInput('')
+          setDeliveryPerson('')
+          setDeliveryNotes('')
+          fetchSalesOrders()
+        } else {
+          toast({ title: 'Error', description: data.error || 'Delivery failed', variant: 'destructive' })
+        }
+      } catch (e) {
+        toast({ title: 'Error', description: 'Delivery failed: ' + String(e), variant: 'destructive' })
+      } finally {
+        setDelivering(false)
+      }
+    }
+
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="text-xl font-semibold">Delivery Management - {workingEntity?.name}</h2>
+          <h2 className="text-xl font-semibold">Delivery Management — {workingEntity?.name}</h2>
         </div>
-        <div className="border rounded-lg overflow-hidden">
-          <Table>
-            <TableHeader><TableRow className="bg-muted/50">
-              <TableHead className="font-semibold">Sales No</TableHead>
-              <TableHead className="font-semibold">Customer</TableHead>
-              <TableHead className="font-semibold">Phone</TableHead>
-              <TableHead className="font-semibold">Address</TableHead>
-              <TableHead className="font-semibold">Delivery Person</TableHead>
-              <TableHead className="font-semibold">Delivery Status</TableHead>
-              <TableHead className="font-semibold text-center">Actions</TableHead>
-            </TableRow></TableHeader>
-            <TableBody>
-              {deliveryOrders.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No delivery orders</TableCell></TableRow>
-              : deliveryOrders.map(s => (
-                <TableRow key={s.id} className="hover:bg-muted/30">
-                  <TableCell className="font-mono text-xs">{s.salesNo}</TableCell>
-                  <TableCell className="font-medium">{s.customer?.name || '—'}</TableCell>
-                  <TableCell className="text-xs">{s.customer?.phone || '—'}</TableCell>
-                  <TableCell className="text-xs max-w-xs truncate">{s.customer?.address || '—'}</TableCell>
-                  <TableCell className="text-sm">{(s as any).deliveryPerson || '—'}</TableCell>
-                  <TableCell>
-                    <Badge variant="outline" className={`text-xs ${(s as any).deliveryStatus === 'delivered' ? 'bg-green-100 text-green-800' : (s as any).deliveryStatus === 'out_for_delivery' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                      {((s as any).deliveryStatus || 'pending').replace(/_/g, ' ')}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-center">
-                    <div className="flex items-center justify-center gap-1">
-                      <Button variant="ghost" size="sm" onClick={() => updateDeliveryStatus(s.id, 'out_for_delivery')} title="Out for Delivery" className="text-xs">📤</Button>
-                      <Button variant="ghost" size="sm" onClick={() => updateDeliveryStatus(s.id, 'delivered')} title="Delivered" className="text-xs">✅</Button>
-                    </div>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+
+        {/* Info banner — explain the flow */}
+        <div className="rounded-md border border-blue-200 bg-blue-50/60 p-3 text-xs text-blue-900">
+          <p className="font-semibold mb-1">📦 Delivery Workflow</p>
+          <ol className="list-decimal list-inside space-y-0.5">
+            <li>Sales order created → stock is NOT hit (only reserved)</li>
+            <li>Search for the sales order below by sales number or customer name</li>
+            <li>Click "Pick & Deliver" on the order to open the picking screen</li>
+            <li>Scan or type each item's barcode → quantity auto-increments</li>
+            <li>Click "Confirm Delivery" → stock is decremented and order marked delivered</li>
+          </ol>
         </div>
+
+        {/* If an order is selected, show the picking screen; otherwise show the search + list */}
+        {deliverySelectedOrder ? (
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <div>
+                  <CardTitle className="text-lg">Picking for {deliverySelectedOrder.salesNo}</CardTitle>
+                  <p className="text-sm text-muted-foreground mt-1">
+                    Customer: {deliverySelectedOrder.customer?.name || '—'}
+                    {deliverySelectedOrder.customer?.phone && ` • ${deliverySelectedOrder.customer.phone}`}
+                  </p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => { setDeliverySelectedOrder(null); setDeliveryPickedItems([]) }}>
+                  <X className="w-4 h-4 mr-1" />Close
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Barcode scan input */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Scan Barcode or Type Item Code</Label>
+                <div className="flex gap-2">
+                  <Input
+                    placeholder="Scan/type barcode here..."
+                    value={deliveryBarcodeInput}
+                    onChange={e => setDeliveryBarcodeInput(e.target.value)}
+                    onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); handleBarcodeScan() } }}
+                    autoFocus
+                    autoComplete="off"
+                    className="text-base font-mono"
+                  />
+                  <Button type="button" onClick={handleBarcodeScan}>
+                    <Barcode className="w-4 h-4 mr-1" />Add
+                  </Button>
+                </div>
+                <p className="text-[11px] text-muted-foreground">Scan a barcode to increment that item's delivery quantity. Each scan adds 1 unit.</p>
+              </div>
+
+              {/* Items to deliver */}
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">SL</th>
+                      <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
+                      <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-32">Barcode</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Ordered</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-24">Deliver Qty</th>
+                      <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-16">UoM</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {deliveryPickedItems.map((p, i) => {
+                      const qty = parseInt(p.deliverQty) || 0
+                      const isPicked = qty > 0
+                      const isComplete = qty >= p.orderedQty
+                      return (
+                        <tr key={p.itemId} className={`border-t ${isComplete ? 'bg-green-50/50' : isPicked ? 'bg-blue-50/40' : ''}`}>
+                          <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
+                          <td className="px-2 py-2 font-medium">{p.itemName}</td>
+                          <td className="px-2 py-2 font-mono text-xs">{p.barcode || p.itemCode || '—'}</td>
+                          <td className="px-2 py-2 text-right">{p.orderedQty}</td>
+                          <td className="px-2 py-2 text-right">
+                            <Input
+                              type="number"
+                              min="0"
+                              max={p.orderedQty}
+                              value={p.deliverQty}
+                              onChange={e => setDeliveryPickedItems(items => items.map(x => x.itemId === p.itemId ? { ...x, deliverQty: e.target.value } : x))}
+                              className={`h-8 text-right text-sm w-full min-w-[70px] ${isComplete ? 'border-green-500' : ''}`}
+                            />
+                          </td>
+                          <td className="px-2 py-2">{p.uom}</td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Delivery person + notes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                <div className="space-y-1">
+                  <Label className="text-xs">Delivery Person</Label>
+                  <Input value={deliveryPerson} onChange={e => setDeliveryPerson(e.target.value)} placeholder="Optional" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">Delivery Notes</Label>
+                  <Input value={deliveryNotes} onChange={e => setDeliveryNotes(e.target.value)} placeholder="Optional" />
+                </div>
+              </div>
+
+              {/* Summary + submit */}
+              <div className="flex items-center justify-between pt-4 border-t">
+                <div className="text-sm text-muted-foreground">
+                  {deliveryPickedItems.filter(p => parseInt(p.deliverQty) > 0).length} of {deliveryPickedItems.length} item(s) picked •
+                  Total units: {deliveryPickedItems.reduce((s, p) => s + (parseInt(p.deliverQty) || 0), 0)}
+                </div>
+                <Button
+                  onClick={handleSubmitDelivery}
+                  disabled={delivering || deliveryPickedItems.filter(p => parseInt(p.deliverQty) > 0).length === 0}
+                  size="lg"
+                >
+                  {delivering ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Delivering...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />Confirm Delivery</>}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ) : (
+          <>
+            {/* Sales order search */}
+            <div className="flex gap-2">
+              <Input
+                placeholder="Search by Sales No, customer name, or phone..."
+                value={deliverySalesSearch}
+                onChange={e => setDeliverySalesSearch(e.target.value)}
+                className="max-w-md"
+              />
+            </div>
+
+            {/* Sales orders list */}
+            <div className="border rounded-lg overflow-hidden">
+              <Table>
+                <TableHeader><TableRow className="bg-muted/50">
+                  <TableHead className="font-semibold">Sales No</TableHead>
+                  <TableHead className="font-semibold">Customer</TableHead>
+                  <TableHead className="font-semibold">Phone</TableHead>
+                  <TableHead className="font-semibold">Order Date</TableHead>
+                  <TableHead className="font-semibold">Items</TableHead>
+                  <TableHead className="font-semibold">Delivery Status</TableHead>
+                  <TableHead className="font-semibold text-center">Action</TableHead>
+                </TableRow></TableHeader>
+                <TableBody>
+                  {matchingOrders.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">{deliverySalesSearch ? 'No matching sales orders' : 'No pending sales orders to deliver'}</TableCell></TableRow>
+                  : matchingOrders.map(s => (
+                    <TableRow key={s.id} className="hover:bg-muted/30">
+                      <TableCell className="font-mono text-xs">{s.salesNo}</TableCell>
+                      <TableCell className="font-medium">{s.customer?.name || '—'}</TableCell>
+                      <TableCell className="text-xs">{s.customer?.phone || '—'}</TableCell>
+                      <TableCell className="text-xs">{bdDate(new Date(s.orderDate))}</TableCell>
+                      <TableCell className="text-xs">{s.items?.length || 0} item(s)</TableCell>
+                      <TableCell>
+                        <Badge variant="outline" className={`text-xs ${(s as any).deliveryStatus === 'delivered' ? 'bg-green-100 text-green-800' : (s as any).deliveryStatus === 'partial' ? 'bg-blue-100 text-blue-800' : (s as any).deliveryStatus === 'out_for_delivery' ? 'bg-purple-100 text-purple-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                          {((s as any).deliveryStatus || 'pending').replace(/_/g, ' ')}
+                        </Badge>
+                      </TableCell>
+                      <TableCell className="text-center">
+                        <Button size="sm" onClick={() => selectOrder(s)}>
+                          <Truck className="w-4 h-4 mr-1" />Pick & Deliver
+                        </Button>
+                      </TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+            </div>
+          </>
+        )}
       </div>
     )
   }

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
-import { decrementStock, StockGuardError, getStock } from '@/lib/stock-guard';
+import { getStock } from '@/lib/stock-guard';
 
 export async function GET(request: NextRequest) {
   try {
@@ -70,9 +70,12 @@ export async function POST(request: NextRequest) {
     const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
     const salesNo = `SO-${dateStr}-${randomStr}`;
 
-    // ★ STOCK GUARD — pre-check all items BEFORE creating the order.
-    // Aggregate quantities per (item, entity) so we detect insufficient stock
-    // up front and return a clear error rather than creating a half-order.
+    // ★ STOCK CHECK (soft warning only — does NOT block creation)
+    // Stock is NOT hit at sales order creation. It will be hit only when the
+    // delivery is confirmed via the Delivery menu (POST /api/sales-orders/[id]/deliver).
+    // We collect low-stock warnings to return to the client for display, but we
+    // still allow the order to be created (the user can deliver partial later).
+    const stockWarnings: string[] = [];
     const aggregated = new Map<string, number>();
     for (const item of items as any[]) {
       const key = `${item.itemId}|${entityId}`;
@@ -83,12 +86,7 @@ export async function POST(request: NextRequest) {
       const current = await getStock(db, itemId, entityId);
       if (current < totalQty) {
         const itemRow = await db.item.findUnique({ where: { id: itemId }, select: { itemName: true } });
-        return NextResponse.json(
-          {
-            error: `Insufficient stock for "${itemRow?.itemName || itemId}". Available: ${current}, requested: ${totalQty}. Stock cannot go below 0.`,
-          },
-          { status: 400 }
-        );
+        stockWarnings.push(`"${itemRow?.itemName || itemId}": available ${current}, ordered ${totalQty} — stock will be checked again at delivery time.`);
       }
     }
 
@@ -148,25 +146,13 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Reduce stock for each item — using stock guard (atomic + race-safe)
-    for (const item of items) {
-      try {
-        await decrementStock(db, item.itemId, entityId, parseInt(item.quantity) || 1);
-      } catch (e) {
-        if (e instanceof StockGuardError) {
-          // Rollback the sales order we just created (cascade will delete items/payments/etc.)
-          await db.salesOrder.delete({ where: { id: salesOrder.id } }).catch(() => {});
-          const itemRow = await db.item.findUnique({ where: { id: item.itemId }, select: { itemName: true } });
-          return NextResponse.json(
-            {
-              error: `Insufficient stock for "${itemRow?.itemName || item.itemId}". Available: ${e.currentQty}, requested: ${Math.abs(e.attemptedDelta)}. Sales order not created.`,
-            },
-            { status: 400 }
-          );
-        }
-        throw e;
-      }
-    }
+    // ★ STOCK IS NOT HIT HERE — sales order creation only records the order.
+    // Stock will be decremented when the delivery is confirmed via
+    // POST /api/sales-orders/[id]/deliver (Delivery menu).
+    // This implements the user's required flow:
+    //   1. Sales order created → stock unchanged
+    //   2. User goes to Delivery menu → searches sales order → scans barcodes
+    //   3. On delivery submit → stock is decremented
 
     // ★ Auto-calculate incentives based on IncentiveFormula (multiple ranges + entity type)
     // For each item in this sales order:
@@ -231,7 +217,7 @@ export async function POST(request: NextRequest) {
       console.error('Incentive auto-calc error:', incError);
     }
 
-    return NextResponse.json({ salesOrder });
+    return NextResponse.json({ salesOrder, stockWarnings: stockWarnings.length > 0 ? stockWarnings : undefined });
   } catch (error) {
     console.error('Create sales order error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
