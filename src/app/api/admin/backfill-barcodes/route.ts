@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
 
       if (field) {
         stmts.push({
-          sql: `UPDATE "Item" SET "${field}" = ? WHERE "id" = ? AND ("${field}" IS NULL OR "${field}" = '')`,
+          sql: `UPDATE "Item" SET "${field}" = ? WHERE "id" = ?`,
           args: [name, item.id],
         });
         if (sampleUpdates.length < 50) {
@@ -80,8 +80,9 @@ export async function POST(request: NextRequest) {
       const batch = stmts.slice(i, i + BATCH);
       try {
         const results = await libsql.batch(batch, 'write');
-        for (const r of results) {
-          updated += (r as any).rows_affected || 0;
+        // libsql batch returns an array of ResultSet objects; each has a `rowsAffected` field
+        for (const r of results as any[]) {
+          updated += r.rowsAffected || r.rows_affected || 0;
         }
       } catch (e) {
         console.error('Batch error at offset', i, ':', String(e).slice(0, 200));
