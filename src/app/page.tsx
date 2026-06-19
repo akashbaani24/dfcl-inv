@@ -1925,8 +1925,9 @@ export default function Home() {
     )
   }
 
-  // Login screen
+  // ★ Error boundary — catch any client-side error and show details
   if (!user) {
+    try {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
         <Card className="w-full max-w-md shadow-xl border-0">
@@ -1959,6 +1960,18 @@ export default function Home() {
         </Card>
       </div>
     )
+    } catch (loginErr) {
+      console.error('Login page render error:', loginErr)
+      return (
+        <div className="min-h-screen flex items-center justify-center p-4">
+          <div className="max-w-md w-full border border-red-300 bg-red-50 rounded-lg p-6 text-red-900">
+            <h2 className="font-bold text-lg mb-2">Render Error on Login Page</h2>
+            <pre className="text-xs whitespace-pre-wrap">{String(loginErr)}</pre>
+            <pre className="text-xs whitespace-pre-wrap mt-2">{(loginErr as any)?.stack}</pre>
+          </div>
+        </div>
+      )
+    }
   }
 
   // Main app
