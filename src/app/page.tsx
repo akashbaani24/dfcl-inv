@@ -515,6 +515,7 @@ export default function Home() {
   const [chatPartners, setChatPartners] = useState<any[]>([])
   const [chatInput, setChatInput] = useState('')
   const [chatLoading, setChatLoading] = useState(false)
+  const [chatUnreadCount, setChatUnreadCount] = useState(0)
   const chatEndRef = useRef<HTMLDivElement | null>(null)
 
   // ★ News Ticker state (top-level)
@@ -1269,6 +1270,20 @@ export default function Home() {
       if (res.ok) { const d = await res.json(); setChatPartners(d.partners || []) }
     } catch {}
   }
+
+  // ★ Chat: poll for unread messages (notification badge)
+  useEffect(() => {
+    if (!workingEntity || chatOpen) return
+    const fetchUnread = async () => {
+      try {
+        const res = await authFetch(`/api/chat?entityId=${workingEntity.id}`)
+        if (res.ok) { const d = await res.json(); const total = (d.partners || []).reduce((s: number, p: any) => s + (p.unread || 0), 0); setChatUnreadCount(total) }
+      } catch {}
+    }
+    fetchUnread()
+    const interval = setInterval(fetchUnread, 15000)
+    return () => clearInterval(interval)
+  }, [workingEntity?.id, chatOpen])
 
   // ★ Chat: fetch messages with a specific partner
   const fetchChatMessages = async (partnerId: string) => {
@@ -4727,7 +4742,7 @@ export default function Home() {
     )
   }
 
-  // ★ News Ticker management page
+  // ★ News Ticker management page — with settings
   const renderNewsTickerPage = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -4739,6 +4754,55 @@ export default function Home() {
           <Button onClick={() => setShowTickerInput(!showTickerInput)}><Plus className="w-4 h-4 mr-2" />New Message</Button>
         )}
       </div>
+
+      {/* Ticker Settings (Admin/Manager only) */}
+      {isManagerOrAdmin && (
+        <Card>
+          <CardHeader><CardTitle className="text-sm flex items-center gap-2"><Settings2 className="w-4 h-4" />Ticker Display Settings</CardTitle></CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="space-y-1">
+                <Label className="text-xs">Scroll Speed (seconds)</Label>
+                <Input type="number" min="5" max="120" value={tickerSettings.speed} onChange={e => setTickerSettings({ ...tickerSettings, speed: parseInt(e.target.value) || 30 })} className="h-9" />
+                <p className="text-[10px] text-muted-foreground">Lower = faster</p>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Background Color</Label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={tickerSettings.bgColor} onChange={e => setTickerSettings({ ...tickerSettings, bgColor: e.target.value })} className="h-9 w-12 border rounded" />
+                  <Input value={tickerSettings.bgColor} onChange={e => setTickerSettings({ ...tickerSettings, bgColor: e.target.value })} className="h-9 text-xs font-mono" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Text Color</Label>
+                <div className="flex items-center gap-2">
+                  <input type="color" value={tickerSettings.textColor} onChange={e => setTickerSettings({ ...tickerSettings, textColor: e.target.value })} className="h-9 w-12 border rounded" />
+                  <Input value={tickerSettings.textColor} onChange={e => setTickerSettings({ ...tickerSettings, textColor: e.target.value })} className="h-9 text-xs font-mono" />
+                </div>
+              </div>
+              <div className="space-y-1">
+                <Label className="text-xs">Font Size</Label>
+                <Select value={tickerSettings.fontSize} onValueChange={v => setTickerSettings({ ...tickerSettings, fontSize: v })}>
+                  <SelectTrigger className="h-9"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="sm">Small</SelectItem>
+                    <SelectItem value="md">Medium</SelectItem>
+                    <SelectItem value="lg">Large</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+            {/* Live preview */}
+            <div className="mt-4 rounded-md overflow-hidden" style={{ backgroundColor: tickerSettings.bgColor }}>
+              <div className="py-2 px-4 font-semibold whitespace-nowrap" style={{ color: tickerSettings.textColor, fontSize: tickerSettings.fontSize === 'lg' ? '16px' : tickerSettings.fontSize === 'sm' ? '13px' : '14px' }}>
+                📢 Live Preview: This is how your ticker will look
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* New message input */}
       {showTickerInput && isManagerOrAdmin && (
         <Card>
           <CardContent className="pt-4">
@@ -4750,6 +4814,8 @@ export default function Home() {
           </CardContent>
         </Card>
       )}
+
+      {/* Messages list */}
       <div className="border rounded-lg overflow-hidden">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
@@ -6795,43 +6861,13 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           {/* Admin/Manager controls */}
           {isManagerOrAdmin && (
             <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-              <button onClick={() => setShowTickerSettings(!showTickerSettings)} className="text-xs opacity-80 hover:opacity-100 px-1" title="Settings">⚙️</button>
-              <button onClick={() => { setShowTickerInput(!showTickerInput); setShowTickerSettings(false) }} className="text-xs opacity-80 hover:opacity-100 px-1" title="Add message">+ Add</button>
+              <button onClick={() => setShowTickerInput(!showTickerInput)} className="text-xs opacity-80 hover:opacity-100 px-1" title="Add message">+ Add</button>
             </div>
           )}
           {showTickerInput && (
             <div className="absolute right-2 top-8 z-50 bg-card border rounded-md shadow-lg p-2 flex gap-1">
               <Input placeholder="Type ticker message..." value={tickerInput} onChange={e => setTickerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && postTickerMessage()} className="h-7 text-xs w-64" />
               <Button size="sm" className="h-7 text-xs" onClick={postTickerMessage}>Post</Button>
-            </div>
-          )}
-          {showTickerSettings && (
-            <div className="absolute right-2 top-8 z-50 bg-card border rounded-md shadow-lg p-3 space-y-2 w-56 text-foreground">
-              <p className="text-xs font-bold">Ticker Settings</p>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Speed (seconds)</Label>
-                <Input type="number" min="5" max="120" value={tickerSettings.speed} onChange={e => setTickerSettings({ ...tickerSettings, speed: parseInt(e.target.value) || 30 })} className="h-7 w-16 text-xs text-right" />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Background</Label>
-                <input type="color" value={tickerSettings.bgColor} onChange={e => setTickerSettings({ ...tickerSettings, bgColor: e.target.value })} className="h-7 w-12 border rounded" />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Text Color</Label>
-                <input type="color" value={tickerSettings.textColor} onChange={e => setTickerSettings({ ...tickerSettings, textColor: e.target.value })} className="h-7 w-12 border rounded" />
-              </div>
-              <div className="flex items-center justify-between">
-                <Label className="text-xs">Font Size</Label>
-                <Select value={tickerSettings.fontSize} onValueChange={v => setTickerSettings({ ...tickerSettings, fontSize: v })}>
-                  <SelectTrigger className="h-7 w-20 text-xs"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="sm">Small</SelectItem>
-                    <SelectItem value="md">Medium</SelectItem>
-                    <SelectItem value="lg">Large</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-              <Button size="sm" className="w-full h-7 text-xs" onClick={() => setShowTickerSettings(false)}>Done</Button>
             </div>
           )}
         </div>
@@ -6977,6 +7013,9 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
                 : chatMessages.map((msg, i) => (
                   <div key={i} className={`flex ${msg.fromEntityId === workingEntity?.id ? 'justify-end' : 'justify-start'}`}>
                     <div className={`max-w-[75%] rounded-lg px-3 py-1.5 text-xs ${msg.fromEntityId === workingEntity?.id ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                      <p className={`text-[10px] font-semibold mb-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/70' : 'text-muted-foreground'}`}>
+                        {msg.fromEntityId === workingEntity?.id ? 'You' : (msg as any).senderName || msg.fromEntity?.name || 'Unknown'}
+                      </p>
                       <p>{msg.message}</p>
                       <p className={`text-[9px] mt-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
                         {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
@@ -6998,8 +7037,11 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           )}
         </div>
       ) : (
-        <button onClick={() => { setChatOpen(true); fetchChatPartners() }} className="fixed bottom-4 right-4 z-[9998] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105">
+        <button onClick={() => { setChatOpen(true); fetchChatPartners(); setChatUnreadCount(0) }} className="fixed bottom-4 right-4 z-[9998] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105 relative">
           <span className="text-2xl">💬</span>
+          {chatUnreadCount > 0 && (
+            <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[10px] font-bold w-5 h-5 rounded-full flex items-center justify-center">{chatUnreadCount > 9 ? '9+' : chatUnreadCount}</span>
+          )}
         </button>
       )}
       </div>{/* close flex-1 div */}

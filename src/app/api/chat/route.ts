@@ -39,7 +39,17 @@ export async function GET(request: NextRequest) {
         data: { read: true },
       });
 
-      return NextResponse.json({ messages });
+      // Get sender usernames
+      const userIds = [...new Set(messages.map(m => m.createdBy).filter(Boolean))];
+      const users = await db.user.findMany({ where: { id: { in: userIds as string[] } }, select: { id: true, displayName: true } });
+      const userMap = new Map(users.map(u => [u.id, u.displayName]));
+
+      const messagesWithUser = messages.map(m => ({
+        ...m,
+        senderName: m.createdBy ? (userMap.get(m.createdBy) || 'Unknown') : 'System',
+      }));
+
+      return NextResponse.json({ messages: messagesWithUser });
     } else {
       // Get list of partners with latest message + unread count
       const allMessages = await db.chatMessage.findMany({
