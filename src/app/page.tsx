@@ -2011,30 +2011,23 @@ export default function Home() {
 
   // Function menu items (main working area, shown after entity selection)
   const functionItems = [
-    // ★ Master Data at top
-    { key: 'masterData' as ViewType, label: 'Master Data', icon: Database, isParent: true, children: [] },
-    // ★ Inventory tab
-    { key: 'inventory' as ViewType, label: 'Inventory', icon: Package, isParent: true, children: [
-      { key: 'itemPrice' as ViewType, label: 'Item Price', icon: TrendingUp },
-      { key: 'myEntityStock' as ViewType, label: 'My Entity Stock', icon: Warehouse },
-      { key: 'allEntityStock' as ViewType, label: 'All Entity Stock', icon: BarChart3 },
-      { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', icon: Settings2 },
-      { key: 'transfer' as ViewType, label: 'Transfer', icon: ArrowRightLeft },
-      { key: 'receive' as ViewType, label: 'Receive', icon: ArrowDownToLine },
-      { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
-    ]},
-    // ★ Purchase tab
+    { key: 'itemPrice' as ViewType, label: 'Item Price', icon: TrendingUp },
+    { key: 'myEntityStock' as ViewType, label: 'My Entity Stock', icon: Warehouse },
+    { key: 'allEntityStock' as ViewType, label: 'All Entity Stock', icon: BarChart3 },
+    { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', icon: Settings2 },
+    { key: 'transfer' as ViewType, label: 'Transfer', icon: ArrowRightLeft },
+    { key: 'receive' as ViewType, label: 'Receive', icon: ArrowDownToLine },
     { key: 'purchase' as ViewType, label: 'Purchase', icon: ShoppingCart, isParent: true, children: [
       { key: 'purchase' as ViewType, label: 'Purchase List', icon: ClipboardList },
       { key: 'purchaseApproval' as ViewType, label: 'Purchase Approval', icon: CheckCircle2 },
       { key: 'supplierPayments' as ViewType, label: 'Supplier Payments', icon: DollarSign },
     ]},
-    // ★ Sales tab
     { key: 'sales' as ViewType, label: 'Sales', icon: ShoppingCart, isParent: true, children: [
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
       { key: 'delivery' as ViewType, label: 'Delivery', icon: Truck },
     ]},
+    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
     { key: 'damage' as ViewType, label: 'Damage/Wastage', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
@@ -2114,47 +2107,17 @@ export default function Home() {
     <div className="space-y-0.5">
       {functionItems.map(item => {
         if (item.isParent && item.children) {
-          // ★ Master Data parent — uses visibleMasterDataItems as children
-          if (item.key === 'masterData') {
-            const mdItems = visibleMasterDataItems.map(mi => ({
-              key: mi.key as ViewType,
-              label: mi.label,
-              icon: mi.icon,
-            }))
-            if (mdItems.length === 0) return null
-            return (
-              <div key={item.key}>
-                <button onClick={() => setMasterDataOpen(!masterDataOpen)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isMasterDataActive ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
-                  <item.icon className="w-4 h-4 shrink-0" /><span className="flex-1 text-left">{item.label}</span><ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${masterDataOpen ? 'rotate-180' : ''}`} />
-                </button>
-                {masterDataOpen && (
-                  <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
-                    {mdItems.map(child => (
-                      <button key={child.key} onClick={(e) => { if (isNewTabClick(e)) { e.preventDefault(); openInNewTab(child.key) } else { setCurrentView(child.key); onNavigate?.() } }} onContextMenu={(e) => handleContextMenu(e, child.key)} onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(child.key) } }} className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === child.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-                        <child.icon className="w-3.5 h-3.5 shrink-0" />{child.label}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-            )
-          }
-
-          // ★ Other parent items (inventory, purchase, sales)
           let isOpen: boolean
           let isActive: boolean
           let toggleOpen: () => void
-          if (item.key === 'inventory') {
-            isOpen = inventoryOpen; isActive = ['itemPrice','myEntityStock','allEntityStock','itemAdjustment','transfer','receive','booking'].includes(currentView); toggleOpen = () => setInventoryOpen(!inventoryOpen)
-          } else if (item.key === 'purchase') {
+          if (item.key === 'purchase') {
             isOpen = purchaseOpen; isActive = isPurchaseActive; toggleOpen = () => setPurchaseOpen(!purchaseOpen)
           } else {
             isOpen = salesOpen; isActive = isSalesActive; toggleOpen = () => setSalesOpen(!salesOpen)
           }
           if (isActive && !isOpen) {
             setTimeout(() => {
-              if (item.key === 'inventory') setInventoryOpen(true)
-              else if (item.key === 'purchase') setPurchaseOpen(true)
+              if (item.key === 'purchase') setPurchaseOpen(true)
               else setSalesOpen(true)
             }, 0)
           }
