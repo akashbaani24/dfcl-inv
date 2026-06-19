@@ -10,7 +10,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     const { id } = await params;
     const body = await request.json();
 
-    // Handle payment addition separately
+    // ★ Load the order first to check delivery status — delivered orders are locked.
+    // (Payment collection is still allowed for delivered orders — money may come in later.)
+    const existingOrder = await db.salesOrder.findUnique({
+      where: { id },
+      select: { status: true, deliveryStatus: true },
+    });
+    if (!existingOrder) {
+      return NextResponse.json({ error: 'Sales order not found' }, { status: 404 });
+    }
+    const isDelivered = existingOrder.deliveryStatus === 'delivered' || existingOrder.status === 'delivered';
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'manager';
+
+    // Handle payment addition separately — allowed even for delivered orders (money may come in later)
     if (body.addPayment) {
       const now = new Date();
       const dateStr = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
@@ -33,6 +45,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       });
 
       return NextResponse.json({ payment });
+    }
+
+    // ★ For any other update (status, delivery status, items), the order must NOT be delivered.
+    // Admins can bypass this lock (for fixing mistakes).
+    if (isDelivered && !isAdmin) {
+      return NextResponse.json(
+        {
+          error: 'This sales order has already been delivered and is locked. Modifications are not allowed for regular users. Contact an admin if a change is needed.',
+          deliveryStatus: existingOrder.deliveryStatus,
+          status: existingOrder.status,
+        },
+        { status: 403 }
+      );
     }
 
     // Handle status update
@@ -66,6 +91,24 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
     if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const { id } = await params;
+
+    // ★ Block deletion of delivered orders (non-admin)
+    const existingOrder = await db.salesOrder.findUnique({
+      where: { id },
+      select: { status: true, deliveryStatus: true },
+    });
+    if (!existingOrder) {
+      return NextResponse.json({ error: 'Sales order not found' }, { status: 404 });
+    }
+    const isDelivered = existingOrder.deliveryStatus === 'delivered' || existingOrder.status === 'delivered';
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'manager';
+    if (isDelivered && !isAdmin) {
+      return NextResponse.json(
+        { error: 'This sales order has been delivered and cannot be deleted. Contact an admin if needed.' },
+        { status: 403 }
+      );
+    }
+
     await db.salesOrder.delete({ where: { id } });
     return NextResponse.json({ success: true });
   } catch (error) {

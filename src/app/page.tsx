@@ -4329,11 +4329,15 @@ export default function Home() {
                   </div>
                 )}
 
-                {/* Action buttons */}
+                {/* Action buttons — locked if order is delivered (non-admin) */}
                 <div className="flex flex-wrap gap-2 pt-3 border-t">
                   <Button variant="default" size="sm" onClick={() => printSalesInvoice(so)}><FileText className="w-4 h-4 mr-2" />Print Invoice</Button>
                   <Button variant="outline" size="sm" onClick={() => { setEditingSalesOrderId(so.id); setShowAddPaymentDialog(true) }}><DollarSign className="w-4 h-4 mr-2" />Add Payment</Button>
-                  {so.status !== 'delivered' && so.status !== 'cancelled' && (
+                  {so.deliveryStatus === 'delivered' || so.status === 'delivered' ? (
+                    <Badge variant="outline" className="bg-green-100 text-green-800 self-center px-3 py-1.5">
+                      <CheckCircle2 className="w-3.5 h-3.5 mr-1" />Delivered — Locked
+                    </Badge>
+                  ) : so.status !== 'cancelled' && (
                     <Button variant="outline" size="sm" className="text-green-700 hover:text-green-800" onClick={async () => {
                       try {
                         const res = await authFetch(`/api/sales-orders/${so.id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'delivered' }) })
