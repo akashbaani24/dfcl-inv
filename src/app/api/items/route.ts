@@ -46,6 +46,10 @@ export async function GET(request: NextRequest) {
           { group: { contains: searchTerm } },
           { subGroup: { contains: searchTerm } },
           { year: { contains: searchTerm } },
+          { barcode: { contains: searchTerm } },
+          { itemCode: { contains: searchTerm } },
+          { color: { contains: searchTerm } },
+          { supplierCode: { contains: searchTerm } },
         ],
       };
     }
@@ -68,6 +72,15 @@ export async function GET(request: NextRequest) {
           price: true,
           uom: true,
           createdAt: true,
+          // ★ Always return barcode + itemCode so item picker / transfer form / receive
+          //   form can show them after a scan-based search.
+          barcode: true,
+          itemCode: true,
+          color: true,
+          pattern: true,
+          supplierCode: true,
+          dimension: true,
+          description: true,
         },
       }),
       db.item.count({ where }),
@@ -112,6 +125,15 @@ export async function GET(request: NextRequest) {
           result[col] = item[col as keyof typeof item];
         }
       }
+      // ★ Always expose barcode + itemCode regardless of column access — they're
+      //   needed by the transfer/receive forms for scan-based item lookup.
+      result.barcode = item.barcode;
+      result.itemCode = item.itemCode;
+      result.color = item.color;
+      result.pattern = item.pattern;
+      result.supplierCode = item.supplierCode;
+      result.dimension = item.dimension;
+      result.description = item.description;
       return result;
     });
 

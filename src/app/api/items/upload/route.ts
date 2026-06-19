@@ -71,23 +71,34 @@ export async function POST(request: NextRequest) {
     }
 
     const idx = (col: string) => header.indexOf(col);
+    // ★ Optional barcode + itemCode columns (not required, but if present will be checked for duplicates)
+    const hasBarcodeCol = header.includes('barcode');
+    const hasItemCodeCol = header.includes('itemcode');
 
     let inserted = 0;
     let skipped = 0;
     let duplicate = 0;
     const errors: string[] = [];
+    const duplicateBarcodes: string[] = []; // ★ detailed list of duplicate barcodes for the warning message
 
-    // Cache existing itemNames from DB for fast duplicate check
-    // RULE: Only itemName is checked for duplicates — year, lcNo, group, subGroup, price, uom
-    // can all be duplicates without issue.
+    // Cache existing itemNames AND barcodes from DB for fast duplicate check
+    // RULE: Both itemName and barcode must be unique. Other columns can duplicate.
     const existingItems = await db.item.findMany({
-      select: { itemName: true },
+      select: { itemName: true, barcode: true },
     });
     const existingNames = new Set(
       existingItems.map(i => i.itemName.toLowerCase())
     );
+    // ★ Build a set of existing non-empty barcodes (case-insensitive)
+    const existingBarcodes = new Set(
+      existingItems
+        .map(i => i.barcode?.trim())
+        .filter((b): b is string => !!b && b.length > 0)
+        .map(b => b!.toLowerCase())
+    );
     // Also track duplicates within this same upload
     const seenInThisUpload = new Set<string>();
+    const seenBarcodesInThisUpload = new Set<string>();
 
     // Parse all rows first, then batch-insert to avoid Vercel's 10s timeout
     const rowsToInsert: Array<{
@@ -98,6 +109,8 @@ export async function POST(request: NextRequest) {
       itemName: string;
       price: number;
       uom: string;
+      barcode: string | null;
+      itemCode: string | null;
       createdBy: string;
     }> = [];
 
@@ -124,17 +137,23 @@ export async function POST(request: NextRequest) {
           const v = cols[idx(col)]?.trim() ?? '';
           return v === '' ? fallback : v;
         };
+        // ★ For optional columns that may not exist in the CSV
+        const getOptional = (col: string): string => {
+          const colIdx = header.indexOf(col)
+          if (colIdx < 0) return ''
+          const v = cols[colIdx]?.trim() ?? ''
+          return v
+        };
 
         const itemName = getCellOr('itemname', 'N/A');
 
         // Skip only if itemName is completely missing (N/A and empty)
-        // No other column is mandatory
         if (itemName === 'N/A' || !itemName) {
           skipped++;
           continue;
         }
 
-        // DUPLICATE CHECK: only by itemName (case-insensitive)
+        // DUPLICATE CHECK by itemName (case-insensitive)
         const key = itemName.toLowerCase();
         if (existingNames.has(key) || seenInThisUpload.has(key)) {
           duplicate++;
@@ -143,6 +162,26 @@ export async function POST(request: NextRequest) {
           }
           continue;
         }
+
+        // ★ DUPLICATE CHECK by barcode (if a barcode column exists and the cell is non-empty)
+        const barcodeRaw = hasBarcodeCol ? getOptional('barcode') : '';
+        const barcodeValue = barcodeRaw && barcodeRaw !== 'N/A' ? barcodeRaw : '';
+        if (barcodeValue) {
+          const barcodeKey = barcodeValue.toLowerCase();
+          if (existingBarcodes.has(barcodeKey) || seenBarcodesInThisUpload.has(barcodeKey)) {
+            duplicate++;
+            duplicateBarcodes.push(`Row ${i + 1}: barcode "${barcodeValue}" (item "${itemName}") already exists — skipped`);
+            if (errors.length < 20) {
+              errors.push(`Row ${i + 1}: duplicate barcode "${barcodeValue}" (item "${itemName}") — skipped`);
+            }
+            continue;
+          }
+          seenBarcodesInThisUpload.add(barcodeKey);
+        }
+
+        const itemCodeValue = hasItemCodeCol ? getOptional('itemcode') : '';
+        const itemCodeFinal = itemCodeValue && itemCodeValue !== 'N/A' ? itemCodeValue : '';
+
         seenInThisUpload.add(key);
 
         // Other columns can be empty/N/A — no required fields
@@ -163,6 +202,8 @@ export async function POST(request: NextRequest) {
           itemName,
           price,
           uom: getCellOr('uom', 'PCS'),
+          barcode: barcodeValue || null,
+          itemCode: itemCodeFinal || null,
           createdBy: currentUser.id,
         });
       } catch (e) {
@@ -191,21 +232,25 @@ export async function POST(request: NextRequest) {
       const libsql = createClient({ url: tursoUrl, authToken: tursoToken })
 
       // Build multi-row INSERT statements
-      // SQLite param limit is 999. With 10 params per row (id + 9 fields), max ~99 rows.
-      // Use 70 rows per statement (70 × 10 = 700 params, safely under 999).
-      // ALL statements sent in ONE HTTP request via libsql.batch()
+      // SQLite param limit is 999. With 12 params per row (id + 11 fields), max ~83 rows.
+      // Use 70 rows per statement (70 × 12 = 840 params, safely under 999).
       const ROWS_PER_STATEMENT = 70
-      const stmts: Array<{ sql: string; args: (string | number)[] }> = []
+      const stmts: Array<{ sql: string; args: (string | number | null)[] }> = []
 
       for (let i = 0; i < rowsToInsert.length; i += ROWS_PER_STATEMENT) {
         const batch = rowsToInsert.slice(i, i + ROWS_PER_STATEMENT)
-        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, datetime(\'now\'), datetime(\'now\'))').join(', ')
-        const args: (string | number)[] = []
+        const placeholders = batch.map(() => '(?, ?, ?, ?, ?, ?, ?, ?, NULL, ?, ?, ?, ?, datetime(\'now\'), datetime(\'now\'))').join(', ')
+        const args: (string | number | null)[] = []
         for (const row of batch) {
-          args.push(generateId(), row.year, row.lcNo, row.group, row.subGroup, row.itemName, row.price, row.uom, row.createdBy)
+          args.push(
+            generateId(), row.year, row.lcNo, row.group, row.subGroup,
+            row.itemName, row.price, row.uom,
+            row.createdBy,
+            row.barcode, row.itemCode
+          )
         }
         stmts.push({
-          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "createdAt", "updatedAt") VALUES ${placeholders}`,
+          sql: `INSERT OR IGNORE INTO "Item" ("id", "year", "lcNo", "group", "subGroup", "itemName", "price", "uom", "supplierId", "createdBy", "updatedBy", "barcode", "itemCode", "createdAt", "updatedAt") VALUES ${placeholders}`,
           args,
         })
       }
@@ -262,6 +307,7 @@ export async function POST(request: NextRequest) {
       duplicate,
       total: lines.length - 1,
       delimiter,
+      duplicateBarcodes: duplicateBarcodes.length > 0 ? duplicateBarcodes : undefined,
       errors: errors.length > 0 ? errors : undefined,
     });
   } catch (error) {

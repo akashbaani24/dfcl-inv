@@ -400,6 +400,8 @@ export default function Home() {
   const [txItemSearch, setTxItemSearch] = useState('')
   const [txItemResults, setTxItemResults] = useState<ItemData[]>([])
   const [txItemLoading, setTxItemLoading] = useState(false)
+  // ★ Track the last-selected item so the search field can show its details after the results list is cleared.
+  const [txSelectedItem, setTxSelectedItem] = useState<ItemData | null>(null)
 
   // Items state
   const [items, setItems] = useState<ItemData[]>([])
@@ -462,6 +464,9 @@ export default function Home() {
   // Stock upload state
   const [stockUploadFile, setStockUploadFile] = useState<File | null>(null)
   const [stockUploading, setStockUploading] = useState(false)
+  // ★ Entity selector for the standalone stock upload page (renderStockUploadPage)
+  const [stockUploadEntityId, setStockUploadEntityId] = useState<string>('')
+  const [stockUploadResult, setStockUploadResult] = useState<any>(null)
 
   // Master Data state
   const [tailors, setTailors] = useState<TailorData[]>([])
@@ -870,20 +875,30 @@ export default function Home() {
   const handleStockUpload = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!stockUploadFile) { toast({ title: 'Error', description: 'Select a CSV file', variant: 'destructive' }); return }
+    if (!stockUploadEntityId) {
+      toast({ title: 'Error', description: 'Please select an entity first.', variant: 'destructive' })
+      return
+    }
     setStockUploading(true)
+    setStockUploadResult(null)
     try {
       const formData = new FormData(); formData.append('file', stockUploadFile)
-      const res = await authFetch('/api/stock/upload', { method: 'POST', body: formData })
+      const res = await authFetch(`/api/stock/upload?entityId=${stockUploadEntityId}`, { method: 'POST', body: formData })
       const data = await res.json()
       if (res.ok) {
-        toast({ title: 'Success', description: `Uploaded ${data.upserted} stock entries${data.skipped > 0 ? `, skipped ${data.skipped}` : ''}` })
+        setStockUploadResult(data)
+        toast({ title: 'Success', description: `Uploaded ${data.upserted} stock entries${data.skipped > 0 ? `, skipped ${data.skipped}${data.wrongEntity ? ` (wrong entity: ${data.wrongEntity})` : ''}` : ''} for ${data.selectedEntity || 'entity'}` })
         setStockUploadFile(null)
-        setCurrentView('items')
-        fetchItems()
+        // Don't auto-redirect — let user see the result. They can navigate themselves.
       } else {
-        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+        setStockUploadResult({ error: data.error || 'Upload failed' })
+        toast({ title: 'Error', description: data.error || 'Upload failed', variant: 'destructive' })
       }
-    } catch { toast({ title: 'Error', description: 'Upload failed', variant: 'destructive' }) }
+    } catch (err) {
+      const msg = String(err)
+      setStockUploadResult({ error: msg })
+      toast({ title: 'Error', description: 'Upload failed: ' + msg, variant: 'destructive' })
+    }
     finally { setStockUploading(false) }
   }
 
@@ -1035,6 +1050,30 @@ export default function Home() {
       const res = await authFetch(`/api/items?${params}`)
       if (res.ok) { const data = await res.json(); setTxItemResults(data.items) }
     } catch {} finally { setTxItemLoading(false) }
+  }, [txItemSearch])
+
+  // ★ Debounced auto-search for transaction item picker (transfer / receive / adjustment)
+  //    Fires 300ms after the user stops typing. Supports barcode / itemCode / itemName.
+  useEffect(() => {
+    const q = txItemSearch.trim()
+    if (!q) { setTxItemResults([]); return }
+    setTxItemLoading(true)
+    const timer = setTimeout(async () => {
+      try {
+        const params = new URLSearchParams({ page: '1', pageSize: '20', search: q })
+        const res = await authFetch(`/api/items?${params}`)
+        if (res.ok) {
+          const data = await res.json()
+          setTxItemResults(data.items || [])
+          // ★ Auto-pick if exactly one match (esp. for barcode scans where the user
+          //    wants the item to be selected immediately).
+          if ((data.items || []).length === 1 && q.length >= 3) {
+            // Don't auto-pick — let user click. Auto-pick is too aggressive when typing partial names.
+          }
+        }
+      } catch {} finally { setTxItemLoading(false) }
+    }, 300)
+    return () => clearTimeout(timer)
   }, [txItemSearch])
 
   // Transaction save handlers
@@ -1390,7 +1429,12 @@ export default function Home() {
   useEffect(() => { if (currentView === 'purchase' || currentView === 'purchaseApproval') fetchPurchases() }, [currentView])
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
-  useEffect(() => { if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() } }, [currentView, workingEntity?.id])
+  useEffect(() => {
+    if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() }
+    if (currentView === 'stockUpload' && workingEntity && !stockUploadEntityId) {
+      setStockUploadEntityId(workingEntity.id)
+    }
+  }, [currentView, workingEntity?.id, stockUploadEntityId])
   useEffect(() => {
     if (currentView === 'tailorPayment' && workingEntity) fetchTailorPayments()
     if (currentView === 'newTailorPayment' && workingEntity) {
@@ -1786,8 +1830,19 @@ export default function Home() {
       const res = editingUomId
         ? await authFetch(`/api/uom/${editingUomId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(uomForm) })
         : await authFetch('/api/uom', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(uomForm) })
-      if (res.ok) { toast({ title: 'Success', description: editingUomId ? 'UoM updated' : 'UoM created' }); setShowUomDialog(false); setUomForm({ name: '', description: '' }); setEditingUomId(null); fetchUom() }
-      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+      const data = await res.json().catch(() => ({}))
+      if (res.ok) {
+        // ★ Show the cascade message from the server if present (e.g. "UoM renamed. 5 item(s) updated.")
+        const desc = data.message || (editingUomId ? 'UoM updated' : 'UoM created')
+        toast({ title: 'Success', description: desc })
+        setShowUomDialog(false)
+        setUomForm({ name: '', description: '' })
+        setEditingUomId(null)
+        fetchUom()
+        // ★ Items cache may be stale after a UoM rename cascade — refresh.
+        fetchItems()
+      }
+      else { toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
   const handleDeleteUom = async (id: string) => { if (!confirm('Delete?')) return; try { const res = await authFetch(`/api/uom/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchUom() } } catch {} }
@@ -1894,20 +1949,23 @@ export default function Home() {
   const handleDeleteSubGroup = async (id: string) => { if (!confirm('Delete this subgroup?')) return; try { const res = await authFetch(`/api/subgroups/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchSubGroups() } } catch {} }
 
   // Upload handler
+  const [uploadResult, setUploadResult] = useState<any>(null)
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!uploadFile) { toast({ title: 'Error', description: 'Select a CSV file', variant: 'destructive' }); return }
     setUploading(true)
+    setUploadResult(null)
     try {
       const formData = new FormData(); formData.append('file', uploadFile)
       const res = await authFetch('/api/items/upload', { method: 'POST', body: formData })
       const data = await res.json()
       if (res.ok) {
+        setUploadResult(data)
         const parts = [`Uploaded ${data.inserted} items`]
         if (data.duplicate > 0) parts.push(`${data.duplicate} duplicates skipped`)
         if (data.skipped > 0) parts.push(`${data.skipped} skipped`)
         toast({ title: 'Success', description: parts.join(', ') })
-        setUploadFile(null); setCurrentView('items'); fetchItems()
+        setUploadFile(null); fetchItems()
       }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Upload failed', variant: 'destructive' }) }
@@ -1916,10 +1974,10 @@ export default function Home() {
 
   // Download items CSV template
   const downloadItemsTemplate = () => {
-    const csv = 'year,lcNo,group,subGroup,itemName,price,uom\n' +
-                '2024,LC-2024-0001,Electronics,Mobile,Samsung Galaxy S23,75000.00,PCS\n' +
-                '2024,LC-2024-0002,Electronics,Laptop,Dell Inspiron 15,55000.00,PCS\n' +
-                '2024,LC-2024-0003,Hardware,Hinge,Concealed Hinge,80.50,KG\n'
+    const csv = 'year,lcNo,group,subGroup,itemName,price,uom,barcode,itemCode\n' +
+                '2024,LC-2024-0001,Electronics,Mobile,Samsung Galaxy S23,75000.00,PCS,8801234567890,SM-S23\n' +
+                '2024,LC-2024-0002,Electronics,Laptop,Dell Inspiron 15,55000.00,PCS,8801234567891,DELL-INS-15\n' +
+                '2024,LC-2024-0003,Hardware,Hinge,Concealed Hinge,80.50,KG,,HNG-001\n'
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
     const link = document.createElement('a')
@@ -2661,25 +2719,116 @@ export default function Home() {
   }
 
   // Item search component for transaction dialogs
-  const renderItemSearchField = (selectedItemId: string, onSelectItem: (item: ItemData) => void) => (
-    <div className="space-y-2">
-      <Label>Search Item*</Label>
-      <div className="flex gap-2">
-        <Input placeholder="Type item name..." value={txItemSearch} onChange={e => setTxItemSearch(e.target.value)} />
-        <Button type="button" variant="outline" onClick={handleTxItemSearch} disabled={txItemLoading}><Search className="w-4 h-4" /></Button>
-      </div>
-      {txItemResults.length > 0 && !selectedItemId && (
-        <div className="border rounded-lg max-h-40 overflow-y-auto">
-          {txItemResults.map(item => (
-            <button key={item.id} type="button" onClick={() => { onSelectItem(item); setTxItemSearch(''); setTxItemResults([]) }} className="w-full text-left px-3 py-2 hover:bg-muted text-sm border-b last:border-0">
-              <span className="font-medium">{item.itemName}</span><span className="text-muted-foreground ml-2">{item.group} - {item.subGroup}</span>
-            </button>
-          ))}
+  // ★ Barcode-aware: type or scan a barcode → debounced search → click to select.
+  //   Also shows the selected item's barcode / itemCode / uom for visual confirmation.
+  const renderItemSearchField = (selectedItemId: string, onSelectItem: (item: ItemData) => void) => {
+    // Use the cached selected item if it matches, otherwise try the results list
+    const selectedItem = (txSelectedItem && txSelectedItem.id === selectedItemId)
+      ? txSelectedItem
+      : txItemResults.find(i => i.id === selectedItemId) || null
+    return (
+      <div className="space-y-2">
+        <Label>Scan Barcode or Search Item *</Label>
+        <div className="flex gap-2">
+          <Input
+            placeholder="Type barcode / item code / name..."
+            value={txItemSearch}
+            onChange={e => setTxItemSearch(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault()
+                // On Enter: if results exist, pick the first one (typical for barcode scans)
+                if (txItemResults.length > 0 && !selectedItemId) {
+                  const picked = txItemResults[0]
+                  setTxSelectedItem(picked)
+                  onSelectItem(picked)
+                  setTxItemSearch('')
+                  setTxItemResults([])
+                } else if (txItemResults.length === 0) {
+                  handleTxItemSearch()
+                }
+              } else if (e.key === 'Escape') {
+                setTxItemSearch('')
+                setTxItemResults([])
+              }
+            }}
+            autoFocus
+            autoComplete="off"
+          />
+          <Button type="button" variant="outline" onClick={handleTxItemSearch} disabled={txItemLoading}>
+            {txItemLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Search className="w-4 h-4" />}
+          </Button>
+          {selectedItemId && (
+            <Button
+              type="button"
+              variant="ghost"
+              size="sm"
+              onClick={() => { setTxSelectedItem(null); onSelectItem({ id: '' } as ItemData); setTxItemSearch(''); setTxItemResults([]) }}
+              title="Clear selection"
+            >
+              <X className="w-4 h-4" />
+            </Button>
+          )}
         </div>
-      )}
-      {selectedItemId && <p className="text-sm text-green-600">Item selected</p>}
-    </div>
-  )
+
+        {/* Search results */}
+        {txItemResults.length > 0 && !selectedItemId && (
+          <div className="border rounded-lg max-h-52 overflow-y-auto bg-background shadow-md">
+            <div className="px-3 py-1 text-[11px] text-muted-foreground bg-muted/30 border-b sticky top-0">
+              {txItemResults.length} item{txItemResults.length !== 1 ? 's' : ''} found — click or press Enter to select the first one
+            </div>
+            {txItemResults.map(item => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => { setTxSelectedItem(item); onSelectItem(item); setTxItemSearch(''); setTxItemResults([]) }}
+                className="w-full text-left px-3 py-2 hover:bg-primary hover:text-primary-foreground text-sm border-b last:border-0 transition-colors"
+              >
+                <div className="flex flex-col gap-0.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="font-medium">{item.itemName}</span>
+                    <span className="text-[11px] opacity-75 font-mono">{item.year || ''}</span>
+                  </div>
+                  <div className="flex flex-wrap gap-2 text-[11px] opacity-90">
+                    {item.barcode && <span className="font-mono">BC: {item.barcode}</span>}
+                    {item.itemCode && <span className="font-mono">IC: {item.itemCode}</span>}
+                    <span>{item.group} - {item.subGroup}</span>
+                    {item.uom && <span>UoM: {item.uom}</span>}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+        )}
+
+        {/* Selected item card — shows full info so user can verify before continuing */}
+        {selectedItemId && selectedItem && (
+          <div className="rounded-md border border-green-200 bg-green-50/50 p-3 text-xs space-y-1">
+            <div className="flex items-center justify-between">
+              <span className="font-semibold text-green-800">{selectedItem.itemName}</span>
+              <span className="text-green-700 text-[11px]">✓ Selected</span>
+            </div>
+            <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-green-900">
+              {selectedItem.barcode && <div><span className="text-muted-foreground">Barcode:</span> <span className="font-mono">{selectedItem.barcode}</span></div>}
+              {selectedItem.itemCode && <div><span className="text-muted-foreground">Item Code:</span> <span className="font-mono">{selectedItem.itemCode}</span></div>}
+              {selectedItem.group && <div><span className="text-muted-foreground">Group:</span> {selectedItem.group}</div>}
+              {selectedItem.subGroup && <div><span className="text-muted-foreground">Sub Group:</span> {selectedItem.subGroup}</div>}
+              {selectedItem.uom && <div><span className="text-muted-foreground">UoM:</span> {selectedItem.uom}</div>}
+              {selectedItem.year && <div><span className="text-muted-foreground">Year:</span> {selectedItem.year}</div>}
+            </div>
+          </div>
+        )}
+
+        {/* Hint when nothing selected yet */}
+        {!selectedItemId && !txItemSearch && (
+          <p className="text-[11px] text-muted-foreground">💡 Type or scan a barcode — results appear automatically as you type.</p>
+        )}
+        {txItemSearch && txItemResults.length === 0 && !txItemLoading && (
+          <p className="text-[11px] text-amber-600">No items found matching "{txItemSearch}". Try a different term.</p>
+        )}
+      </div>
+    )
+  }
 
   // ====== NEW FUNCTION PAGES ======
 
@@ -3073,9 +3222,9 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Transfer - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowTransferDialog(true); setTxItemSearch(''); setTxItemResults([]) }}><Plus className="w-4 h-4 mr-2" />New Transfer</Button>
+        <Button onClick={() => { setShowTransferDialog(true); setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null) }}><Plus className="w-4 h-4 mr-2" />New Transfer</Button>
       </div>
-      <div className="border rounded-lg overflow-hidden">
+      <div className="border rounded-lg overflow-x-auto">
         <Table>
           <TableHeader><TableRow className="bg-muted/50">
             <TableHead className="font-semibold">Item</TableHead>
@@ -3084,9 +3233,10 @@ export default function Home() {
             <TableHead className="font-semibold text-right">Qty</TableHead>
             <TableHead className="font-semibold">Status</TableHead>
             <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {transfers.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No transfers</TableCell></TableRow>
+            {transfers.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No transfers</TableCell></TableRow>
             : transfers.map(t => (
               <TableRow key={t.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{t.itemName}</TableCell>
@@ -3095,6 +3245,29 @@ export default function Home() {
                 <TableCell className="text-right">{t.quantity}</TableCell>
                 <TableCell>{statusBadge(t.status)}</TableCell>
                 <TableCell className="text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-center">
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    title="Print / Download Challan (PDF)"
+                    onClick={() => {
+                      // Open the challan HTML in a new tab — user prints from there.
+                      const token = localStorage.getItem('auth_token') || ''
+                      // Use fetch to get the HTML then write to a new tab (so we can pass auth header)
+                      fetch(`/api/transfers/${t.id}/challan`, { headers: { 'Authorization': `Bearer ${token}` } })
+                        .then(r => r.text())
+                        .then(html => {
+                          const w = window.open('', '_blank')
+                          if (!w) { toast({ title: 'Popup blocked', description: 'Allow popups to view the challan.', variant: 'destructive' }); return }
+                          w.document.write(html)
+                          w.document.close()
+                        })
+                        .catch(() => toast({ title: 'Error', description: 'Failed to load challan', variant: 'destructive' }))
+                    }}
+                  >
+                    <Printer className="w-4 h-4" />
+                  </Button>
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -3642,13 +3815,16 @@ export default function Home() {
               <div className="space-y-1"><Label className="text-xs">Delivery Date</Label><Input type="date" value={salesOrderForm.deliveryDate} onChange={e => setSalesOrderForm({...salesOrderForm, deliveryDate: e.target.value})} className="h-9" /></div>
               <div className="space-y-1">
                 <Label className="text-xs">Sales Person</Label>
-                <Select value={salesOrderForm.salesPersonId || '__none__'} onValueChange={v => setSalesOrderForm({...salesOrderForm, salesPersonId: v === '__none__' ? '' : v})}>
-                  <SelectTrigger className="h-9"><SelectValue placeholder="Select" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— None —</SelectItem>
-                    {employees.filter(e => e.status === 'active' && (e.roles || '').split(',').map(r => r.trim()).includes('sales')).map(e => <SelectItem key={e.id} value={e.id}>{e.name}{e.designation ? ` (${e.designation})` : ''}</SelectItem>)}
-                  </SelectContent>
-                </Select>
+                <Combobox
+                  options={employees
+                    .filter(e => e.status === 'active' && (e.roles || '').split(',').map(r => r.trim()).includes('sales'))
+                    .map(e => ({ value: e.id, label: e.name, subLabel: e.designation || e.roles || '' }))}
+                  value={salesOrderForm.salesPersonId || ''}
+                  onChange={(v) => setSalesOrderForm({ ...salesOrderForm, salesPersonId: v })}
+                  placeholder="Type to search sales person..."
+                  clearable
+                  className="h-9"
+                />
               </div>
               <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={salesOrderForm.status} onValueChange={v => setSalesOrderForm({...salesOrderForm, status: v})}><SelectTrigger className="h-9"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="pending">Pending</SelectItem><SelectItem value="processing">Processing</SelectItem><SelectItem value="delivered">Delivered</SelectItem><SelectItem value="cancelled">Cancelled</SelectItem></SelectContent></Select></div>
             </div>
@@ -4646,25 +4822,27 @@ export default function Home() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Sales Order *</Label>
-                  <Select value={tailorPaymentForm.salesOrderId} onValueChange={v => setTailorPaymentForm(f => ({ ...f, salesOrderId: v, tailorId: '', amount: '' }))}>
-                    <SelectTrigger><SelectValue placeholder="Select sales order" /></SelectTrigger>
-                    <SelectContent>
-                      {salesOrders.map((s: any) => (
-                        <SelectItem key={s.id} value={s.id}>{s.salesNo} — {s.customer?.name || 'Walk-in'} ({new Date(s.orderDate).toLocaleDateString()})</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={salesOrders.map((s: any) => ({
+                      value: s.id,
+                      label: s.salesNo,
+                      subLabel: `${s.customer?.name || 'Walk-in'} • ${new Date(s.orderDate).toLocaleDateString()}`,
+                    }))}
+                    value={tailorPaymentForm.salesOrderId}
+                    onChange={(v) => setTailorPaymentForm(f => ({ ...f, salesOrderId: v, tailorId: '', amount: '' }))}
+                    placeholder="Type sales order no..."
+                  />
                 </div>
                 <div className="space-y-2">
                   <Label>Tailor *</Label>
-                  <Select value={tailorPaymentForm.tailorId} onValueChange={v => setTailorPaymentForm(f => ({ ...f, tailorId: v }))}>
-                    <SelectTrigger><SelectValue placeholder="Select tailor" /></SelectTrigger>
-                    <SelectContent>
-                      {tailors.filter((t: any) => t.status === 'active').map((t: any) => (
-                        <SelectItem key={t.id} value={t.id}>{t.name}{t.phone ? ` (${t.phone})` : ''}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={tailors
+                      .filter((t: any) => t.status === 'active')
+                      .map((t: any) => ({ value: t.id, label: t.name, subLabel: t.phone }))}
+                    value={tailorPaymentForm.tailorId}
+                    onChange={(v) => setTailorPaymentForm(f => ({ ...f, tailorId: v }))}
+                    placeholder="Type tailor name..."
+                  />
                 </div>
               </div>
 
@@ -6981,21 +7159,64 @@ export default function Home() {
           <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
             <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-lg font-medium mb-1">Drop your CSV file here or click to browse</p>
-            <p className="text-sm text-muted-foreground mb-4">Columns: year, lcNo, group, subGroup, itemName, price, uom</p>
-            <Input type="file" accept=".csv" onChange={e => setUploadFile(e.target.files?.[0] || null)} className="max-w-sm mx-auto" />
+            <p className="text-sm text-muted-foreground mb-4">Columns: year, lcNo, group, subGroup, itemName, price, uom, barcode (optional), itemCode (optional)</p>
+            <Input type="file" accept=".csv" onChange={e => { setUploadFile(e.target.files?.[0] || null); setUploadResult(null) }} className="max-w-sm mx-auto" />
             {uploadFile && <p className="mt-3 text-sm text-primary font-medium">Selected: {uploadFile.name}</p>}
           </div>
           <div className="bg-muted/50 rounded-lg p-4">
-            <p className="text-sm font-medium mb-2">CSV Format Example:</p>
-            <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`year,lcNo,group,subGroup,itemName,price,uom\n2024,LC-2024-0001,Electronics,Mobile,Samsung Galaxy S23,75000.00,PCS\n2024,LC-2024-0002,Electronics,Laptop,Dell Inspiron 15,55000.00,PCS`}</pre>
+            <p className="text-sm font-medium mb-2">CSV Format Example (with barcode):</p>
+            <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`year,lcNo,group,subGroup,itemName,price,uom,barcode,itemCode\n2024,LC-001,Electronics,Mobile,Samsung S23,75000,PCS,8801234567890,SM-S23\n2024,LC-002,Electronics,Laptop,Dell Inspiron,55000,PCS,8801234567891,DELL-INS-15`}</pre>
+            <p className="text-[11px] text-muted-foreground mt-2">If a <strong>barcode</strong> column is present, duplicate barcodes (already in DB or earlier in the same file) will be detected and those rows skipped. The full list of duplicate barcodes appears in the upload result below.</p>
           </div>
           <div className="flex gap-3 flex-wrap">
             <Button type="submit" disabled={!uploadFile || uploading}><Upload className="w-4 h-4 mr-2" />{uploading ? 'Uploading...' : 'Upload CSV'}</Button>
             <Button type="button" variant="outline" onClick={downloadItemsTemplate}><Download className="w-4 h-4 mr-2" />Download Format</Button>
-            <Button type="button" variant="ghost" onClick={() => { setCurrentView('items'); setUploadFile(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+            <Button type="button" variant="ghost" onClick={() => { setCurrentView('items'); setUploadFile(null); setUploadResult(null) }}><X className="w-4 h-4 mr-2" />Cancel</Button>
           </div>
+
+          {/* ★ Upload result with duplicate barcode details */}
+          {uploadResult && (
+            <div className={`rounded-lg border p-4 text-sm ${uploadResult.error ? 'bg-red-50 border-red-200 text-red-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+              {uploadResult.error ? (
+                <>
+                  <p className="font-semibold mb-1">Upload failed</p>
+                  <p className="text-xs">{uploadResult.error}</p>
+                </>
+              ) : (
+                <div className="space-y-2">
+                  <p className="font-semibold">Upload complete</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div><span className="opacity-70">Total rows:</span> <strong>{uploadResult.total}</strong></div>
+                    <div><span className="opacity-70">Inserted:</span> <strong className="text-green-700">{uploadResult.inserted}</strong></div>
+                    <div><span className="opacity-70">Duplicates:</span> <strong className="text-amber-700">{uploadResult.duplicate}</strong></div>
+                    <div><span className="opacity-70">Skipped:</span> <strong className="text-red-700">{uploadResult.skipped}</strong></div>
+                  </div>
+
+                  {uploadResult.duplicateBarcodes && uploadResult.duplicateBarcodes.length > 0 && (
+                    <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                      <p className="font-semibold text-amber-900 mb-1">⚠ Duplicate Barcodes Detected ({uploadResult.duplicateBarcodes.length})</p>
+                      <p className="text-xs text-amber-800 mb-2">These rows were skipped because the barcode already exists in the database or earlier in the same file:</p>
+                      <ul className="list-disc list-inside text-xs text-amber-900 space-y-0.5 max-h-40 overflow-y-auto">
+                        {uploadResult.duplicateBarcodes.map((msg: string, i: number) => <li key={i}>{msg}</li>)}
+                      </ul>
+                    </div>
+                  )}
+
+                  {uploadResult.errors && uploadResult.errors.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-medium">All warnings ({uploadResult.errors.length}) — click to expand</summary>
+                      <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
+                        {uploadResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-            <strong>💡 Tip:</strong> Click "Download Format" to get a CSV template. Empty cells will be automatically filled with "N/A". Required columns: <code>year</code> and <code>itemName</code>.
+            <strong>💡 Tip:</strong> Click "Download Format" to get a CSV template. Empty cells will be automatically filled with "N/A". Required columns: <code>year</code> and <code>itemName</code>. Optional: <code>barcode</code>, <code>itemCode</code> (duplicates are auto-detected).
           </div>
         </form>
       </CardContent>
@@ -7251,44 +7472,96 @@ export default function Home() {
           <Database className="w-5 h-5" />
           Upload Stock via CSV
         </CardTitle>
-        <p className="text-sm text-muted-foreground">Bulk upload stock quantities for items across entities using a CSV file.</p>
+        <p className="text-sm text-muted-foreground">Bulk upload stock quantities for items at a specific entity using a CSV file.</p>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleStockUpload} className="space-y-6">
+          {/* ★ Entity selector — required by the API. Defaults to current working entity. */}
+          <div className="space-y-2">
+            <Label className="text-sm font-semibold">Entity *</Label>
+            <Select
+              value={stockUploadEntityId || workingEntity?.id || ''}
+              onValueChange={v => setStockUploadEntityId(v)}
+            >
+              <SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger>
+              <SelectContent>
+                {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+              </SelectContent>
+            </Select>
+            <p className="text-[11px] text-muted-foreground">
+              All stock rows in the CSV must have <strong>entityName</strong> matching this selected entity (case-insensitive).
+              Rows with a different entity name will be skipped.
+            </p>
+          </div>
+
           <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
             <Upload className="w-12 h-12 mx-auto text-muted-foreground mb-4" />
             <p className="text-lg font-medium mb-1">Drop your CSV file here or click to browse</p>
             <p className="text-sm text-muted-foreground mb-4">Upload stock data for multiple items at once</p>
-            <Input type="file" accept=".csv" onChange={e => setStockUploadFile(e.target.files?.[0] || null)} className="max-w-sm mx-auto" />
+            <Input type="file" accept=".csv" onChange={e => { setStockUploadFile(e.target.files?.[0] || null); setStockUploadResult(null) }} className="max-w-sm mx-auto" />
             {stockUploadFile && <p className="mt-3 text-sm text-primary font-medium">Selected: {stockUploadFile.name}</p>}
           </div>
+
           <div className="bg-muted/50 rounded-lg p-4 space-y-3">
             <p className="text-sm font-medium">CSV Format Requirements:</p>
-            <p className="text-xs text-muted-foreground">The CSV must have a <strong>quantity</strong> column and either an <strong>entityName</strong> or <strong>entityId</strong> column to identify the entity. To identify items, use either <strong>itemName</strong> or <strong>lcNo</strong> (optionally with <strong>year</strong>).</p>
-            <p className="text-sm font-medium mt-2">CSV Format Example:</p>
-            <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`itemName,entityName,quantity
-Samsung Galaxy S23,Dhaka Warehouse,150
-Samsung Galaxy S23,Chittagong Store,75
-Dell Inspiron 15,Dhaka Warehouse,30`}</pre>
-            <p className="text-sm font-medium mt-2">Alternative with LC No:</p>
-            <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`lcNo,year,entityName,quantity
-LC-2024-0001,2024,Dhaka Warehouse,150
-LC-2024-0002,2024,Chittagong Store,75`}</pre>
-            <p className="text-xs text-muted-foreground mt-2">Supported headers: itemName/item_name/item, entityName/entity_name/entity/warehouse/store, entityId/entity_id, quantity/qty/stock, lcNo/lc_no/lc, year/yr</p>
+            <p className="text-xs text-muted-foreground">
+              The CSV must have a <strong>quantity</strong> column, an <strong>entityName</strong> column (must match the selected entity above), and at least one of <strong>barcode</strong> / <strong>itemCode</strong> / <strong>itemName</strong> to identify each item. <strong>uom</strong> is optional.
+            </p>
+            <p className="text-sm font-medium mt-2">Recommended format (barcode-based):</p>
+            <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`barcode,entityName,quantity
+8801234567890,Head Office,150
+8801234567891,Head Office,75`}</pre>
+            <p className="text-sm font-medium mt-2">Or with itemName:</p>
+            <pre className="text-xs bg-background p-3 rounded border overflow-x-auto">{`itemName,entityName,quantity,uom
+Cotton Shirt,Head Office,150,PCS
+Wool Pant,Head Office,75,PCS`}</pre>
+            <p className="text-xs text-muted-foreground mt-2">Supported headers: barcode/bar_code/bc, itemCode/item_code/ic, itemName/item_name/item, entityName/entity_name/entity/warehouse/store, quantity/qty/stock, uom/unit</p>
           </div>
+
           <div className="flex gap-3 flex-wrap">
-            <Button type="submit" disabled={!stockUploadFile || stockUploading}>
+            <Button type="submit" disabled={!stockUploadFile || stockUploading || !stockUploadEntityId}>
               <Upload className="w-4 h-4 mr-2" />{stockUploading ? 'Uploading...' : 'Upload Stock CSV'}
             </Button>
             <Button type="button" variant="outline" onClick={downloadStockTemplate}>
               <Download className="w-4 h-4 mr-2" />Download Format
             </Button>
-            <Button type="button" variant="ghost" onClick={() => { setCurrentView('items'); setStockUploadFile(null) }}>
+            <Button type="button" variant="ghost" onClick={() => { setCurrentView('items'); setStockUploadFile(null); setStockUploadResult(null) }}>
               <X className="w-4 h-4 mr-2" />Cancel
             </Button>
           </div>
+
+          {/* ★ Live upload result — shows full feedback instead of silently failing */}
+          {stockUploadResult && (
+            <div className={`rounded-lg border p-4 text-sm ${stockUploadResult.error ? 'bg-red-50 border-red-200 text-red-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+              {stockUploadResult.error ? (
+                <>
+                  <p className="font-semibold mb-1">Upload failed</p>
+                  <p className="text-xs">{stockUploadResult.error}</p>
+                </>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="font-semibold">Upload complete for "{stockUploadResult.selectedEntity || 'entity'}"</p>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+                    <div><span className="opacity-70">Total rows:</span> <strong>{stockUploadResult.total}</strong></div>
+                    <div><span className="opacity-70">Upserted:</span> <strong className="text-green-700">{stockUploadResult.upserted}</strong></div>
+                    <div><span className="opacity-70">Skipped:</span> <strong className="text-amber-700">{stockUploadResult.skipped}</strong></div>
+                    <div><span className="opacity-70">Wrong entity:</span> <strong className="text-red-700">{stockUploadResult.wrongEntity || 0}</strong></div>
+                  </div>
+                  {stockUploadResult.errors && stockUploadResult.errors.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-medium">First {stockUploadResult.errors.length} warning(s) — click to expand</summary>
+                      <ul className="list-disc list-inside mt-1 text-xs space-y-0.5">
+                        {stockUploadResult.errors.map((e: string, i: number) => <li key={i}>{e}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
-            <strong>💡 Tip:</strong> Click "Download Format" to get a CSV template. Empty cells will be automatically filled with "N/A". Required columns: <code>itemName</code>, <code>entityName</code>, and <code>quantity</code>.
+            <strong>💡 Tip:</strong> Pick the entity first, then click "Download Format" to get a CSV template. The template will be pre-filled with the selected entity name. Empty cells will be automatically filled with "N/A". Required columns: <code>barcode</code> (or <code>itemName</code>), <code>entityName</code>, and <code>quantity</code>.
           </div>
         </form>
       </CardContent>
