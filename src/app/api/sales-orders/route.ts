@@ -124,6 +124,70 @@ export async function POST(request: NextRequest) {
       });
     }
 
+    // ★ Auto-calculate incentives based on IncentiveFormula
+    // For each item in this sales order, check if it's part of an active formula
+    // AND the sale unit price falls within the formula's [priceFrom, priceTo] range.
+    // If yes, look up the commission for the destination entity's name in commissionMap
+    // (falling back to "default"), and create an Incentive entry of type "formula".
+    try {
+      const entity = await db.entity.findUnique({ where: { id: entityId }, select: { name: true } });
+      const entityName = entity?.name || '';
+      // Collect distinct item IDs in this order
+      const orderItemIds = items.map((it: any) => it.itemId);
+      if (orderItemIds.length > 0) {
+        // Find all active formula-items matching these item IDs
+        const formulaItems = await db.incentiveFormulaItem.findMany({
+          where: { itemId: { in: orderItemIds } },
+          include: { formula: true },
+        });
+        // Group by item → formulas (a single item may be in multiple formulas with non-overlapping ranges)
+        const byItem = new Map<string, typeof formulaItems>();
+        for (const fi of formulaItems) {
+          if (fi.formula.status !== 'active') continue;
+          const arr = byItem.get(fi.itemId) || [];
+          arr.push(fi);
+          byItem.set(fi.itemId, arr);
+        }
+        // For each item in the order, try to find a formula whose range matches the unit price
+        for (const item of items) {
+          const unitPrice = parseFloat(item.unitPrice) || 0;
+          const quantity = parseInt(item.quantity) || 1;
+          const formulas = byItem.get(item.itemId) || [];
+          // Pick the first matching formula (first by createdAt asc)
+          const match = formulas
+            .sort((a, b) => a.formula.createdAt.getTime() - b.formula.createdAt.getTime())
+            .find(fi => unitPrice >= fi.formula.priceFrom && unitPrice <= fi.formula.priceTo);
+          if (!match) continue;
+          // Parse commissionMap: { "<entityName>": <amount>, "default": <amount> }
+          let commissionMap: Record<string, number> = {};
+          try { commissionMap = JSON.parse(match.formula.commissionMap || '{}'); } catch {}
+          const commissionPerUnit = commissionMap[entityName] ?? commissionMap['default'] ?? 0;
+          if (commissionPerUnit <= 0) continue;
+          const totalCommission = commissionPerUnit * quantity;
+          // Find the created SalesOrderItem for this item (to link salesOrderItemId)
+          const soItem = salesOrder.items.find((si: any) => si.itemId === item.itemId);
+          await db.incentive.create({
+            data: {
+              itemId: item.itemId,
+              entityId,
+              amount: totalCommission,
+              type: 'formula',
+              status: 'pending',
+              notes: `Auto-generated from ${salesOrder.salesNo} • Formula: ${match.formula.name} • Range ${match.formula.priceFrom}-${match.formula.priceTo} • Commission/unit: ${commissionPerUnit}`,
+              formulaId: match.formula.id,
+              salesOrderItemId: soItem?.id || null,
+              units: quantity,
+              saleUnitPrice: unitPrice,
+              createdBy: currentUser.id,
+            },
+          });
+        }
+      }
+    } catch (incError) {
+      // Don't fail the sales order creation if incentive calculation fails
+      console.error('Incentive auto-calc error:', incError);
+    }
+
     return NextResponse.json({ salesOrder });
   } catch (error) {
     console.error('Create sales order error:', error);

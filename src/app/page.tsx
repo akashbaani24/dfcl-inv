@@ -327,6 +327,21 @@ export default function Home() {
   const [incentives, setIncentives] = useState<IncentiveData[]>([])
   const [incentiveForm, setIncentiveForm] = useState({ itemId: '', tailorId: '', amount: '', type: 'tailor', notes: '' })
   const [showIncentiveDialog, setShowIncentiveDialog] = useState(false)
+  const [incentiveSubTab, setIncentiveSubTab] = useState<'formulas' | 'manual'>('formulas')
+
+  // ★ Incentive Formula state
+  const [incentiveFormulas, setIncentiveFormulas] = useState<any[]>([])
+  const [formulaForm, setFormulaForm] = useState({
+    name: '', description: '', priceFrom: '', priceTo: '',
+    commissionEntries: [] as Array<{ entityName: string; amount: string }>,
+    defaultAmount: '',
+    status: 'active', notes: '',
+    itemIds: [] as string[],
+  })
+  const [editingFormulaId, setEditingFormulaId] = useState<string | null>(null)
+  const [showFormulaDialog, setShowFormulaDialog] = useState(false)
+  const [formulaItemSearch, setFormulaItemSearch] = useState('')
+  const [formulaItemResults, setFormulaItemResults] = useState<any[]>([])
 
   // Booking state
   const [bookings, setBookings] = useState<Array<any>>([])
@@ -1182,6 +1197,111 @@ export default function Home() {
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
+
+  // ★ Incentive Formula handlers
+  const fetchIncentiveFormulas = async () => {
+    try {
+      const res = await authFetch('/api/incentive-formulas')
+      if (res.ok) { const d = await res.json(); setIncentiveFormulas(d.formulas || []) }
+    } catch {}
+  }
+  useEffect(() => { if (currentView === 'incentive') fetchIncentiveFormulas() }, [currentView])
+
+  const resetFormulaForm = () => {
+    setFormulaForm({
+      name: '', description: '', priceFrom: '', priceTo: '',
+      commissionEntries: [], defaultAmount: '',
+      status: 'active', notes: '', itemIds: [],
+    })
+    setEditingFormulaId(null)
+    setFormulaItemSearch('')
+    setFormulaItemResults([])
+  }
+  const openNewFormulaDialog = () => { resetFormulaForm(); setShowFormulaDialog(true) }
+  const openEditFormulaDialog = (f: any) => {
+    let commissionMap: Record<string, number> = {}
+    try { commissionMap = JSON.parse(f.commissionMap || '{}') } catch {}
+    const entries = Object.entries(commissionMap).filter(([k]) => k !== 'default').map(([k, v]) => ({ entityName: k, amount: String(v) }))
+    setFormulaForm({
+      name: f.name, description: f.description || '',
+      priceFrom: String(f.priceFrom), priceTo: String(f.priceTo),
+      commissionEntries: entries,
+      defaultAmount: commissionMap['default'] !== undefined ? String(commissionMap['default']) : '',
+      status: f.status, notes: f.notes || '',
+      itemIds: (f.items || []).map((fi: any) => fi.itemId),
+    })
+    setEditingFormulaId(f.id)
+    setShowFormulaDialog(true)
+  }
+  const handleFormulaItemSearch = async () => {
+    if (!formulaItemSearch.trim()) return
+    try {
+      const res = await authFetch(`/api/items?search=${encodeURIComponent(formulaItemSearch)}&pageSize=20`)
+      if (res.ok) { const d = await res.json(); setFormulaItemResults(d.items || []) }
+    } catch {}
+  }
+  const toggleFormulaItem = (itemId: string) => {
+    setFormulaForm(f => ({
+      ...f,
+      itemIds: f.itemIds.includes(itemId) ? f.itemIds.filter(id => id !== itemId) : [...f.itemIds, itemId],
+    }))
+  }
+  const addCommissionEntry = () => {
+    setFormulaForm(f => ({ ...f, commissionEntries: [...f.commissionEntries, { entityName: '', amount: '' }] }))
+  }
+  const updateCommissionEntry = (idx: number, field: 'entityName' | 'amount', value: string) => {
+    setFormulaForm(f => {
+      const arr = [...f.commissionEntries]
+      arr[idx] = { ...arr[idx], [field]: value }
+      return { ...f, commissionEntries: arr }
+    })
+  }
+  const removeCommissionEntry = (idx: number) => {
+    setFormulaForm(f => ({ ...f, commissionEntries: f.commissionEntries.filter((_, i) => i !== idx) }))
+  }
+  const handleSaveFormula = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!formulaForm.name) { toast({ title: 'Error', description: 'Formula name required', variant: 'destructive' }); return }
+    if (!formulaForm.priceFrom || !formulaForm.priceTo) { toast({ title: 'Error', description: 'Price range required', variant: 'destructive' }); return }
+    // Build commissionMap object
+    const commissionMap: Record<string, number> = {}
+    for (const e of formulaForm.commissionEntries) {
+      if (e.entityName.trim() && e.amount) commissionMap[e.entityName.trim()] = parseFloat(e.amount) || 0
+    }
+    if (formulaForm.defaultAmount) commissionMap['default'] = parseFloat(formulaForm.defaultAmount) || 0
+    const payload = {
+      name: formulaForm.name,
+      description: formulaForm.description || undefined,
+      priceFrom: parseFloat(formulaForm.priceFrom),
+      priceTo: parseFloat(formulaForm.priceTo),
+      commissionMap,
+      status: formulaForm.status,
+      notes: formulaForm.notes || undefined,
+      itemIds: formulaForm.itemIds,
+    }
+    try {
+      const res = editingFormulaId
+        ? await authFetch(`/api/incentive-formulas/${editingFormulaId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+        : await authFetch('/api/incentive-formulas', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (res.ok) {
+        toast({ title: 'Success', description: editingFormulaId ? 'Formula updated' : 'Formula created' })
+        setShowFormulaDialog(false)
+        resetFormulaForm()
+        fetchIncentiveFormulas()
+      } else {
+        const d = await res.json()
+        toast({ title: 'Error', description: d.error || 'Failed', variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteFormula = async (id: string) => {
+    if (!confirm('Delete this formula? Auto-generated incentives from this formula will remain but lose their formula link.')) return
+    try {
+      const res = await authFetch(`/api/incentive-formulas/${id}`, { method: 'DELETE' })
+      if (res.ok) { toast({ title: 'Deleted' }); fetchIncentiveFormulas() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch {}
+  }
   useEffect(() => { if (currentView === 'booking') { handleAutoCancelBookings(); fetchBookings() } }, [currentView])
   useEffect(() => { if (currentView === 'booking' || currentView === 'bookingReasons') fetchBookingReasons() }, [currentView])
 
@@ -1717,7 +1837,7 @@ export default function Home() {
             <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4">
               <Package className="w-8 h-8 text-primary-foreground" />
             </div>
-            <CardTitle className="text-2xl font-bold">Item Management</CardTitle>
+            <CardTitle className="text-2xl font-bold">Akash Inventory System</CardTitle>
             <p className="text-muted-foreground mt-1">Sign in to your account</p>
           </CardHeader>
           <CardContent>
@@ -3875,31 +3995,114 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Incentive - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowIncentiveDialog(true); setTxItemSearch(''); setTxItemResults([]); fetchTailors() }}><Plus className="w-4 h-4 mr-2" />New Incentive</Button>
+        <div className="flex gap-2">
+          {incentiveSubTab === 'formulas' ? (
+            <Button onClick={openNewFormulaDialog} className="gap-2"><Plus className="w-4 h-4" />New Formula</Button>
+          ) : (
+            <Button onClick={() => { setShowIncentiveDialog(true); setTxItemSearch(''); setTxItemResults([]); fetchTailors() }} className="gap-2"><Plus className="w-4 h-4" />New Incentive</Button>
+          )}
+        </div>
       </div>
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
-          <TableHeader><TableRow className="bg-muted/50">
-            <TableHead className="font-semibold">Item</TableHead>
-            <TableHead className="font-semibold">Tailor</TableHead>
-            <TableHead className="font-semibold">Type</TableHead>
-            <TableHead className="font-semibold text-right">Amount</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
-          </TableRow></TableHeader>
-          <TableBody>
-            {incentives.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No incentives</TableCell></TableRow>
-            : incentives.map(i => (
-              <TableRow key={i.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{i.itemName}</TableCell>
-                <TableCell>{i.tailorName || '-'}</TableCell>
-                <TableCell className="capitalize">{i.type}</TableCell>
-                <TableCell className="text-right">{i.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
-                <TableCell>{statusBadge(i.status)}</TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
+
+      {/* Sub-tab switcher */}
+      <div className="flex gap-1 border-b">
+        <button onClick={() => setIncentiveSubTab('formulas')} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${incentiveSubTab === 'formulas' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+          <Settings2 className="w-4 h-4" /> Formulas ({incentiveFormulas.length})
+        </button>
+        <button onClick={() => setIncentiveSubTab('manual')} className={`flex items-center gap-2 px-4 py-2 text-sm font-medium border-b-2 -mb-px transition-colors ${incentiveSubTab === 'manual' ? 'border-primary text-primary' : 'border-transparent text-muted-foreground hover:text-foreground'}`}>
+          <DollarSign className="w-4 h-4" /> Incentive Report ({incentives.length})
+        </button>
       </div>
+
+      {incentiveSubTab === 'formulas' ? (
+        <div className="space-y-3">
+          <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900">
+            <p className="font-semibold mb-1">📋 How formulas work</p>
+            <p>1. Create a formula with a price range (e.g. 700-1200) and commission amounts per entity (Outlet: 10, Head Office: 5, default: 5).<br/>
+            2. Assign items to the formula (an item can be in multiple formulas with non-overlapping ranges).<br/>
+            3. When a sales order is created with a sale unit price falling within the formula's range, an incentive entry is auto-generated and pushed to the Incentive Report tab.</p>
+          </div>
+          <div className="border rounded-lg overflow-hidden">
+            <Table>
+              <TableHeader><TableRow className="bg-muted/50">
+                <TableHead className="font-semibold">Formula Name</TableHead>
+                <TableHead className="font-semibold text-right">Price Range</TableHead>
+                <TableHead className="font-semibold">Commission per Entity</TableHead>
+                <TableHead className="font-semibold text-center">Items</TableHead>
+                <TableHead className="font-semibold">Status</TableHead>
+                <TableHead className="font-semibold text-center">Actions</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {incentiveFormulas.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No formulas yet. Click "New Formula" to create one.</TableCell></TableRow>
+                : incentiveFormulas.map(f => {
+                  let commissionMap: Record<string, number> = {}
+                  try { commissionMap = JSON.parse(f.commissionMap || '{}') } catch {}
+                  return (
+                    <TableRow key={f.id} className="hover:bg-muted/30">
+                      <TableCell>
+                        <div className="font-semibold">{f.name}</div>
+                        {f.description && <div className="text-xs text-muted-foreground">{f.description}</div>}
+                      </TableCell>
+                      <TableCell className="text-right font-mono text-sm">{f.priceFrom} – {f.priceTo}</TableCell>
+                      <TableCell>
+                        <div className="flex gap-1 flex-wrap">
+                          {Object.entries(commissionMap).map(([k, v]) => (
+                            <Badge key={k} variant="outline" className={`text-xs ${k === 'default' ? 'bg-gray-100 text-gray-700' : 'bg-green-100 text-green-800'}`}>
+                              {k === 'default' ? 'Default' : k}: {v}
+                            </Badge>
+                          ))}
+                          {Object.keys(commissionMap).length === 0 && <span className="text-xs text-muted-foreground">—</span>}
+                        </div>
+                      </TableCell>
+                      <TableCell className="text-center">{(f.items || []).length}</TableCell>
+                      <TableCell>{f.status === 'active' ? <Badge className="bg-green-100 text-green-800">Active</Badge> : <Badge variant="outline">Inactive</Badge>}</TableCell>
+                      <TableCell className="text-center">
+                        <div className="flex items-center justify-center gap-1">
+                          <Button variant="ghost" size="sm" onClick={() => openEditFormulaDialog(f)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteFormula(f.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                        </div>
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </div>
+        </div>
+      ) : (
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Item</TableHead>
+              <TableHead className="font-semibold">Type</TableHead>
+              <TableHead className="font-semibold text-right">Units</TableHead>
+              <TableHead className="font-semibold text-right">Sale Price/Unit</TableHead>
+              <TableHead className="font-semibold text-right">Amount</TableHead>
+              <TableHead className="font-semibold">Status</TableHead>
+              <TableHead className="font-semibold">Notes</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {incentives.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No incentives yet. Formula-based incentives will appear here automatically when sales happen.</TableCell></TableRow>
+              : incentives.map(i => (
+                <TableRow key={i.id} className={`hover:bg-muted/30 ${(i as any).type === 'formula' ? 'bg-blue-50/30' : ''}`}>
+                  <TableCell className="font-medium">{i.itemName}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-xs capitalize ${(i as any).type === 'formula' ? 'bg-blue-100 text-blue-800' : 'bg-gray-100'}`}>{i.type}</Badge>
+                    {i.tailorName && <div className="text-[10px] text-muted-foreground">{i.tailorName}</div>}
+                  </TableCell>
+                  <TableCell className="text-right">{(i as any).units || 1}</TableCell>
+                  <TableCell className="text-right text-xs">{(i as any).saleUnitPrice != null ? (i as any).saleUnitPrice.toFixed(2) : '—'}</TableCell>
+                  <TableCell className="text-right font-semibold">{i.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                  <TableCell>{statusBadge(i.status)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground max-w-xs truncate" title={i.notes || ''}>{i.notes || '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
+
+      {/* Manual Incentive Dialog */}
       <Dialog open={showIncentiveDialog} onOpenChange={setShowIncentiveDialog}>
         <DialogContent><DialogHeader><DialogTitle>New Incentive</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveIncentive} className="space-y-4">
@@ -3911,6 +4114,104 @@ export default function Home() {
             <div className="space-y-2"><Label>Amount*</Label><Input type="number" step="0.01" value={incentiveForm.amount} onChange={e => setIncentiveForm(f => ({ ...f, amount: e.target.value }))} required /></div>
             <div className="space-y-2"><Label>Notes</Label><Input value={incentiveForm.notes} onChange={e => setIncentiveForm(f => ({ ...f, notes: e.target.value }))} /></div>
             <DialogFooter><Button type="submit">Save Incentive</Button></DialogFooter>
+          </form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Formula Dialog */}
+      <Dialog open={showFormulaDialog} onOpenChange={setShowFormulaDialog}>
+        <DialogContent className="max-w-3xl max-h-[92vh] overflow-y-auto">
+          <DialogHeader><DialogTitle>{editingFormulaId ? 'Edit Formula' : 'New Formula'}</DialogTitle></DialogHeader>
+          <form onSubmit={handleSaveFormula} className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+              <div className="md:col-span-2 space-y-1"><Label className="text-xs">Formula Name *</Label><Input placeholder="e.g. Fresh Fabric" value={formulaForm.name} onChange={e => setFormulaForm({ ...formulaForm, name: e.target.value })} required /></div>
+              <div className="space-y-1"><Label className="text-xs">Status</Label><Select value={formulaForm.status} onValueChange={v => setFormulaForm({ ...formulaForm, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="active">Active</SelectItem><SelectItem value="inactive">Inactive</SelectItem></SelectContent></Select></div>
+            </div>
+            <div className="space-y-1"><Label className="text-xs">Description</Label><Input placeholder="Optional description" value={formulaForm.description} onChange={e => setFormulaForm({ ...formulaForm, description: e.target.value })} /></div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1"><Label className="text-xs">Price Range From *</Label><Input type="number" step="0.01" placeholder="e.g. 700" value={formulaForm.priceFrom} onChange={e => setFormulaForm({ ...formulaForm, priceFrom: e.target.value })} required /></div>
+              <div className="space-y-1"><Label className="text-xs">Price Range To *</Label><Input type="number" step="0.01" placeholder="e.g. 1200" value={formulaForm.priceTo} onChange={e => setFormulaForm({ ...formulaForm, priceTo: e.target.value })} required /></div>
+            </div>
+            <p className="text-[11px] text-muted-foreground">Sale unit price must fall within this range (inclusive) for the formula to apply.</p>
+
+            {/* Commission per entity */}
+            <div className="space-y-2">
+              <div className="flex items-center justify-between">
+                <Label className="text-xs font-semibold">Commission per Entity (per unit sold)</Label>
+                <Button type="button" variant="outline" size="sm" onClick={addCommissionEntry} className="h-7 text-xs"><Plus className="w-3 h-3 mr-1" />Add Entity</Button>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Type entity names exactly as they appear in Entity master data (e.g. "Head Office", "Gulshan Branch").</p>
+              <div className="space-y-2">
+                {formulaForm.commissionEntries.map((ce, idx) => (
+                  <div key={idx} className="flex gap-2 items-end">
+                    <div className="flex-1 space-y-1">
+                      <Label className="text-[10px]">Entity Name</Label>
+                      <Input list="entity-list" placeholder="e.g. Gulshan Branch" value={ce.entityName} onChange={e => updateCommissionEntry(idx, 'entityName', e.target.value)} />
+                    </div>
+                    <div className="w-32 space-y-1">
+                      <Label className="text-[10px]">Amount/Unit</Label>
+                      <Input type="number" step="0.01" placeholder="e.g. 10" value={ce.amount} onChange={e => updateCommissionEntry(idx, 'amount', e.target.value)} />
+                    </div>
+                    <Button type="button" variant="ghost" size="sm" onClick={() => removeCommissionEntry(idx)} className="text-destructive h-9"><X className="w-4 h-4" /></Button>
+                  </div>
+                ))}
+                <datalist id="entity-list">{entities.map(e => <option key={e.id} value={e.name} />)}</datalist>
+              </div>
+              <div className="flex gap-2 items-end pt-2 border-t">
+                <div className="w-48 space-y-1">
+                  <Label className="text-[10px]">Default Commission (fallback)</Label>
+                  <Input type="number" step="0.01" placeholder="e.g. 5" value={formulaForm.defaultAmount} onChange={e => setFormulaForm({ ...formulaForm, defaultAmount: e.target.value })} />
+                </div>
+                <p className="text-[11px] text-muted-foreground">Used when an entity name is not listed above.</p>
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Items assigned to this formula */}
+            <div className="space-y-2">
+              <Label className="text-xs font-semibold">Items covered by this formula ({formulaForm.itemIds.length})</Label>
+              <p className="text-[11px] text-muted-foreground">Search and select items. When these items are sold within the price range, incentives are auto-generated.</p>
+              <div className="flex gap-2">
+                <Input placeholder="Search item to add..." value={formulaItemSearch} onChange={e => setFormulaItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleFormulaItemSearch())} className="flex-1" />
+                <Button type="button" variant="outline" onClick={handleFormulaItemSearch}><Search className="w-4 h-4" /></Button>
+              </div>
+              {formulaItemResults.length > 0 && (
+                <div className="border rounded-md max-h-32 overflow-y-auto bg-background shadow-lg">
+                  {formulaItemResults.map((item, idx) => {
+                    const isSelected = formulaForm.itemIds.includes(item.id)
+                    return (
+                      <button key={item.id || idx} type="button" onClick={() => toggleFormulaItem(item.id)} className={`w-full text-left px-3 py-2 text-sm border-b last:border-0 transition-colors ${isSelected ? 'bg-green-50 text-green-700' : 'hover:bg-muted'}`}>
+                        {isSelected ? '✓ ' : ''}{item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''} {item.itemCode ? `• ${item.itemCode}` : ''}
+                      </button>
+                    )
+                  })}
+                </div>
+              )}
+              {formulaForm.itemIds.length > 0 && (
+                <div className="flex gap-1 flex-wrap pt-1">
+                  {formulaForm.itemIds.map(id => {
+                    const item = formulaItemResults.find((r: any) => r.id === id)
+                    // Also look it up from already-loaded items if needed
+                    const name = item?.itemName || `Item ${id.slice(-6)}`
+                    return (
+                      <Badge key={id} variant="outline" className="text-xs bg-blue-50 text-blue-800 gap-1">
+                        {name}
+                        <button type="button" onClick={() => toggleFormulaItem(id)} className="ml-1 hover:text-red-600"><X className="w-3 h-3" /></button>
+                      </Badge>
+                    )
+                  })}
+                </div>
+              )}
+            </div>
+
+            <div className="space-y-1"><Label className="text-xs">Notes</Label><Input value={formulaForm.notes} onChange={e => setFormulaForm({ ...formulaForm, notes: e.target.value })} placeholder="Optional notes" /></div>
+
+            <DialogFooter className="pt-4">
+              <Button type="button" variant="outline" onClick={() => { setShowFormulaDialog(false); resetFormulaForm() }}><X className="w-4 h-4 mr-2" />Cancel</Button>
+              <Button type="submit"><Save className="w-4 h-4 mr-2" />{editingFormulaId ? 'Update Formula' : 'Create Formula'}</Button>
+            </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
@@ -4491,13 +4792,17 @@ export default function Home() {
   const renderEntitySelection = () => {
     const availableEntities = isManagerOrAdmin ? entities : entities.filter(e => user.entityAccess.some(ea => ea.entityId === e.id))
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-slate-50 to-slate-100 p-4">
-        <div className="w-full max-w-5xl">
-          <div className="text-center mb-8">
-            <div className="mx-auto w-16 h-16 bg-primary rounded-2xl flex items-center justify-center mb-4"><Package className="w-8 h-8 text-primary-foreground" /></div>
-            <h1 className="text-2xl font-bold">Select Entity</h1>
-            <p className="text-muted-foreground mt-1">Choose the entity you want to work with</p>
-            <p className="text-sm text-muted-foreground">Logged in as <span className="font-medium">{user.displayName}</span></p>
+      <div className="min-h-screen bg-gradient-to-br from-slate-50 to-slate-100 p-4 md:p-8">
+        <div className="w-full max-w-7xl mx-auto">
+          <div className="mb-6">
+            <div className="flex items-center gap-4 mb-4">
+              <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shrink-0"><Package className="w-7 h-7 text-primary-foreground" /></div>
+              <div>
+                <h1 className="text-2xl md:text-3xl font-bold">Akash Inventory System</h1>
+                <p className="text-muted-foreground">Choose the entity you want to work with</p>
+              </div>
+            </div>
+            <p className="text-sm text-muted-foreground">Logged in as <span className="font-medium">{user.displayName}</span> ({user.role})</p>
           </div>
           {availableEntities.length === 0 ? (
             <Card>
@@ -4505,12 +4810,7 @@ export default function Home() {
                 <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
                 <p className="text-lg font-medium">No Entity Available</p>
                 {isManagerOrAdmin ? (
-                  <>
-                    <p className="text-muted-foreground mb-4">No entities exist yet. Create your first entity to get started.</p>
-                    <Button onClick={openNewEntityDialog} className="gap-2">
-                      <Plus className="w-4 h-4" />Create New Entity
-                    </Button>
-                  </>
+                  <p className="text-muted-foreground">No entities exist yet. An admin can create entities from Master Data → Entity.</p>
                 ) : (
                   <p className="text-muted-foreground">Contact your administrator to get entity access.</p>
                 )}
@@ -4518,37 +4818,32 @@ export default function Home() {
             </Card>
           ) : (
             <>
-              {/* ★ Row-based table layout — scales to any number of entities */}
+              {/* ★ Row-based table layout — uses full page width, scales to any number of entities */}
               <div className="bg-white rounded-lg border shadow-sm overflow-hidden">
                 <div className="px-4 py-3 border-b bg-muted/30 flex items-center justify-between">
                   <div>
                     <h3 className="font-semibold text-sm">Entities ({availableEntities.length})</h3>
                     <p className="text-[11px] text-muted-foreground">Click any row to enter</p>
                   </div>
-                  {isManagerOrAdmin && (
-                    <Button variant="outline" size="sm" onClick={openNewEntityDialog} className="gap-2">
-                      <Plus className="w-4 h-4" />New Entity
-                    </Button>
-                  )}
                 </div>
-                <div className="max-h-[60vh] overflow-y-auto">
+                <div className="max-h-[70vh] overflow-y-auto">
                   {availableEntities.map((entity, idx) => (
                     <button
                       key={entity.id}
                       onClick={() => { setWorkingEntity({ id: entity.id, name: entity.name }); setCurrentView('itemPrice') }}
-                      className="w-full text-left px-4 py-3.5 flex items-center gap-4 hover:bg-primary/5 border-b last:border-0 transition-colors group"
+                      className="w-full text-left px-4 py-4 flex items-center gap-4 hover:bg-primary/5 border-b last:border-0 transition-colors group"
                     >
-                      <div className="w-10 h-10 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
+                      <div className="w-11 h-11 bg-primary/10 rounded-lg flex items-center justify-center shrink-0 group-hover:bg-primary/20 transition-colors">
                         <Building2 className="w-5 h-5 text-primary" />
                       </div>
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs text-muted-foreground font-mono">#{String(idx + 1).padStart(2, '0')}</span>
-                          <h3 className="font-semibold text-sm truncate">{entity.name}</h3>
+                          <span className="text-xs text-muted-foreground font-mono w-8">#{String(idx + 1).padStart(2, '0')}</span>
+                          <h3 className="font-semibold text-base truncate">{entity.name}</h3>
                         </div>
-                        {entity.description && <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">{entity.description}</p>}
+                        {entity.description && <p className="text-sm text-muted-foreground mt-0.5 line-clamp-2">{entity.description}</p>}
                       </div>
-                      <ChevronRight className="w-4 h-4 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
+                      <ChevronRight className="w-5 h-5 text-muted-foreground shrink-0 group-hover:text-primary group-hover:translate-x-0.5 transition-all" />
                     </button>
                   ))}
                 </div>
@@ -4564,7 +4859,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* Entity Creation Dialog (also available from entity selection screen) */}
+        {/* Entity Creation Dialog (kept here for navigation from Master Data → Entity page) */}
         <Dialog open={showEntityDialog} onOpenChange={setShowEntityDialog}>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" />{editingEntityId ? 'Edit Entity' : 'Create New Entity'}</DialogTitle></DialogHeader>
@@ -5700,7 +5995,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center"><Package className="w-5 h-5 text-primary-foreground" /></div>
               <div className="min-w-0 flex-1">
-                <h1 className="font-bold text-sm truncate">Item Management</h1>
+                <h1 className="font-bold text-sm truncate">Akash Inventory</h1>
                 <button onClick={() => setWorkingEntity(null)} className="flex items-center gap-1 text-xs text-primary hover:underline" title="Switch entity">
                   <Building2 className="w-3 h-3" />{workingEntity.name}
                 </button>
@@ -5732,7 +6027,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           <Sheet>
             <SheetTrigger asChild><Button variant="ghost" size="icon" className="mb-4"><Menu className="w-5 h-5" /></Button></SheetTrigger>
             <SheetContent side="left" className="w-64 p-0">
-              <div className="p-4 border-b"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center"><Package className="w-5 h-5 text-primary-foreground" /></div><div><h1 className="font-bold text-sm">Item Management</h1><button onClick={() => setWorkingEntity(null)} className="flex items-center gap-1 text-xs text-primary hover:underline"><Building2 className="w-3 h-3" />{workingEntity.name}</button></div></div></div>
+              <div className="p-4 border-b"><div className="flex items-center gap-3"><div className="w-10 h-10 bg-primary rounded-xl flex items-center justify-center"><Package className="w-5 h-5 text-primary-foreground" /></div><div><h1 className="font-bold text-sm">Akash Inventory</h1><button onClick={() => setWorkingEntity(null)} className="flex items-center gap-1 text-xs text-primary hover:underline"><Building2 className="w-3 h-3" />{workingEntity.name}</button></div></div></div>
               <div className="flex-1 overflow-y-auto overflow-x-hidden"><nav className="p-3 space-y-1">
                 {renderFunctionMenu()}
                 {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && (<><div className="my-2"><Separator /></div>{renderMasterDataSection()}</>)}

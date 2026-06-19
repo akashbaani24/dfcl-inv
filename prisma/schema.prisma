@@ -151,6 +151,7 @@ model Item {
   salesReturns SalesReturn[]
   bookingItems BookingItem[]
   incentives   Incentive[]
+  incentiveFormulaItems IncentiveFormulaItem[]
   purchaseItems PurchaseItem[]
 
   @@index([itemName])
@@ -498,9 +499,17 @@ model Incentive {
   entityId  String
   tailorId  String?
   amount    Float
-  type      String   // "tailor", "sales", "bonus"
+  type      String   // "tailor", "sales", "bonus", "formula"
   status    String   @default("pending") // "pending", "paid", "cancelled"
   notes     String?
+  // ★ Link to the formula that generated this incentive (if auto-generated)
+  formulaId String?
+  // ★ Link to the sales order item that triggered this incentive (if auto-generated)
+  salesOrderItemId String?
+  // ★ Number of units the commission was calculated for
+  units     Int      @default(1)
+  // ★ Sale price per unit at the time of sale (for audit)
+  saleUnitPrice Float?
   createdBy String?
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -508,6 +517,51 @@ model Incentive {
   item    Item    @relation(fields: [itemId], references: [id], onDelete: Cascade)
   entity  Entity  @relation(fields: [entityId], references: [id], onDelete: Cascade)
   tailor  Tailor? @relation(fields: [tailorId], references: [id], onDelete: SetNull)
+  formula IncentiveFormula? @relation(fields: [formulaId], references: [id], onDelete: SetNull)
+}
+
+// ★ Incentive Formula — defines commission rules for items based on sale price ranges
+// Example: Formula "Fresh Fabric" with range 700-1200 → Commission 10 for Outlet, 5 for Head Office
+// A single formula can include multiple items (via IncentiveFormulaItem).
+// When a sales order item is created with a price falling within a formula's range,
+// an Incentive entry is auto-created for that item with the calculated commission.
+model IncentiveFormula {
+  id              String   @id @default(cuid())
+  name            String   // e.g. "Fresh Fabric", "Premium Bed Sheet"
+  description     String?
+  // Range (inclusive) — sale price per unit must fall within [priceFrom, priceTo]
+  priceFrom       Float    // e.g. 700
+  priceTo         Float    // e.g. 1200
+  // Commission amount per unit sold (flat amount, not percentage)
+  // Stored as JSON string: { "<entityName>": <amount>, ... }
+  // Example: {"Outlet": 10, "Head Office": 5, "default": 5}
+  // On sales: look up commission by the destination entity's name; fall back to "default"
+  commissionMap   String   @default("{}")
+  status          String   @default("active") // "active" or "inactive"
+  notes           String?
+  createdBy       String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  items   IncentiveFormulaItem[]
+  incentives Incentive[]  // incentives auto-generated from this formula
+
+  @@index([status])
+}
+
+// ★ Link table: which items are covered by which formula
+model IncentiveFormulaItem {
+  id          String @id @default(cuid())
+  formulaId   String
+  itemId      String
+  createdAt   DateTime @default(now())
+
+  formula IncentiveFormula @relation(fields: [formulaId], references: [id], onDelete: Cascade)
+  item    Item             @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([formulaId, itemId])
+  @@index([formulaId])
+  @@index([itemId])
 }
 
 model Booking {

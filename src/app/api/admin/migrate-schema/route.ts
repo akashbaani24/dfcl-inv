@@ -207,6 +207,85 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_salesPersonId_idx` ON `SalesOrder`(`salesPersonId`)',
     description: 'Index on SalesOrder.salesPersonId',
   },
+  // v48: Add columns to Incentive for formula-based auto-generation
+  {
+    id: '2026_06_19_inc_formulaId',
+    sql: 'ALTER TABLE Incentive ADD COLUMN formulaId TEXT',
+    description: 'Add formulaId column to Incentive',
+  },
+  {
+    id: '2026_06_19_inc_salesOrderItemId',
+    sql: 'ALTER TABLE Incentive ADD COLUMN salesOrderItemId TEXT',
+    description: 'Add salesOrderItemId column to Incentive',
+  },
+  {
+    id: '2026_06_19_inc_units',
+    sql: 'ALTER TABLE Incentive ADD COLUMN units INTEGER NOT NULL DEFAULT 1',
+    description: 'Add units column to Incentive',
+  },
+  {
+    id: '2026_06_19_inc_saleUnitPrice',
+    sql: 'ALTER TABLE Incentive ADD COLUMN saleUnitPrice REAL',
+    description: 'Add saleUnitPrice column to Incentive',
+  },
+  // v48: Create IncentiveFormula table
+  {
+    id: '2026_06_19_create_IncentiveFormula',
+    sql: `CREATE TABLE IF NOT EXISTS "IncentiveFormula" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "name" TEXT NOT NULL,
+      "description" TEXT,
+      "priceFrom" REAL NOT NULL,
+      "priceTo" REAL NOT NULL,
+      "commissionMap" TEXT NOT NULL DEFAULT '{}',
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "notes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+    description: 'Create IncentiveFormula table',
+  },
+  // v48: Create IncentiveFormulaItem link table
+  {
+    id: '2026_06_19_create_IncentiveFormulaItem',
+    sql: `CREATE TABLE IF NOT EXISTS "IncentiveFormulaItem" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "formulaId" TEXT NOT NULL,
+      "itemId" TEXT NOT NULL,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("formulaId") REFERENCES "IncentiveFormula"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create IncentiveFormulaItem link table',
+  },
+  // v48: Indexes for IncentiveFormula
+  {
+    id: '2026_06_19_formula_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormula_status_idx` ON `IncentiveFormula`(`status`)',
+    description: 'Index on IncentiveFormula.status',
+  },
+  {
+    id: '2026_06_19_formula_idx_formulaId',
+    sql: 'CREATE INDEX IF NOT EXISTS `Incentive_formulaId_idx` ON `Incentive`(`formulaId`)',
+    description: 'Index on Incentive.formulaId',
+  },
+  // v48: Indexes + unique constraint for IncentiveFormulaItem
+  {
+    id: '2026_06_19_fitem_idx_formula',
+    sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormulaItem_formulaId_idx` ON `IncentiveFormulaItem`(`formulaId`)',
+    description: 'Index on IncentiveFormulaItem.formulaId',
+  },
+  {
+    id: '2026_06_19_fitem_idx_item',
+    sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormulaItem_itemId_idx` ON `IncentiveFormulaItem`(`itemId`)',
+    description: 'Index on IncentiveFormulaItem.itemId',
+  },
+  {
+    id: '2026_06_19_fitem_unique',
+    sql: 'CREATE UNIQUE INDEX IF NOT EXISTS `IncentiveFormulaItem_formulaId_itemId_key` ON `IncentiveFormulaItem`(`formulaId`, `itemId`)',
+    description: 'Unique index on IncentiveFormulaItem(formulaId, itemId)',
+  },
 ];
 
 export async function POST(request: NextRequest) {

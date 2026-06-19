@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Item Management System",
-  description: "A comprehensive item management system with user roles, column-level access control, and CSV upload support.",
+  title: "Akash Inventory System",
+  description: "Akash Inventory System — comprehensive inventory, sales, purchase, and incentive management with multi-entity support.",
 };
 
 export default function RootLayout({
