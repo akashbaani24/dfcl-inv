@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { bdDate, bdNow } from '@/lib/bd-time';
 
 // GET /api/transfers/[id]/challan — returns HTML for printable transfer challan
 // User can open this URL in a new tab and print it (Ctrl+P) or save as PDF.
@@ -30,7 +31,7 @@ export async function GET(
 
     // Generate a transfer number for display
     const transferNo = `TR-${new Date(transfer.createdAt).toISOString().slice(0, 10).replace(/-/g, '')}-${transfer.id.slice(-6).toUpperCase()}`;
-    const dateStr = new Date(transfer.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+    const dateStr = bdDate(new Date(transfer.createdAt));
 
     const html = `<!DOCTYPE html>
 <html lang="en">
@@ -334,7 +335,7 @@ export async function GET(
   </div>
 
   <div class="footer">
-    Generated on ${new Date().toLocaleString('en-GB')} • Akash Inventory System • Developed by Abdur Rahman Akash
+    Generated on ${bdNow()} • Akash Inventory System • Developed by Abdur Rahman Akash
   </div>
 </body>
 </html>`;

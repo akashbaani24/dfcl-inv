@@ -225,6 +225,24 @@ export async function POST(request: NextRequest) {
           errors.push(`Row ${i + 1}: uom "${uom}" doesn't match item's uom "${item.uom}" (used item's uom).`);
         }
 
+        // ★ Auto-backfill barcode + itemCode on the Item master if they're empty
+        //    but the CSV provided them. This way, future stock uploads (and the
+        //    stock view, transfers, receives) will show the barcode.
+        const itemUpdates: { barcode?: string; itemCode?: string } = {};
+        if (barcode && !item.barcode) itemUpdates.barcode = barcode;
+        if (itemCode && !item.itemCode) itemUpdates.itemCode = itemCode;
+        if (Object.keys(itemUpdates).length > 0) {
+          try {
+            await db.item.update({
+              where: { id: item.id },
+              data: itemUpdates,
+            });
+          } catch (e) {
+            // Non-fatal — the stock upsert below should still proceed.
+            if (errors.length < 10) errors.push(`Row ${i + 1}: warning — could not backfill barcode/itemCode on "${item.itemName}": ${String(e).slice(0, 80)}`);
+          }
+        }
+
         await db.stock.upsert({
           where: { itemId_entityId: { itemId: item.id, entityId: selectedEntity.id } },
           update: { quantity },

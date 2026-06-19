@@ -10,6 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Combobox, type ComboOption } from '@/components/ui/combobox'
 import { useConfirmAction } from '@/hooks/use-confirm-action'
+import { bdDate, bdDateTime, bdTime, bdNow, bdTodayISO } from '@/lib/bd-time'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -1452,9 +1453,9 @@ export default function Home() {
     const custName = s.customer?.name || '—'
     const custPhone = s.customer?.phone || ''
     const custAddr = s.customer?.address || ''
-    const orderDateStr = s.orderDate ? new Date(s.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date(s.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-    const deliveryDateStr = s.deliveryDate ? new Date(s.deliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
-    const printedOn = new Date().toLocaleString('en-GB', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const orderDateStr = s.orderDate ? bdDate(new Date(s.orderDate)) : bdDate(new Date(s.createdAt))
+    const deliveryDateStr = s.deliveryDate ? bdDate(new Date(s.deliveryDate)) : '—'
+    const printedOn = bdNow()
 
     // Build items table — each item row + nested making rows in same column style
     const itemsHtml = (s.items || []).map((si: any, i: number) => {
@@ -1484,7 +1485,7 @@ export default function Home() {
     const due = grandTotal - totalPaid
 
     const paymentsHtml = (s.payments || []).map((p: any) => {
-      const pdStr = p.paymentDate ? new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+      const pdStr = p.paymentDate ? bdDate(new Date(p.paymentDate)) : '—'
       let methodStr = p.paymentType || ''
       if (p.paymentType === 'cheque') methodStr = `Cheque${p.chequeNo ? ` (#${p.chequeNo})` : ''}${p.bankName ? ` - ${p.bankName}` : ''}`
       else if (p.paymentType === 'cash') methodStr = 'Cash'
@@ -1637,7 +1638,7 @@ export default function Home() {
   const printMoneyReceipt = (s: any, p: any) => {
     const win = window.open('', '_blank', 'width=600,height=500')
     if (!win) return
-    win.document.write(`<html><head><title>Money Receipt ${p.receiptNo}</title><style>body{font-family:Arial;padding:40px}h1{font-size:20px;text-align:center}.info{margin:20px 0;font-size:14px}.amt{font-size:24px;font-weight:bold;text-align:center;margin:20px 0}.sig{margin-top:50px;text-align:center;border-top:1px solid #000;padding-top:5px;width:250px;margin-left:auto;margin-right:auto;font-size:12px}</style></head><body><h1>MONEY RECEIPT</h1><div class="info"><strong>Receipt No:</strong> ${p.receiptNo}<br><strong>Sales Order:</strong> ${s.salesNo||''}<br><strong>Customer:</strong> ${s.customer?.name||'—'}<br><strong>Date:</strong> ${new Date(p.paymentDate).toLocaleDateString()}<br><strong>Payment Type:</strong> ${p.paymentType}<br><strong>Payment Mode:</strong> ${p.paymentMode}${p.chequeNo?`<br><strong>Cheque No:</strong> ${p.chequeNo}`:''}${p.bankName?`<br><strong>Bank:</strong> ${p.bankName}`:''}</div><div class="amt">Amount: ${p.amount.toFixed(2)}</div>${p.notes?`<p><strong>Notes:</strong> ${p.notes}</p>`:''}<div class="sig">Authorized Signature</div><script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.write(`<html><head><title>Money Receipt ${p.receiptNo}</title><style>body{font-family:Arial;padding:40px}h1{font-size:20px;text-align:center}.info{margin:20px 0;font-size:14px}.amt{font-size:24px;font-weight:bold;text-align:center;margin:20px 0}.sig{margin-top:50px;text-align:center;border-top:1px solid #000;padding-top:5px;width:250px;margin-left:auto;margin-right:auto;font-size:12px}</style></head><body><h1>MONEY RECEIPT</h1><div class="info"><strong>Receipt No:</strong> ${p.receiptNo}<br><strong>Sales Order:</strong> ${s.salesNo||''}<br><strong>Customer:</strong> ${s.customer?.name||'—'}<br><strong>Date:</strong> ${bdDate(new Date(p.paymentDate))}<br><strong>Payment Type:</strong> ${p.paymentType}<br><strong>Payment Mode:</strong> ${p.paymentMode}${p.chequeNo?`<br><strong>Cheque No:</strong> ${p.chequeNo}`:''}${p.bankName?`<br><strong>Bank:</strong> ${p.bankName}`:''}</div><div class="amt">Amount: ${p.amount.toFixed(2)}</div>${p.notes?`<p><strong>Notes:</strong> ${p.notes}</p>`:''}<div class="sig">Authorized Signature</div><script>window.onload=()=>window.print()</script></body></html>`)
     win.document.close()
   }
 
@@ -3371,7 +3372,7 @@ export default function Home() {
                   <TableCell className="text-right font-semibold">{s.quantity}</TableCell>
                   <TableCell className="text-right">
                     {s.bookedQty > 0 ? (
-                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title={`${s.bookings.length} active booking(s)\n${s.bookings.map((b: any) => `• ${b.bookingNo} → ${b.forEntityName}${b.tillDate ? ` (till ${new Date(b.tillDate).toLocaleDateString()})` : ''}`).join('\n')}`}>
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title={`${s.bookings.length} active booking(s)\n${s.bookings.map((b: any) => `• ${b.bookingNo} → ${b.forEntityName}${b.tillDate ? ` (till ${bdDate(new Date(b.tillDate))})` : ''}`).join('\n')}`}>
                         <Receipt className="w-3 h-3" />{s.bookedQty}
                       </span>
                     ) : <span className="text-muted-foreground">0</span>}
@@ -3462,7 +3463,7 @@ export default function Home() {
                 <TableCell>{statusBadge(a.adjustmentType)}</TableCell>
                 <TableCell className="text-right">{a.quantity}</TableCell>
                 <TableCell>{a.reason}</TableCell>
-                <TableCell className="text-muted-foreground">{new Date(a.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-muted-foreground">{bdDate(new Date(a.createdAt))}</TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -3577,7 +3578,7 @@ export default function Home() {
                 <TableCell>{t.toEntityName}</TableCell>
                 <TableCell className="text-right">{t.quantity}</TableCell>
                 <TableCell>{statusBadge(t.status)}</TableCell>
-                <TableCell className="text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-muted-foreground">{bdDate(new Date(t.createdAt))}</TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Button
@@ -3668,7 +3669,7 @@ export default function Home() {
                   <div className="flex justify-between"><span className="text-muted-foreground">Transfer ID:</span> <span className="font-mono font-semibold">{shortId}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Full ID:</span> <span className="font-mono text-xs">{t.id}</span></div>
                   <div className="flex justify-between"><span className="text-muted-foreground">Status:</span> <span>{statusBadge(t.status)}</span></div>
-                  <div className="flex justify-between"><span className="text-muted-foreground">Created:</span> <span>{new Date(t.createdAt).toLocaleString()}</span></div>
+                  <div className="flex justify-between"><span className="text-muted-foreground">Created:</span> <span>{bdDateTime(new Date(t.createdAt))}</span></div>
                 </div>
                 <div className="border rounded-lg p-3 space-y-1.5">
                   <p className="font-semibold text-xs text-muted-foreground uppercase tracking-wide">Item</p>
@@ -3930,7 +3931,7 @@ export default function Home() {
                       </TableCell>
                       <TableCell>{t.fromEntityName}</TableCell>
                       <TableCell className="text-right font-bold">{t.quantity}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{new Date(t.createdAt).toLocaleDateString()}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{bdDate(new Date(t.createdAt))}</TableCell>
                       <TableCell className="text-center">
                         <Button size="sm" onClick={() => handleQuickReceive(t)}>
                           <ArrowDownToLine className="w-3.5 h-3.5 mr-1" />Receive
@@ -3968,7 +3969,7 @@ export default function Home() {
                 <TableCell className="text-right">{r.quantity}</TableCell>
                 <TableCell>{r.sourceEntityName || (isFromPurchase ? 'Supplier' : '-')}</TableCell>
                 <TableCell className="font-mono text-xs">{r.referenceNo || '-'}</TableCell>
-                <TableCell className="text-muted-foreground">{new Date(r.createdAt).toLocaleDateString()}</TableCell>
+                <TableCell className="text-muted-foreground">{bdDate(new Date(r.createdAt))}</TableCell>
                 <TableCell className="text-center">
                   {isFromPurchase && (
                     <Button variant="ghost" size="sm" title="Print Barcodes" onClick={() => printPurchaseBarcodes(r.id, r.referenceNo, [{ item: { itemName: r.itemName, barcode: (r as any).item?.barcode, itemCode: (r as any).item?.itemCode, uom: (r as any).item?.uom }, quantity: r.quantity, uom: 'PCS' }])}>
@@ -4031,8 +4032,8 @@ export default function Home() {
                 <TableCell className="text-xs">{(s.items||[]).map((si:any,i:number)=>(<div key={i}>{si.item?.itemName||'—'} ×{si.quantity}</div>))}</TableCell>
                 <TableCell className="text-right font-semibold">{total.toFixed(2)}</TableCell>
                 <TableCell className="text-right">{paid.toFixed(2)}</TableCell>
-                <TableCell className="text-xs">{new Date(s.orderDate||s.createdAt).toLocaleDateString()}</TableCell>
-                <TableCell className="text-xs">{s.deliveryDate?new Date(s.deliveryDate).toLocaleDateString():'—'}</TableCell>
+                <TableCell className="text-xs">{bdDate(new Date(s.orderDate||s.createdAt))}</TableCell>
+                <TableCell className="text-xs">{s.deliveryDate?bdDate(new Date(s.deliveryDate)):'—'}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
                 <TableCell className="text-center" onClick={(e)=>e.stopPropagation()}>
                   <Button variant="ghost" size="sm" onClick={() => printSalesInvoice(s)} title="Print Invoice"><FileText className="w-4 h-4" /></Button>
@@ -4174,8 +4175,8 @@ export default function Home() {
             const grandTotal = subTotal + makingTotal
             const totalPaid = (so.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
             const due = grandTotal - totalPaid
-            const orderDateStr = so.orderDate ? new Date(so.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date(so.createdAt).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })
-            const deliveryDateStr = so.deliveryDate ? new Date(so.deliveryDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) : '—'
+            const orderDateStr = so.orderDate ? bdDate(new Date(so.orderDate)) : bdDate(new Date(so.createdAt))
+            const deliveryDateStr = so.deliveryDate ? bdDate(new Date(so.deliveryDate)) : '—'
             return (
               <>
               {/* Header bar — Bright Solutions style */}
@@ -4297,7 +4298,7 @@ export default function Home() {
                             return (
                               <tr key={i} className="border-t">
                                 <td className="px-2 py-2 font-mono text-xs">{p.receiptNo}</td>
-                                <td className="px-2 py-2 text-xs">{new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</td>
+                                <td className="px-2 py-2 text-xs">{bdDate(new Date(p.paymentDate))}</td>
                                 <td className="px-2 py-2 text-xs">{methodStr} <span className="text-[10px] text-muted-foreground">({p.paymentMode})</span></td>
                                 <td className="px-2 py-2 text-right font-semibold">{(p.amount || 0).toFixed(2)}</td>
                                 <td className="px-2 py-2 text-center"><Button variant="ghost" size="sm" onClick={() => printMoneyReceipt(so, p)} title="Print Receipt"><FileText className="w-3 h-3" /></Button></td>
@@ -4401,7 +4402,7 @@ export default function Home() {
           <div className="text-right">
             <div className="text-xl font-extrabold text-primary tracking-[2px]">NEW SALES</div>
             <div className="text-xs text-muted-foreground mt-1">Sales ID auto-generated on save</div>
-            <div className="text-[11px] mt-1"><span className="font-semibold">Order Date:</span> {new Date(salesOrderForm.orderDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</div>
+            <div className="text-[11px] mt-1"><span className="font-semibold">Order Date:</span> {bdDate(new Date(salesOrderForm.orderDate))}</div>
           </div>
         </div>
 
@@ -4851,7 +4852,7 @@ export default function Home() {
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
       </head><body>
         <h1>BARCODES — ${escapeHtml(purchaseNo)}</h1>
-        <div class="info">Purchase ID: ${escapeHtml(purchaseId)} | ${items.length} item(s) | Generated: ${new Date().toLocaleString()}</div>
+        <div class="info">Purchase ID: ${escapeHtml(purchaseId)} | ${items.length} item(s) | Generated: ${bdNow()}</div>
         <div class="labels">${labels}</div>
         <script>
           window.onload = function() {
@@ -4927,7 +4928,7 @@ export default function Home() {
               <DialogHeader><DialogTitle>Purchase: {selectedPurchase.purchaseNo}</DialogTitle></DialogHeader>
               <div className="space-y-3">
                 <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div><strong>Date:</strong> {new Date(selectedPurchase.purchaseDate).toLocaleDateString()}</div>
+                  <div><strong>Date:</strong> {bdDate(new Date(selectedPurchase.purchaseDate))}</div>
                   <div><strong>Type:</strong> {selectedPurchase.purchaseType}</div>
                   <div><strong>Supplier:</strong> {selectedPurchase.supplier?.name || '—'}</div>
                   <div><strong>Bill No:</strong> {selectedPurchase.billNo || '—'}</div>
@@ -5406,7 +5407,7 @@ export default function Home() {
                 <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No payments recorded yet</TableCell></TableRow>
               ) : filteredPayments.map((p: any) => (
                 <TableRow key={p.id} className="hover:bg-muted/30">
-                  <TableCell className="text-xs">{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-xs">{bdDate(new Date(p.paymentDate))}</TableCell>
                   <TableCell className="font-mono text-xs">{p.salesOrder?.salesNo || '—'}</TableCell>
                   <TableCell>{p.salesOrder?.customer?.name || '—'}</TableCell>
                   <TableCell className="font-medium">
@@ -5465,7 +5466,7 @@ export default function Home() {
                     options={salesOrders.map((s: any) => ({
                       value: s.id,
                       label: s.salesNo,
-                      subLabel: `${s.customer?.name || 'Walk-in'} • ${new Date(s.orderDate).toLocaleDateString()}`,
+                      subLabel: `${s.customer?.name || 'Walk-in'} • ${bdDate(new Date(s.orderDate))}`,
                     }))}
                     value={tailorPaymentForm.salesOrderId}
                     onChange={(v) => setTailorPaymentForm(f => ({ ...f, salesOrderId: v, tailorId: '', amount: '' }))}
@@ -5500,7 +5501,7 @@ export default function Home() {
                       <ul className="space-y-0.5">
                         {priorPaymentsForTailor.map((p: any) => (
                           <li key={p.id} className="flex justify-between">
-                            <span>{new Date(p.paymentDate).toLocaleDateString()} — {p.paymentType}</span>
+                            <span>{bdDate(new Date(p.paymentDate))} — {p.paymentType}</span>
                             <span className="font-mono">{p.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
                           </li>
                         ))}
@@ -5611,8 +5612,8 @@ export default function Home() {
                   ))}
                 </TableCell>
                 <TableCell>{b.customer?.name || '—'}</TableCell>
-                <TableCell className="text-xs">{new Date(b.bookingDate).toLocaleDateString()}</TableCell>
-                <TableCell className="text-xs">{b.tillDate ? new Date(b.tillDate).toLocaleDateString() : '—'}</TableCell>
+                <TableCell className="text-xs">{bdDate(new Date(b.bookingDate))}</TableCell>
+                <TableCell className="text-xs">{b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</TableCell>
                 <TableCell className="text-xs">{b.reason || '—'}</TableCell>
                 <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
                 <TableCell className="text-center">
@@ -5797,7 +5798,7 @@ export default function Home() {
       <p style="font-size:14px;color:#666">Booking No: <strong>${b.bookingNo}</strong></p>
       <div class="info">
         <div><strong>Customer:</strong> ${b.customer?.name || '—'}<br>${b.customer?.phone ? 'Phone: ' + b.customer.phone : ''}</div>
-        <div><strong>Booking Date:</strong> ${new Date(b.bookingDate).toLocaleDateString()}<br><strong>Till Date:</strong> ${b.tillDate ? new Date(b.tillDate).toLocaleDateString() : '—'}</div>
+        <div><strong>Booking Date:</strong> ${bdDate(new Date(b.bookingDate))}<br><strong>Till Date:</strong> ${b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</div>
         <div><strong>For Entity:</strong> ${b.entity?.name || workingEntity?.name || ''}<br><strong>Status:</strong> ${b.status}</div>
       </div>
       ${b.reason ? `<p><strong>Reason:</strong> ${b.reason}</p>` : ''}
@@ -6295,7 +6296,7 @@ export default function Home() {
                   <TableCell><Badge variant="outline" className="text-xs bg-red-100 text-red-800">Damage</Badge></TableCell>
                   <TableCell className="text-right font-bold text-red-600">{a.quantity}</TableCell>
                   <TableCell className="text-sm">{a.reason}</TableCell>
-                  <TableCell className="text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleDateString()}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{bdDate(new Date(a.createdAt))}</TableCell>
                 </TableRow>
               ))}
             </TableBody>

@@ -613,6 +613,54 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `TailorPayment_paymentDate_idx` ON `TailorPayment`(`paymentDate`)',
     description: 'Index on TailorPayment.paymentDate',
   },
+  // ★ v58: Performance indexes for future data growth
+  {
+    id: '2026_06_19_item_idx_barcode',
+    sql: 'CREATE INDEX IF NOT EXISTS `Item_barcode_idx` ON `Item`(`barcode`)',
+    description: 'Index on Item.barcode for barcode-based search/lookup',
+  },
+  // Composite index on Stock for the by-entity query (most common stock query)
+  {
+    id: '2026_06_19_stock_idx_entity_item',
+    sql: 'CREATE INDEX IF NOT EXISTS `Stock_entityId_itemId_idx` ON `Stock`(`entityId`, `itemId`)',
+    description: 'Composite index on Stock(entityId, itemId) for fast stock-by-entity queries',
+  },
+  // Index on Transfer for the "incoming transfers" query (filter by toEntityId + status)
+  {
+    id: '2026_06_19_transfer_idx_to_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `Transfer_toEntityId_status_idx` ON `Transfer`(`toEntityId`, `status`)',
+    description: 'Composite index on Transfer(toEntityId, status) for incoming-transfer queries',
+  },
+  // Index on Transfer for outgoing queries (fromEntityId + status)
+  {
+    id: '2026_06_19_transfer_idx_from_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `Transfer_fromEntityId_status_idx` ON `Transfer`(`fromEntityId`, `status`)',
+    description: 'Composite index on Transfer(fromEntityId, status) for outgoing-transfer queries',
+  },
+  // Index on SalesOrder for entity + status queries
+  {
+    id: '2026_06_19_salesorder_idx_entity_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_entityId_status_idx` ON `SalesOrder`(`entityId`, `status`)',
+    description: 'Composite index on SalesOrder(entityId, status)',
+  },
+  // Index on Receive for entity + source queries
+  {
+    id: '2026_06_19_receive_idx_entity_source',
+    sql: 'CREATE INDEX IF NOT EXISTS `Receive_entityId_sourceEntityId_idx` ON `Receive`(`entityId`, `sourceEntityId`)',
+    description: 'Composite index on Receive(entityId, sourceEntityId)',
+  },
+  // Index on ItemAdjustment for entity queries
+  {
+    id: '2026_06_19_itemadj_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `ItemAdjustment_entityId_idx` ON `ItemAdjustment`(`entityId`)',
+    description: 'Index on ItemAdjustment.entityId',
+  },
+  // Index on Purchase for entity + status queries
+  {
+    id: '2026_06_19_purchase_idx_entity_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `Purchase_entityId_status_idx` ON `Purchase`(`entityId`, `status`)',
+    description: 'Composite index on Purchase(entityId, status)',
+  },
 ];
 
 export async function POST(request: NextRequest) {

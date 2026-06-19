@@ -203,6 +203,7 @@ model Item {
 
   @@index([itemName])
   @@index([itemCode])
+  @@index([barcode])
   @@index([year])
   @@index([lcNo])
   @@index([group])
