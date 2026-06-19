@@ -115,10 +115,13 @@ export const MENU_ITEMS = [
   { key: 'receive', label: 'Receive', group: 'Function' },
   { key: 'purchase', label: 'Purchase', group: 'Purchase' },
   { key: 'purchaseApproval', label: 'Purchase Approval', group: 'Purchase' },
+  { key: 'supplierPayments', label: 'Supplier Payments', group: 'Purchase' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
+  { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'bookingReasons', label: 'Booking Reasons', group: 'Function' },
+  { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ] as const;

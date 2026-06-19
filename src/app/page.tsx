@@ -164,7 +164,7 @@ type ViewType =
   | 'itemAdjustment' | 'transfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
-  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'reports'
+  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -200,10 +200,13 @@ const ALL_MENU_ITEMS = [
   { key: 'receive', label: 'Receive', group: 'Function' },
   { key: 'purchase', label: 'Purchase', group: 'Purchase' },
   { key: 'purchaseApproval', label: 'Purchase Approval', group: 'Purchase' },
+  { key: 'supplierPayments', label: 'Supplier Payments', group: 'Purchase' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
+  { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'bookingReasons', label: 'Booking Reasons', group: 'Function' },
+  { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ]
@@ -4463,6 +4466,193 @@ export default function Home() {
     </div>
   )
 
+  // ★ Supplier Payments page
+  const renderSupplierPaymentsPage = () => {
+    const [spSearch, setSpSearch] = useState('')
+    const [payments, setPayments] = useState<any[]>([])
+    const [spLoading, setSpLoading] = useState(false)
+    const [showSpDialog, setShowSpDialog] = useState(false)
+    const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
+
+    useEffect(() => {
+      const fetch = async () => {
+        setSpLoading(true)
+        try {
+          const params = new URLSearchParams()
+          if (workingEntity?.id) params.set('entityId', workingEntity.id)
+          const res = await authFetch(`/api/supplier-payments?${params}`)
+          if (res.ok) { const d = await res.json(); setPayments(d.payments || []) }
+        } catch {} finally { setSpLoading(false) }
+      }
+      fetch()
+    }, [workingEntity?.id])
+
+    const handleSaveSp = async (e: React.FormEvent) => {
+      e.preventDefault()
+      try {
+        const res = await authFetch('/api/supplier-payments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...spForm, entityId: workingEntity?.id, amount: parseFloat(spForm.amount) }) })
+        if (res.ok) { toast({ title: 'Success', description: 'Payment recorded' }); setShowSpDialog(false); setSpForm({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' }); const params = new URLSearchParams(); if (workingEntity?.id) params.set('entityId', workingEntity.id); const r = await authFetch(`/api/supplier-payments?${params}`); if (r.ok) { const d = await r.json(); setPayments(d.payments || []) } } else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+      } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+    }
+
+    const filtered = spSearch ? payments.filter(p => (p.supplier?.name || '').toLowerCase().includes(spSearch.toLowerCase())) : payments
+    const totalPaid = filtered.reduce((s, p) => s + p.amount, 0)
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Supplier Payments - {workingEntity?.name}</h2>
+          <Button onClick={() => setShowSpDialog(true)}><Plus className="w-4 h-4 mr-2" />New Payment</Button>
+        </div>
+        <div className="flex gap-3 items-center">
+          <Input placeholder="Search supplier..." value={spSearch} onChange={e => setSpSearch(e.target.value)} className="w-64" />
+          <Badge variant="outline" className="bg-blue-50 text-blue-700">Total Paid: {totalPaid.toFixed(2)}</Badge>
+        </div>
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Supplier</TableHead>
+              <TableHead className="font-semibold">Purchase No</TableHead>
+              <TableHead className="font-semibold">Date</TableHead>
+              <TableHead className="font-semibold">Type</TableHead>
+              <TableHead className="font-semibold text-right">Amount</TableHead>
+              <TableHead className="font-semibold">Notes</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {spLoading ? <TableRow><TableCell colSpan={6} className="text-center py-8">Loading...</TableCell></TableRow>
+              : filtered.length === 0 ? <TableRow><TableCell colSpan={6} className="text-center py-8 text-muted-foreground">No payments</TableCell></TableRow>
+              : filtered.map(p => (
+                <TableRow key={p.id} className="hover:bg-muted/30">
+                  <TableCell className="font-medium">{p.supplier?.name || '—'}</TableCell>
+                  <TableCell className="text-xs font-mono">{p.purchase?.purchaseNo || '—'}</TableCell>
+                  <TableCell className="text-xs">{new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs">{p.paymentType}</Badge></TableCell>
+                  <TableCell className="text-right font-semibold">{p.amount.toFixed(2)}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{p.notes || '—'}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+        <Dialog open={showSpDialog} onOpenChange={setShowSpDialog}>
+          <DialogContent><DialogHeader><DialogTitle>New Supplier Payment</DialogTitle></DialogHeader>
+            <form onSubmit={handleSaveSp} className="space-y-3">
+              <div className="space-y-1"><Label className="text-xs">Supplier *</Label><Select value={spForm.supplierId || '__none__'} onValueChange={v => setSpForm({ ...spForm, supplierId: v === '__none__' ? '' : v })}><SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger><SelectContent><SelectItem value="__none__">— None —</SelectItem>{suppliers.filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-1"><Label className="text-xs">Amount *</Label><Input type="number" step="0.01" value={spForm.amount} onChange={e => setSpForm({ ...spForm, amount: e.target.value })} required /></div>
+                <div className="space-y-1"><Label className="text-xs">Date</Label><Input type="date" value={spForm.paymentDate} onChange={e => setSpForm({ ...spForm, paymentDate: e.target.value })} /></div>
+                <div className="space-y-1"><Label className="text-xs">Type</Label><Select value={spForm.paymentType} onValueChange={v => setSpForm({ ...spForm, paymentType: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
+                {spForm.paymentType === 'cheque' && <div className="space-y-1"><Label className="text-xs">Cheque No</Label><Input value={spForm.chequeNo} onChange={e => setSpForm({ ...spForm, chequeNo: e.target.value })} /></div>}
+              </div>
+              <div className="space-y-1"><Label className="text-xs">Notes</Label><Input value={spForm.notes} onChange={e => setSpForm({ ...spForm, notes: e.target.value })} /></div>
+              <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />Save Payment</Button></DialogFooter>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+    )
+  }
+
+  // ★ Delivery Management page
+  const renderDeliveryPage = () => {
+    const deliveryOrders = salesOrders.filter((s: any) => s.status === 'delivered' || s.status === 'processing' || (s as any).deliveryStatus === 'out_for_delivery')
+    const updateDeliveryStatus = async (id: string, status: string) => {
+      try {
+        await authFetch(`/api/sales-orders/${id}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ deliveryStatus: status }) })
+        toast({ title: 'Updated', description: `Delivery status: ${status}` })
+        fetchSalesOrders()
+      } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+    }
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Delivery Management - {workingEntity?.name}</h2>
+        </div>
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Sales No</TableHead>
+              <TableHead className="font-semibold">Customer</TableHead>
+              <TableHead className="font-semibold">Phone</TableHead>
+              <TableHead className="font-semibold">Address</TableHead>
+              <TableHead className="font-semibold">Delivery Person</TableHead>
+              <TableHead className="font-semibold">Delivery Status</TableHead>
+              <TableHead className="font-semibold text-center">Actions</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {deliveryOrders.length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No delivery orders</TableCell></TableRow>
+              : deliveryOrders.map(s => (
+                <TableRow key={s.id} className="hover:bg-muted/30">
+                  <TableCell className="font-mono text-xs">{s.salesNo}</TableCell>
+                  <TableCell className="font-medium">{s.customer?.name || '—'}</TableCell>
+                  <TableCell className="text-xs">{s.customer?.phone || '—'}</TableCell>
+                  <TableCell className="text-xs max-w-xs truncate">{s.customer?.address || '—'}</TableCell>
+                  <TableCell className="text-sm">{(s as any).deliveryPerson || '—'}</TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className={`text-xs ${(s as any).deliveryStatus === 'delivered' ? 'bg-green-100 text-green-800' : (s as any).deliveryStatus === 'out_for_delivery' ? 'bg-blue-100 text-blue-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                      {((s as any).deliveryStatus || 'pending').replace(/_/g, ' ')}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <Button variant="ghost" size="sm" onClick={() => updateDeliveryStatus(s.id, 'out_for_delivery')} title="Out for Delivery" className="text-xs">📤</Button>
+                      <Button variant="ghost" size="sm" onClick={() => updateDeliveryStatus(s.id, 'delivered')} title="Delivered" className="text-xs">✅</Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    )
+  }
+
+  // ★ Damage/Wastage Tracking page — uses ItemAdjustment with type 'decrease' and reason containing 'damage' or 'wastage'
+  const renderDamagePage = () => {
+    const damageRecords = adjustments.filter(a => a.adjustmentType === 'decrease' && (a.reason.toLowerCase().includes('damage') || a.reason.toLowerCase().includes('wastage') || a.reason.toLowerCase().includes('broken')))
+    const totalLoss = damageRecords.reduce((s, a) => s + a.quantity, 0)
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between">
+          <h2 className="text-xl font-semibold">Damage/Wastage Tracking - {workingEntity?.name}</h2>
+          <Button onClick={() => { setShowAdjustmentDialog(true); setTxItemSearch(''); setTxItemResults([]) }}><Plus className="w-4 h-4 mr-2" />Record Damage</Button>
+        </div>
+        <div className="rounded-md border border-amber-200 bg-amber-50/50 p-3 text-xs text-amber-900">
+          <p className="font-semibold">⚠️ How to record damage:</p>
+          <p>Go to Item Adjustment → New Adjustment → Select "Decrease" type → In Reason, include the word "damage", "wastage", or "broken" → it will automatically appear here.</p>
+        </div>
+        <div className="flex gap-3 items-center">
+          <Badge variant="outline" className="bg-red-50 text-red-700">Total Items Lost: {totalLoss}</Badge>
+          <Badge variant="outline" className="bg-amber-50 text-amber-700">Records: {damageRecords.length}</Badge>
+        </div>
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Item</TableHead>
+              <TableHead className="font-semibold">Type</TableHead>
+              <TableHead className="font-semibold text-right">Qty Lost</TableHead>
+              <TableHead className="font-semibold">Reason</TableHead>
+              <TableHead className="font-semibold">Date</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {damageRecords.length === 0 ? <TableRow><TableCell colSpan={5} className="text-center py-8 text-muted-foreground">No damage records. Use Item Adjustment with "decrease" type and include "damage"/"wastage" in the reason.</TableCell></TableRow>
+              : damageRecords.map(a => (
+                <TableRow key={a.id} className="hover:bg-muted/30 bg-red-50/20">
+                  <TableCell className="font-medium">{a.itemName}</TableCell>
+                  <TableCell><Badge variant="outline" className="text-xs bg-red-100 text-red-800">Damage</Badge></TableCell>
+                  <TableCell className="text-right font-bold text-red-600">{a.quantity}</TableCell>
+                  <TableCell className="text-sm">{a.reason}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{new Date(a.createdAt).toLocaleDateString()}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    )
+  }
+
   // ---- Reports page helpers ----
   const fmtMoney = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n || 0)
   const fmtNum = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
@@ -5570,6 +5760,9 @@ export default function Home() {
       case 'incentive': return renderIncentivePage()
       case 'newFormula': return renderNewFormulaPage()
       case 'cogsPage': return renderCogsPage()
+      case 'supplierPayments': return renderSupplierPaymentsPage()
+      case 'delivery': return renderDeliveryPage()
+      case 'damage': return renderDamagePage()
       case 'reports': return renderReportsPage()
       case 'tailors': return renderTailorsPage()
       case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })

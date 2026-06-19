@@ -462,6 +462,66 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_createdAt_idx` ON `SalesOrder`(`createdAt`)',
     description: 'Index on SalesOrder.createdAt',
   },
+  // v53: Supplier Payment table
+  {
+    id: '2026_06_19_create_SupplierPayment',
+    sql: `CREATE TABLE IF NOT EXISTS "SupplierPayment" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "supplierId" TEXT NOT NULL,
+      "purchaseId" TEXT,
+      "entityId" TEXT NOT NULL,
+      "amount" REAL NOT NULL,
+      "paymentDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "paymentType" TEXT NOT NULL DEFAULT 'cash',
+      "chequeNo" TEXT,
+      "bankName" TEXT,
+      "notes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      FOREIGN KEY ("supplierId") REFERENCES "Supplier"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("purchaseId") REFERENCES "Purchase"("id") ON DELETE SET NULL,
+      FOREIGN KEY ("entityId") REFERENCES "Entity"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create SupplierPayment table',
+  },
+  {
+    id: '2026_06_19_sp_idx_supplier',
+    sql: 'CREATE INDEX IF NOT EXISTS `SupplierPayment_supplierId_idx` ON `SupplierPayment`(`supplierId`)',
+    description: 'Index on SupplierPayment.supplierId',
+  },
+  {
+    id: '2026_06_19_sp_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `SupplierPayment_entityId_idx` ON `SupplierPayment`(`entityId`)',
+    description: 'Index on SupplierPayment.entityId',
+  },
+  {
+    id: '2026_06_19_sp_idx_purchase',
+    sql: 'CREATE INDEX IF NOT EXISTS `SupplierPayment_purchaseId_idx` ON `SupplierPayment`(`purchaseId`)',
+    description: 'Index on SupplierPayment.purchaseId',
+  },
+  // v53: Delivery management fields on SalesOrder
+  {
+    id: '2026_06_19_so_deliveryPerson',
+    sql: 'ALTER TABLE SalesOrder ADD COLUMN deliveryPerson TEXT',
+    description: 'Add deliveryPerson column to SalesOrder',
+  },
+  {
+    id: '2026_06_19_so_deliveryStatus',
+    sql: "ALTER TABLE SalesOrder ADD COLUMN deliveryStatus TEXT NOT NULL DEFAULT 'pending'",
+    description: 'Add deliveryStatus column to SalesOrder',
+  },
+  {
+    id: '2026_06_19_so_deliveryNotes',
+    sql: 'ALTER TABLE SalesOrder ADD COLUMN deliveryNotes TEXT',
+    description: 'Add deliveryNotes column to SalesOrder',
+  },
+  // v53: Index on deliveryStatus
+  {
+    id: '2026_06_19_so_idx_deliveryStatus',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_deliveryStatus_idx` ON `SalesOrder`(`deliveryStatus`)',
+    description: 'Index on SalesOrder.deliveryStatus',
+  },
 ];
 
 export async function POST(request: NextRequest) {

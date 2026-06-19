@@ -44,6 +44,15 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       return NextResponse.json({ salesOrder });
     }
 
+    // Handle delivery status update
+    if (body.deliveryStatus !== undefined) {
+      const updateData: Record<string, unknown> = { deliveryStatus: body.deliveryStatus };
+      if (body.deliveryPerson !== undefined) updateData.deliveryPerson = body.deliveryPerson;
+      if (body.deliveryNotes !== undefined) updateData.deliveryNotes = body.deliveryNotes;
+      const salesOrder = await db.salesOrder.update({ where: { id }, data: updateData });
+      return NextResponse.json({ salesOrder });
+    }
+
     return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
   } catch (error) {
     console.error('Update sales order error:', error);

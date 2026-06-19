@@ -130,6 +130,7 @@ model Entity {
   salesOrderItems SalesOrderItem[] @relation("SalesOrderEntity")
   purchases       Purchase[]
   customersCreatedBy Customer[] @relation("CustomerCreatedByEntity")
+  supplierPayments SupplierPayment[]
 }
 
 model Item {
@@ -267,6 +268,32 @@ model Supplier {
 
   items Item[]
   purchases Purchase[]
+  payments SupplierPayment[]
+}
+
+// ★ Supplier Payment — track payments made to suppliers
+model SupplierPayment {
+  id          String   @id @default(cuid())
+  supplierId  String
+  purchaseId  String?  // optional link to a specific purchase
+  entityId    String   // which entity made the payment
+  amount      Float
+  paymentDate DateTime @default(now())
+  paymentType String   @default("cash") // cash, card, mobile_banking, cheque
+  chequeNo    String?
+  bankName    String?
+  notes       String?
+  createdBy   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  supplier Supplier @relation(fields: [supplierId], references: [id], onDelete: Cascade)
+  purchase Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+  entity   Entity   @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([supplierId])
+  @@index([entityId])
+  @@index([purchaseId])
 }
 
 // ★ Employee master data — used to track staff and their functional roles
@@ -317,6 +344,7 @@ model Purchase {
   supplier Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
   items    PurchaseItem[]
   receives Receive[]
+  supplierPayments SupplierPayment[]
 
   @@index([entityId])
   @@index([supplierId])
@@ -433,6 +461,10 @@ model SalesOrder {
   deliveryDate  DateTime?
   status        String         @default("pending")
   discount      Float          @default(0) // ★ flat discount amount
+  // ★ Delivery management fields
+  deliveryPerson  String?  // name of delivery person
+  deliveryStatus  String   @default("pending") // pending, out_for_delivery, delivered, failed
+  deliveryNotes   String?
   notes         String?
   createdBy     String?
   createdAt     DateTime       @default(now())
