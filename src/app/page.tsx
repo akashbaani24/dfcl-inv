@@ -6971,7 +6971,9 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
         </div>
       )}
 
-      {/* ★ Chat Widget — bottom right */}
+      </div>{/* close flex-1 div */}
+
+      {/* ★ Chat Widget — always fixed bottom right, outside main layout divs */}
       {chatOpen ? (
         <div className="fixed bottom-4 right-4 z-[9998] w-80 bg-card border rounded-lg shadow-2xl flex flex-col" style={{ maxHeight: '500px' }}>
           {/* Header */}
@@ -7044,7 +7046,6 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           )}
         </button>
       )}
-      </div>{/* close flex-1 div */}
     </div>
   )
 }
