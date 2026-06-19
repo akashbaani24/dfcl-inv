@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useState, useEffect, useCallback, useRef } from 'react'
+import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -381,6 +381,15 @@ export default function Home() {
   const [pageSize, setPageSize] = useState(20)
   const [totalPages, setTotalPages] = useState(0)
   const [searchQuery, setSearchQuery] = useState('')
+  const [debouncedSearch, setDebouncedSearch] = useState('')
+  // ★ Debounce search — wait 400ms after user stops typing before fetching
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(searchQuery)
+      setCurrentPage(1)
+    }, 400)
+    return () => clearTimeout(timer)
+  }, [searchQuery])
   const [visibleColumns, setVisibleColumns] = useState<string[]>([])
   const [itemsLoading, setItemsLoading] = useState(false)
   const [selectedEntityId, setSelectedEntityId] = useState<string>('all')
@@ -553,7 +562,7 @@ export default function Home() {
 
   useEffect(() => {
     if (user) { fetchItems() }
-  }, [user, currentPage, searchQuery, selectedEntityId])
+  }, [user, currentPage, debouncedSearch, selectedEntityId])
 
   useEffect(() => {
     if (user) { fetchEntities() }
@@ -562,7 +571,7 @@ export default function Home() {
   const fetchItems = useCallback(async () => {
     setItemsLoading(true)
     try {
-      const params = new URLSearchParams({ page: currentPage.toString(), pageSize: pageSize.toString(), search: searchQuery, entityId: selectedEntityId === 'all' ? '' : selectedEntityId })
+      const params = new URLSearchParams({ page: currentPage.toString(), pageSize: pageSize.toString(), search: debouncedSearch, entityId: selectedEntityId === 'all' ? '' : selectedEntityId })
       const res = await authFetch(`/api/items?${params}`)
       if (res.ok) {
         const data = await res.json()
@@ -570,7 +579,7 @@ export default function Home() {
       }
     } catch { toast({ title: 'Error', description: 'Failed to fetch items', variant: 'destructive' }) }
     finally { setItemsLoading(false) }
-  }, [currentPage, pageSize, searchQuery, selectedEntityId, toast])
+  }, [currentPage, pageSize, debouncedSearch, selectedEntityId, toast])
 
   const fetchEntities = useCallback(async () => {
     try {
@@ -608,7 +617,7 @@ export default function Home() {
   }
 
   // Item handlers
-  const handleSearch = () => { setCurrentPage(1); fetchItems() }
+  const handleSearch = () => { setCurrentPage(1) /* fetchItems auto-triggers via debounce */ }
   const handleSearchReset = () => { setSearchQuery(''); setCurrentPage(1); setSelectedEntityId('all') }
 
   const handleCreateItem = async (e: React.FormEvent) => {
@@ -1021,9 +1030,9 @@ export default function Home() {
       </tr>${makingRows}`
     }).join('')
 
-    const subTotal = (s.items || []).reduce((sum: number, si: any) => sum + (si.quantity || 0) * (si.unitPrice || 0), 0)
-    const makingTotal = (s.items || []).reduce((sum: number, si: any) => sum + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0), 0)
-    const grandTotal = subTotal + makingTotal
+    const grandTotalPreDiscount = subTotal + makingTotal
+    const discount = s.discount || 0
+    const grandTotal = grandTotalPreDiscount - discount
     const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
     const due = grandTotal - totalPaid
 
@@ -1130,7 +1139,8 @@ export default function Home() {
           <table>
             <tr><td class="label">Sub Total</td><td class="num">${subTotal.toFixed(2)}</td></tr>
             <tr><td class="label">Making Charges</td><td class="num">${makingTotal.toFixed(2)}</td></tr>
-            <tr><td class="label">Total Amount</td><td class="num">${grandTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Total Amount</td><td class="num">${grandTotalPreDiscount.toFixed(2)}</td></tr>
+            ${discount > 0 ? `<tr><td class="label">Discount</td><td class="num">-${discount.toFixed(2)}</td></tr>` : ''}
             <tr class="grand"><td>GRAND TOTAL</td><td class="num">${grandTotal.toFixed(2)}</td></tr>
           </table>
         </div>
@@ -1168,6 +1178,8 @@ export default function Home() {
         <div>Prepared By: ${user?.displayName || 'System'}</div>
         <div>Printed On: ${printedOn}</div>
       </div>
+
+      ${custPhone ? `<div style="text-align:center;margin-top:15px"><a href="https://wa.me/${custPhone.replace(/[^0-9]/g, '').replace(/^0/, '880')}" target="_blank" style="display:inline-block;padding:8px 24px;background:#25D366;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📱 Send via WhatsApp</a></div>` : ''}
 
       <script>window.onload=()=>window.print()</script>
     </body></html>`)

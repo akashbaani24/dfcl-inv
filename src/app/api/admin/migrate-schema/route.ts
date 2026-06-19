@@ -436,6 +436,32 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormula_status_idx` ON `IncentiveFormula`(`status`)',
     description: 'Recreate index on IncentiveFormula.status',
   },
+  // v52: Performance indexes on SalesOrder
+  {
+    id: '2026_06_19_so_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_entityId_idx` ON `SalesOrder`(`entityId`)',
+    description: 'Index on SalesOrder.entityId',
+  },
+  {
+    id: '2026_06_19_so_idx_customer',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_customerId_idx` ON `SalesOrder`(`customerId`)',
+    description: 'Index on SalesOrder.customerId',
+  },
+  {
+    id: '2026_06_19_so_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_status_idx` ON `SalesOrder`(`status`)',
+    description: 'Index on SalesOrder.status',
+  },
+  {
+    id: '2026_06_19_so_idx_orderDate',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_orderDate_idx` ON `SalesOrder`(`orderDate`)',
+    description: 'Index on SalesOrder.orderDate',
+  },
+  {
+    id: '2026_06_19_so_idx_createdAt',
+    sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_createdAt_idx` ON `SalesOrder`(`createdAt`)',
+    description: 'Index on SalesOrder.createdAt',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -64,7 +64,8 @@ export async function GET(request: NextRequest) {
         entity: { select: { name: true } },
         customer: { select: { name: true } },
         items: {
-          include: {
+          select: {
+            id: true, itemId: true, fromEntityId: true, quantity: true,
             item: { select: { itemName: true } },
             fromEntity: { select: { name: true } },
           },

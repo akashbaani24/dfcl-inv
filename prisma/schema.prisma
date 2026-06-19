@@ -444,6 +444,12 @@ model SalesOrder {
   items       SalesOrderItem[]
   payments   SalesPayment[]
   returns    SalesReturn[]
+
+  @@index([entityId])
+  @@index([customerId])
+  @@index([status])
+  @@index([orderDate])
+  @@index([createdAt])
 }
 
 // Multiple items per sales order with unit price

@@ -24,8 +24,9 @@ export async function GET(request: NextRequest) {
       include: {
         entity: { select: { name: true } },
         customer: { select: { name: true, phone: true } },
-        items: { include: { item: { select: { itemName: true } }, makingEntries: true } },
-        payments: true,
+        salesPerson: { select: { name: true } },
+        items: { select: { id: true, itemId: true, quantity: true, unitPrice: true, item: { select: { itemName: true } } } },
+        payments: { select: { id: true, amount: true, paymentType: true, paymentMode: true, receiptNo: true, paymentDate: true, chequeNo: true, bankName: true } },
       },
     });
 
