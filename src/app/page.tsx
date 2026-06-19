@@ -500,6 +500,13 @@ export default function Home() {
   const [reportExporting, setReportExporting] = useState(false)
   const [entitySearch, setEntitySearch] = useState('') // entity selection page search
 
+  // ★ Supplier Payments state (must be at top-level before any early return)
+  const [spPayments, setSpPayments] = useState<any[]>([])
+  const [spLoading, setSpLoading] = useState(false)
+  const [showSpDialog, setShowSpDialog] = useState(false)
+  const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
+  const [spSearch, setSpSearch] = useState('')
+
   const { toast } = useToast()
 
   // Close context menu on any click
@@ -778,6 +785,7 @@ export default function Home() {
   const fetchUom = async () => { try { const res = await authFetch('/api/uom'); if (res.ok) { const d = await res.json(); setUomList(d.uomList) } } catch {} }
   const fetchSuppliers = async () => { try { const res = await authFetch('/api/suppliers'); if (res.ok) { const d = await res.json(); setSuppliers(d.suppliers) } } catch {} }
   const fetchEmployees = async () => { try { const res = await authFetch('/api/employees'); if (res.ok) { const d = await res.json(); setEmployees(d.employees) } } catch {} }
+  const fetchSupplierPayments = async () => { if (!workingEntity) return; setSpLoading(true); try { const params = new URLSearchParams(); params.set('entityId', workingEntity.id); const res = await authFetch(`/api/supplier-payments?${params}`); if (res.ok) { const d = await res.json(); setSpPayments(d.payments || []) } } catch {} finally { setSpLoading(false) } }
   const fetchCustomers = async () => { try { const res = await authFetch('/api/customers'); if (res.ok) { const d = await res.json(); setCustomers(d.customers) } } catch {} }
 
   // Transaction fetch handlers
@@ -1234,6 +1242,7 @@ export default function Home() {
   useEffect(() => { if (currentView === 'purchase' || currentView === 'purchaseApproval') fetchPurchases() }, [currentView])
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
+  useEffect(() => { if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() } }, [currentView, workingEntity?.id])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
 
@@ -4478,25 +4487,8 @@ export default function Home() {
     </div>
   )
 
-  // ★ Supplier Payments state (top-level, not inside render function)
-  const [spPayments, setSpPayments] = useState<any[]>([])
-  const [spLoading, setSpLoading] = useState(false)
-  const [showSpDialog, setShowSpDialog] = useState(false)
-  const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
-  const [spSearch, setSpSearch] = useState('')
-
-  const fetchSupplierPayments = async () => {
-    if (!workingEntity) return
-    setSpLoading(true)
-    try {
-      const params = new URLSearchParams()
-      if (workingEntity.id) params.set('entityId', workingEntity.id)
-      const res = await authFetch(`/api/supplier-payments?${params}`)
-      if (res.ok) { const d = await res.json(); setSpPayments(d.payments || []) }
-    } catch {} finally { setSpLoading(false) }
-  }
-
-  useEffect(() => { if (currentView === 'supplierPayments') fetchSupplierPayments() }, [currentView, workingEntity?.id])
+  // ★ Supplier Payments handlers (state is at top-level)
+  // fetchSupplierPayments is called via useEffect below
 
   const handleSaveSp = async (e: React.FormEvent) => {
     e.preventDefault()
