@@ -308,7 +308,7 @@ export default function Home() {
 
   const [salesOrders, setSalesOrders] = useState<Array<any>>([])
   const [salesOrderForm, setSalesOrderForm] = useState({
-    customerId: '', salesPersonId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '',
+    customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '',
     items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; makingEntries: Array<{ name: string; unitPrice: string; quantity: string }> }>,
     payments: [] as Array<{ amount: string; paymentType: string; paymentMode: string; paymentDate: string; chequeNo: string; bankName: string; notes: string }>,
     newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
@@ -340,6 +340,7 @@ export default function Home() {
     ranges: [] as Array<{ priceFrom: string; priceTo: string; outletCommission: string; headOfficeCommission: string }>,
     status: 'active', notes: '',
     itemIds: [] as string[],
+    itemNames: {} as Record<string, string>, // ★ map itemId → itemName for display
   })
   const [editingFormulaId, setEditingFormulaId] = useState<string | null>(null)
   const [formulaItemSearch, setFormulaItemSearch] = useState('')
@@ -900,7 +901,7 @@ export default function Home() {
 
   // Sales order handlers
   const resetSalesOrderForm = () => {
-    setSalesOrderForm({ customerId: '', salesPersonId: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
+    setSalesOrderForm({ customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
     setEditingSalesOrderId(null); setSalesCustomerMode('existing'); setSalesCustomerSearch(''); setSalesItemSearch(''); setSalesItemResults([])
   }
 
@@ -962,6 +963,7 @@ export default function Home() {
       const payload = {
         entityId: workingEntity.id, customerId,
         salesPersonId: salesOrderForm.salesPersonId || undefined,
+        discount: parseFloat(salesOrderForm.discount) || 0,
         orderDate: salesOrderForm.orderDate, deliveryDate: salesOrderForm.deliveryDate || undefined,
         status: salesOrderForm.status, notes: salesOrderForm.notes,
         items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseInt(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseInt(me.quantity) || 1 })) })),
@@ -1231,7 +1233,7 @@ export default function Home() {
     setFormulaForm({
       name: '', description: '',
       ranges: [{ priceFrom: '', priceTo: '', outletCommission: '', headOfficeCommission: '' }],
-      status: 'active', notes: '', itemIds: [],
+      status: 'active', notes: '', itemIds: [], itemNames: {},
     })
     setEditingFormulaId(null)
     setFormulaItemSearch('')
@@ -1239,6 +1241,10 @@ export default function Home() {
   }
   const openNewFormulaPage = () => { resetFormulaForm(); setCurrentView('newFormula') }
   const openEditFormulaPage = (f: any) => {
+    const itemNames: Record<string, string> = {}
+    for (const fi of (f.items || [])) {
+      if (fi.item) itemNames[fi.itemId] = fi.item.itemName || fi.item.itemCode || 'Unknown'
+    }
     setFormulaForm({
       name: f.name, description: f.description || '',
       ranges: (f.ranges || []).map((r: any) => ({
@@ -1247,6 +1253,7 @@ export default function Home() {
       })),
       status: f.status, notes: f.notes || '',
       itemIds: (f.items || []).map((fi: any) => fi.itemId),
+      itemNames,
     })
     setEditingFormulaId(f.id)
     setCurrentView('newFormula')
@@ -1271,11 +1278,17 @@ export default function Home() {
       if (res.ok) { const d = await res.json(); setFormulaItemResults(d.items || []) }
     } catch {}
   }
-  const toggleFormulaItem = (itemId: string) => {
-    setFormulaForm(f => ({
-      ...f,
-      itemIds: f.itemIds.includes(itemId) ? f.itemIds.filter(id => id !== itemId) : [...f.itemIds, itemId],
-    }))
+  const toggleFormulaItem = (itemId: string, itemName?: string) => {
+    setFormulaForm(f => {
+      const isIn = f.itemIds.includes(itemId)
+      const newNames = { ...f.itemNames }
+      if (!isIn && itemName) newNames[itemId] = itemName
+      return {
+        ...f,
+        itemIds: isIn ? f.itemIds.filter(id => id !== itemId) : [...f.itemIds, itemId],
+        itemNames: newNames,
+      }
+    })
   }
   const handleSaveFormula = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -1710,7 +1723,7 @@ export default function Home() {
     if (!editingEntityId) return
     try {
       const res = await authFetch(`/api/entities/${editingEntityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
-      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
       else { const data = await res.json(); toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update entity', variant: 'destructive' }) }
   }
@@ -2961,8 +2974,10 @@ export default function Home() {
     const subTotal = salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0)
     const makingTotal = salesOrderForm.items.reduce((s, item) => s + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0)
     const grandTotal = subTotal + makingTotal
+    const discount = parseFloat(salesOrderForm.discount) || 0
+    const netTotal = grandTotal - discount
     const totalPaid = salesOrderForm.payments.reduce((s, p) => s + (parseFloat(p.amount) || 0), 0)
-    const due = grandTotal - totalPaid
+    const due = netTotal - totalPaid
     const entityName = workingEntity?.name || ''
     const initials = entityName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
 
@@ -3164,7 +3179,11 @@ export default function Home() {
                   <div className="flex justify-between text-muted-foreground"><span>Making Charges</span><span className="font-mono">{makingTotal.toFixed(2)}</span></div>
                   <Separator className="my-2" />
                   <div className="flex justify-between text-base"><span className="font-semibold">Total Amount</span><span className="font-mono">{grandTotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between bg-primary text-primary-foreground px-3 py-2 rounded-md text-base font-bold mt-2"><span>GRAND TOTAL</span><span className="font-mono">{grandTotal.toFixed(2)}</span></div>
+                  <div className="space-y-1 pt-1">
+                    <Label className="text-xs text-muted-foreground">Discount</Label>
+                    <Input type="number" step="0.01" placeholder="0.00" value={salesOrderForm.discount} onChange={e => setSalesOrderForm({ ...salesOrderForm, discount: e.target.value })} className="h-8 text-right text-sm" />
+                  </div>
+                  <div className="flex justify-between bg-primary text-primary-foreground px-3 py-2 rounded-md text-base font-bold mt-2"><span>GRAND TOTAL</span><span className="font-mono">{netTotal.toFixed(2)}</span></div>
                   {totalPaid > 0 && (
                     <>
                       <div className="flex justify-between text-muted-foreground mt-2"><span>Total Paid</span><span className="font-mono">{totalPaid.toFixed(2)}</span></div>
@@ -4398,7 +4417,7 @@ export default function Home() {
                   {formulaItemResults.map((item, idx) => {
                     const isSelected = formulaForm.itemIds.includes(item.id)
                     return (
-                      <button key={item.id || idx} type="button" onClick={() => toggleFormulaItem(item.id)} className={`w-full text-left px-3 py-2 text-sm border-b last:border-0 transition-colors ${isSelected ? 'bg-green-50 text-green-700' : 'hover:bg-muted'}`}>
+                      <button key={item.id || idx} type="button" onClick={() => toggleFormulaItem(item.id, item.itemName)} className={`w-full text-left px-3 py-2 text-sm border-b last:border-0 transition-colors ${isSelected ? 'bg-green-50 text-green-700' : 'hover:bg-muted'}`}>
                         {isSelected ? '✓ ' : ''}{item.itemName || 'Unknown'} {item.year ? `(${item.year})` : ''}
                       </button>
                     )
@@ -4408,8 +4427,7 @@ export default function Home() {
               {formulaForm.itemIds.length > 0 && (
                 <div className="flex gap-1 flex-wrap pt-1">
                   {formulaForm.itemIds.map(id => {
-                    const item = formulaItemResults.find((r: any) => r.id === id)
-                    const name = item?.itemName || `Item ${id.slice(-6)}`
+                    const name = formulaForm.itemNames[id] || formulaItemResults.find((r: any) => r.id === id)?.itemName || `Item ${id.slice(-6)}`
                     return (
                       <Badge key={id} variant="outline" className="text-xs bg-blue-50 text-blue-800 gap-1">
                         {name}
@@ -6198,7 +6216,7 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
 
       {/* User Dialog */}
       <Dialog open={showUserDialog} onOpenChange={setShowUserDialog}>
-        <DialogContent className="max-w-6xl max-h-[92vh] overflow-y-auto">
+        <DialogContent className="max-w-[95vw] max-h-[95vh] overflow-y-auto">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Key className="w-5 h-5" />{editingUserId ? 'Edit User' : 'Create New User'}</DialogTitle></DialogHeader>
           <form onSubmit={editingUserId ? handleUpdateUser : handleCreateUser} className="space-y-4">
             <div className="space-y-2"><Label>Username *</Label><Input value={userForm.username} onChange={e => setUserForm({ ...userForm, username: e.target.value })} required disabled={!!editingUserId} /></div>

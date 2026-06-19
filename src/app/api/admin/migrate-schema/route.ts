@@ -381,6 +381,20 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `IncentiveFormulaRange_formulaId_idx` ON `IncentiveFormulaRange`(`formulaId`)',
     description: 'Index on IncentiveFormulaRange.formulaId',
   },
+  // v51: Add discount column to SalesOrder
+  {
+    id: '2026_06_19_so_discount',
+    sql: 'ALTER TABLE SalesOrder ADD COLUMN discount REAL NOT NULL DEFAULT 0',
+    description: 'Add discount column to SalesOrder',
+  },
+  // v51: Clean up old IncentiveFormula columns (priceFrom, priceTo, commissionMap are no longer in schema)
+  // SQLite doesn't support DROP COLUMN, so we just leave them — Prisma will ignore them.
+  // But we need to delete old formula records that have no ranges (they'll cause errors when fetched)
+  {
+    id: '2026_06_19_cleanup_old_formulas',
+    sql: "DELETE FROM IncentiveFormula WHERE id NOT IN (SELECT DISTINCT formulaId FROM IncentiveFormulaRange)",
+    description: 'Delete old IncentiveFormula records that have no ranges (pre-migration records)',
+  },
 ];
 
 export async function POST(request: NextRequest) {

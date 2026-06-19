@@ -432,6 +432,7 @@ model SalesOrder {
   orderDate     DateTime       @default(now())
   deliveryDate  DateTime?
   status        String         @default("pending")
+  discount      Float          @default(0) // ★ flat discount amount
   notes         String?
   createdBy     String?
   createdAt     DateTime       @default(now())
