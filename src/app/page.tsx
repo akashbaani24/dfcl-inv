@@ -507,6 +507,20 @@ export default function Home() {
   const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
   const [spSearch, setSpSearch] = useState('')
 
+  // ★ Chat state (top-level, before any early return)
+  const [chatOpen, setChatOpen] = useState(false)
+  const [chatPartnerId, setChatPartnerId] = useState('')
+  const [chatMessages, setChatMessages] = useState<any[]>([])
+  const [chatPartners, setChatPartners] = useState<any[]>([])
+  const [chatInput, setChatInput] = useState('')
+  const [chatLoading, setChatLoading] = useState(false)
+  const chatEndRef = useRef<HTMLDivElement | null>(null)
+
+  // ★ News Ticker state (top-level)
+  const [tickerMessages, setTickerMessages] = useState<string[]>([])
+  const [showTickerInput, setShowTickerInput] = useState(false)
+  const [tickerInput, setTickerInput] = useState('')
+
   const { toast } = useToast()
 
   // Close context menu on any click
@@ -1243,6 +1257,56 @@ export default function Home() {
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() } }, [currentView, workingEntity?.id])
+
+  // ★ Chat: fetch partner list when chat opened
+  const fetchChatPartners = async () => {
+    if (!workingEntity) return
+    try {
+      const res = await authFetch(`/api/chat?entityId=${workingEntity.id}`)
+      if (res.ok) { const d = await res.json(); setChatPartners(d.partners || []) }
+    } catch {}
+  }
+
+  // ★ Chat: fetch messages with a specific partner
+  const fetchChatMessages = async (partnerId: string) => {
+    if (!workingEntity) return
+    setChatLoading(true)
+    try {
+      const res = await authFetch(`/api/chat?entityId=${workingEntity.id}&partnerEntityId=${partnerId}`)
+      if (res.ok) { const d = await res.json(); setChatMessages(d.messages || []) }
+    } catch {} finally { setChatLoading(false) }
+  }
+
+  // ★ Chat: send a message
+  const sendChatMessage = async () => {
+    if (!workingEntity || !chatPartnerId || !chatInput.trim()) return
+    try {
+      const res = await authFetch('/api/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ fromEntityId: workingEntity.id, toEntityId: chatPartnerId, message: chatInput }) })
+      if (res.ok) { setChatInput(''); fetchChatMessages(chatPartnerId) }
+    } catch {}
+  }
+
+  // ★ News Ticker: fetch active messages
+  const fetchTickerMessages = async () => {
+    try {
+      const res = await authFetch('/api/news-ticker')
+      if (res.ok) { const d = await res.json(); setTickerMessages((d.messages || []).map((m: any) => m.message)) }
+    } catch {}
+  }
+
+  // ★ News Ticker: post a new message (admin/manager only)
+  const postTickerMessage = async () => {
+    if (!tickerInput.trim()) return
+    try {
+      const res = await authFetch('/api/news-ticker', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: tickerInput }) })
+      if (res.ok) { setTickerInput(''); setShowTickerInput(false); fetchTickerMessages() }
+    } catch {}
+  }
+
+  // Poll ticker messages every 30s when logged in
+  useEffect(() => {
+    if (user) { fetchTickerMessages(); const interval = setInterval(fetchTickerMessages, 30000); return () => clearInterval(interval) }
+  }, [user])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
 
@@ -6649,7 +6713,34 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
   }
 
   return (
-    <div className="min-h-screen flex bg-background">
+    <div className="min-h-screen flex flex-col bg-background">
+      {/* ★ News Ticker — scrolling text at top, right-to-left */}
+      {tickerMessages.length > 0 && (
+        <div className="bg-primary text-primary-foreground py-1 overflow-hidden relative shrink-0">
+          <div className="ticker-track whitespace-nowrap text-xs font-medium">
+            {tickerMessages.map((msg, i) => (
+              <span key={i} className="inline-block px-8">📢 {msg}</span>
+            ))}
+            {/* Duplicate for seamless scroll */}
+            {tickerMessages.map((msg, i) => (
+              <span key={`d-${i}`} className="inline-block px-8">📢 {msg}</span>
+            ))}
+          </div>
+          {/* Admin/Manager: add new ticker message */}
+          {isManagerOrAdmin && (
+            <button onClick={() => setShowTickerInput(!showTickerInput)} className="absolute right-2 top-1/2 -translate-y-1/2 text-primary-foreground/80 hover:text-primary-foreground text-xs">
+              {showTickerInput ? '✕' : '+ Add'}
+            </button>
+          )}
+          {showTickerInput && (
+            <div className="absolute right-2 top-7 z-50 bg-card border rounded-md shadow-lg p-2 flex gap-1">
+              <Input placeholder="Type ticker message..." value={tickerInput} onChange={e => setTickerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && postTickerMessage()} className="h-7 text-xs w-64" />
+              <Button size="sm" className="h-7 text-xs" onClick={postTickerMessage}>Post</Button>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="flex flex-1">
       {/* Mobile overlay */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />}
       {/* Sidebar */}
@@ -6747,6 +6838,75 @@ LC-2024-0002,2024,Chittagong Store,75`}</pre>
           <button className="w-full text-left px-3 py-2 text-sm hover:bg-muted transition-colors flex items-center gap-2" onClick={() => { navigator.clipboard?.writeText(`${window.location.origin}/?view=${contextMenu.view}&entityId=${workingEntity?.id || ''}`); setContextMenu(null); toast({ title: 'Copied', description: 'Link copied' }) }}><FileText className="w-4 h-4" /> Copy link</button>
         </div>
       )}
+
+      {/* ★ Chat Widget — bottom right */}
+      {chatOpen ? (
+        <div className="fixed bottom-4 right-4 z-[9998] w-80 bg-card border rounded-lg shadow-2xl flex flex-col" style={{ maxHeight: '500px' }}>
+          {/* Header */}
+          <div className="flex items-center justify-between p-3 border-b bg-primary text-primary-foreground rounded-t-lg">
+            <span className="text-sm font-semibold flex items-center gap-2">
+              {chatPartnerId ? (
+                <>
+                  <button onClick={() => { setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">←</button>
+                  {entities.find(e => e.id === chatPartnerId)?.name || 'Chat'}
+                </>
+              ) : (
+                <>💬 Entity Chat — {workingEntity?.name}</>
+              )}
+            </span>
+            <button onClick={() => { setChatOpen(false); setChatPartnerId(''); setChatMessages([]) }} className="hover:opacity-70">✕</button>
+          </div>
+
+          {/* Content */}
+          <div className="flex-1 overflow-y-auto" style={{ minHeight: '200px', maxHeight: '350px' }}>
+            {!chatPartnerId ? (
+              /* Partner list */
+              <div className="p-2 space-y-1">
+                <p className="text-xs text-muted-foreground px-2 py-1">Select an entity to chat with:</p>
+                {entities.filter(e => e.id !== workingEntity?.id).map(e => {
+                  const partner = chatPartners.find(p => p.partnerId === e.id)
+                  return (
+                    <button key={e.id} onClick={() => { setChatPartnerId(e.id); fetchChatMessages(e.id) }} className="w-full text-left px-3 py-2 hover:bg-muted rounded-md text-sm flex items-center justify-between">
+                      <span>{e.name}</span>
+                      {partner && partner.unread > 0 && <Badge className="bg-red-500 text-white text-[10px]">{partner.unread}</Badge>}
+                    </button>
+                  )
+                })}
+              </div>
+            ) : (
+              /* Messages */
+              <div className="p-2 space-y-2">
+                {chatLoading ? <p className="text-center text-xs text-muted-foreground py-4">Loading...</p>
+                : chatMessages.length === 0 ? <p className="text-center text-xs text-muted-foreground py-4">No messages yet. Say hello!</p>
+                : chatMessages.map((msg, i) => (
+                  <div key={i} className={`flex ${msg.fromEntityId === workingEntity?.id ? 'justify-end' : 'justify-start'}`}>
+                    <div className={`max-w-[75%] rounded-lg px-3 py-1.5 text-xs ${msg.fromEntityId === workingEntity?.id ? 'bg-primary text-primary-foreground' : 'bg-muted'}`}>
+                      <p>{msg.message}</p>
+                      <p className={`text-[9px] mt-0.5 ${msg.fromEntityId === workingEntity?.id ? 'text-primary-foreground/60' : 'text-muted-foreground'}`}>
+                        {new Date(msg.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+                <div ref={chatEndRef} />
+              </div>
+            )}
+          </div>
+
+          {/* Input */}
+          {chatPartnerId && (
+            <div className="p-2 border-t flex gap-1">
+              <Input placeholder="Type a message..." value={chatInput} onChange={e => setChatInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && sendChatMessage()} className="h-8 text-xs flex-1" />
+              <Button size="sm" className="h-8 px-2" onClick={sendChatMessage}>Send</Button>
+            </div>
+          )}
+        </div>
+      ) : (
+        <button onClick={() => { setChatOpen(true); fetchChatPartners() }} className="fixed bottom-4 right-4 z-[9998] w-14 h-14 bg-primary text-primary-foreground rounded-full shadow-lg hover:bg-primary/90 flex items-center justify-center transition-all hover:scale-105">
+          <span className="text-2xl">💬</span>
+        </button>
+      )}
+      </div>{/* close flex-1 div */}
     </div>
   )
 }

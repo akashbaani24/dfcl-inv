@@ -522,6 +522,55 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `SalesOrder_deliveryStatus_idx` ON `SalesOrder`(`deliveryStatus`)',
     description: 'Index on SalesOrder.deliveryStatus',
   },
+  // v55: Chat messages table
+  {
+    id: '2026_06_19_create_ChatMessage',
+    sql: `CREATE TABLE IF NOT EXISTS "ChatMessage" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "fromEntityId" TEXT NOT NULL,
+      "toEntityId" TEXT NOT NULL,
+      "message" TEXT NOT NULL,
+      "createdBy" TEXT,
+      "read" BOOLEAN NOT NULL DEFAULT 0,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY ("fromEntityId") REFERENCES "Entity"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("toEntityId") REFERENCES "Entity"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create ChatMessage table for entity-to-entity chat',
+  },
+  {
+    id: '2026_06_19_chat_idx_from',
+    sql: 'CREATE INDEX IF NOT EXISTS `ChatMessage_fromEntityId_idx` ON `ChatMessage`(`fromEntityId`)',
+    description: 'Index on ChatMessage.fromEntityId',
+  },
+  {
+    id: '2026_06_19_chat_idx_to',
+    sql: 'CREATE INDEX IF NOT EXISTS `ChatMessage_toEntityId_idx` ON `ChatMessage`(`toEntityId`)',
+    description: 'Index on ChatMessage.toEntityId',
+  },
+  {
+    id: '2026_06_19_chat_idx_created',
+    sql: 'CREATE INDEX IF NOT EXISTS `ChatMessage_createdAt_idx` ON `ChatMessage`(`createdAt`)',
+    description: 'Index on ChatMessage.createdAt',
+  },
+  // v55: News Ticker table
+  {
+    id: '2026_06_19_create_NewsTicker',
+    sql: `CREATE TABLE IF NOT EXISTS "NewsTicker" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "message" TEXT NOT NULL,
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+    description: 'Create NewsTicker table',
+  },
+  {
+    id: '2026_06_19_nt_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS `NewsTicker_status_idx` ON `NewsTicker`(`status`)',
+    description: 'Index on NewsTicker.status',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -3,6 +3,18 @@
 
 @custom-variant dark (&:is(.dark *));
 
+/* ★ News Ticker — right-to-left scrolling animation */
+@keyframes ticker-scroll {
+  0% { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+.ticker-track {
+  animation: ticker-scroll 30s linear infinite;
+}
+.ticker-track:hover {
+  animation-play-state: paused;
+}
+
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);

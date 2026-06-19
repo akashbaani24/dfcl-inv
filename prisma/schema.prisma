@@ -131,6 +131,38 @@ model Entity {
   purchases       Purchase[]
   customersCreatedBy Customer[] @relation("CustomerCreatedByEntity")
   supplierPayments SupplierPayment[]
+  sentMessages     ChatMessage[]   @relation("ChatFromEntity")
+  receivedMessages ChatMessage[]   @relation("ChatToEntity")
+}
+
+// ★ Chat message — entity to entity messaging
+model ChatMessage {
+  id           String   @id @default(cuid())
+  fromEntityId String
+  toEntityId   String
+  message      String
+  createdBy    String?
+  read         Boolean  @default(false)
+  createdAt    DateTime @default(now())
+
+  fromEntity Entity @relation("ChatFromEntity", fields: [fromEntityId], references: [id], onDelete: Cascade)
+  toEntity   Entity @relation("ChatToEntity", fields: [toEntityId], references: [id], onDelete: Cascade)
+
+  @@index([fromEntityId])
+  @@index([toEntityId])
+  @@index([createdAt])
+}
+
+// ★ News Ticker — admin/manager broadcast messages shown as scrolling text
+model NewsTicker {
+  id        String   @id @default(cuid())
+  message   String
+  status    String   @default("active") // "active" or "inactive"
+  createdBy String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
 }
 
 model Item {
