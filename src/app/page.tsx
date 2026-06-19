@@ -66,6 +66,7 @@ import {
   Printer,
   Phone,
   Mail,
+  Barcode,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -2146,6 +2147,45 @@ export default function Home() {
 
   // Upload handler
   const [uploadResult, setUploadResult] = useState<any>(null)
+  // ★ State for the "Update Barcodes" panel (retroactively add barcode/itemCode to existing items)
+  const [barcodeUpdateFile, setBarcodeUpdateFile] = useState<File | null>(null)
+  const [barcodeUpdating, setBarcodeUpdating] = useState(false)
+  const [barcodeUpdateResult, setBarcodeUpdateResult] = useState<any>(null)
+  const handleBarcodeUpdate = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!barcodeUpdateFile) { toast({ title: 'Error', description: 'Select a CSV file', variant: 'destructive' }); return }
+    setBarcodeUpdating(true)
+    setBarcodeUpdateResult(null)
+    try {
+      const formData = new FormData(); formData.append('file', barcodeUpdateFile)
+      const res = await authFetch('/api/items/update-barcodes', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok) {
+        setBarcodeUpdateResult(data)
+        toast({ title: 'Success', description: `Updated ${data.updated} item(s) with barcode/itemCode` })
+        setBarcodeUpdateFile(null); fetchItems()
+      } else {
+        setBarcodeUpdateResult({ error: data.error || 'Update failed' })
+        toast({ title: 'Error', description: data.error || 'Update failed', variant: 'destructive' })
+      }
+    } catch (err) { toast({ title: 'Error', description: 'Update failed: ' + String(err), variant: 'destructive' }) }
+    finally { setBarcodeUpdating(false) }
+  }
+  const downloadBarcodeUpdateTemplate = () => {
+    const csv = 'itemName,barcode,itemCode\n' +
+                'AJ-435-40-A,2606190000001,SM-S23\n' +
+                'AJ-435-39-E,2606190000002,SM-S22\n'
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = 'barcode-update-template.csv'
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+    URL.revokeObjectURL(url)
+    toast({ title: 'Downloaded', description: 'barcode-update-template.csv' })
+  }
   const handleUpload = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!uploadFile) { toast({ title: 'Error', description: 'Select a CSV file', variant: 'destructive' }); return }
@@ -7552,8 +7592,9 @@ export default function Home() {
   )
 
   const renderUploadForm = () => (
-    <Card className="max-w-2xl">
-      <CardHeader><CardTitle className="flex items-center gap-2"><FileUp className="w-5 h-5" />Upload Items via CSV</CardTitle></CardHeader>
+    <div className="space-y-4">
+      <Card className="max-w-2xl">
+        <CardHeader><CardTitle className="flex items-center gap-2"><FileUp className="w-5 h-5" />Upload Items via CSV</CardTitle></CardHeader>
       <CardContent>
         <form onSubmit={handleUpload} className="space-y-6">
           <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-8 text-center hover:border-primary/50 transition-colors">
@@ -7618,6 +7659,78 @@ export default function Home() {
           <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-blue-800">
             <strong>💡 Tip:</strong> Click "Download Format" to get a CSV template. Empty cells will be automatically filled with "N/A". Required columns: <code>year</code> and <code>itemName</code>. Optional: <code>barcode</code>, <code>itemCode</code> (duplicates are auto-detected).
           </div>
+        </form>
+      </CardContent>
+    </Card>
+    {renderBarcodeUpdatePanel()}
+    </div>
+  )
+
+  // ★ "Update Barcodes" panel — retroactively add barcode/itemCode to existing items.
+  // Useful when items were uploaded without the barcode/itemCode columns and the
+  // user later wants to add those identifiers (e.g. for stock upload via barcode).
+  const renderBarcodeUpdatePanel = () => (
+    <Card className="max-w-2xl mt-6 border-blue-200">
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2 text-blue-900">
+          <Barcode className="w-5 h-5" />Update Barcodes / Item Codes on Existing Items
+        </CardTitle>
+        <p className="text-sm text-muted-foreground">
+          Use this if your items already exist in the master table but were uploaded without barcode / itemCode columns.
+          Upload a CSV with <code>itemName</code> (required — must match the existing item's name) and one or both of
+          <code>barcode</code> / <code>itemCode</code>. The system will update the matching items in place.
+        </p>
+      </CardHeader>
+      <CardContent>
+        <form onSubmit={handleBarcodeUpdate} className="space-y-4">
+          <Input type="file" accept=".csv" onChange={e => { setBarcodeUpdateFile(e.target.files?.[0] || null); setBarcodeUpdateResult(null) }} />
+          <div className="bg-muted/50 rounded-lg p-3">
+            <p className="text-sm font-medium mb-1">CSV Format:</p>
+            <pre className="text-xs bg-background p-2 rounded border">{`itemName,barcode,itemCode
+AJ-435-40-A,2606190000001,SM-S23
+AJ-435-39-E,2606190000002,SM-S22`}</pre>
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            <Button type="submit" disabled={!barcodeUpdateFile || barcodeUpdating}>
+              <RefreshCw className={`w-4 h-4 mr-2 ${barcodeUpdating ? 'animate-spin' : ''}`} />
+              {barcodeUpdating ? 'Updating...' : 'Update Barcodes'}
+            </Button>
+            <Button type="button" variant="outline" onClick={downloadBarcodeUpdateTemplate}>
+              <Download className="w-4 h-4 mr-2" />Download Format
+            </Button>
+          </div>
+          {barcodeUpdateResult && (
+            <div className={`rounded-lg border p-3 text-sm ${barcodeUpdateResult.error ? 'bg-red-50 border-red-200 text-red-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+              {barcodeUpdateResult.error ? (
+                <p>{barcodeUpdateResult.error}</p>
+              ) : (
+                <div className="space-y-1.5">
+                  <p className="font-semibold">Update complete</p>
+                  <div className="grid grid-cols-3 gap-2 text-xs">
+                    <div><span className="opacity-70">Total rows:</span> <strong>{barcodeUpdateResult.total}</strong></div>
+                    <div><span className="opacity-70">Updated:</span> <strong className="text-green-700">{barcodeUpdateResult.updated}</strong></div>
+                    <div><span className="opacity-70">Not found:</span> <strong className="text-amber-700">{barcodeUpdateResult.notFound}</strong></div>
+                  </div>
+                  {barcodeUpdateResult.notFoundList && barcodeUpdateResult.notFoundList.length > 0 && (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-xs font-medium">Items not found ({barcodeUpdateResult.notFoundList.length}) — click to expand</summary>
+                      <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                        {barcodeUpdateResult.notFoundList.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                  {barcodeUpdateResult.errors && barcodeUpdateResult.errors.length > 0 && (
+                    <details className="mt-1">
+                      <summary className="cursor-pointer text-xs font-medium">All warnings ({barcodeUpdateResult.errors.length})</summary>
+                      <ul className="list-disc list-inside text-xs mt-1 space-y-0.5">
+                        {barcodeUpdateResult.errors.map((s: string, i: number) => <li key={i}>{s}</li>)}
+                      </ul>
+                    </details>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
         </form>
       </CardContent>
     </Card>

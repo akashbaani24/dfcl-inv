@@ -98,6 +98,11 @@ export async function POST(request: NextRequest) {
     const idx = (col: string) => header.indexOf(col);
 
     // Cache items: by barcode, by itemCode, by itemName (lowercase)
+    // ★ Also by itemName matching common barcode/itemCode patterns — many users
+    //    uploaded items without the barcode/itemCode columns, so the values they
+    //    meant as barcodes/itemCodes ended up in itemName. We need to match those
+    //    cases too when a stock CSV row uses a barcode or itemCode that matches
+    //    an item's itemName.
     const items = await db.item.findMany({ select: { id: true, itemName: true, barcode: true, itemCode: true, uom: true } });
     const itemByBarcode = new Map<string, typeof items[0]>();
     const itemByCode = new Map<string, typeof items[0]>();
@@ -166,18 +171,38 @@ export async function POST(request: NextRequest) {
         }
 
         // Match item: barcode → itemCode → itemName
+        // ★ Fallback: if barcode/itemCode doesn't match, also try matching the
+        //    barcode/itemCode value against itemName (because many users uploaded
+        //    items without a barcode/itemCode column, so the code ended up in
+        //    itemName). This makes the stock upload "just work" for those cases.
         let item: typeof items[0] | undefined;
         let rowFailureReasons: string[] = []; // collect all reasons for this row's failure
+        let matchSource = ''; // for the success log
         if (barcode) {
-          item = itemByBarcode.get(barcode.toLowerCase());
+          const bcLower = barcode.toLowerCase();
+          item = itemByBarcode.get(bcLower);
+          if (item) matchSource = 'barcode';
+          // ★ Fallback: try matching barcode value against itemName
+          if (!item) {
+            item = itemByName.get(bcLower);
+            if (item) matchSource = 'itemName (matched barcode value)';
+          }
           if (!item) rowFailureReasons.push(`barcode "${barcode}"`);
         }
         if (!item && itemCode) {
-          item = itemByCode.get(itemCode.toLowerCase());
+          const icLower = itemCode.toLowerCase();
+          item = itemByCode.get(icLower);
+          if (item) matchSource = 'itemCode';
+          // ★ Fallback: try matching itemCode value against itemName
+          if (!item) {
+            item = itemByName.get(icLower);
+            if (item) matchSource = 'itemName (matched itemCode value)';
+          }
           if (!item) rowFailureReasons.push(`itemCode "${itemCode}"`);
         }
         if (!item && itemName && itemName !== 'N/A') {
           item = itemByName.get(itemName.toLowerCase());
+          if (item) matchSource = 'itemName';
           if (!item) rowFailureReasons.push(`itemName "${itemName}"`);
         }
 
