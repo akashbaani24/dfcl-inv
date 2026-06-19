@@ -554,6 +554,28 @@ export default function Home() {
     }
   }, [user])
 
+  // ★ Force-clean any leftover service worker + caches when NOT logged in (login screen)
+  //    This makes the new login UI appear even if an old SW is still registered.
+  useEffect(() => {
+    if (typeof window === 'undefined' || user) return
+    // Only runs on login screen
+    const cleanup = async () => {
+      try {
+        if ('serviceWorker' in navigator) {
+          const regs = await navigator.serviceWorker.getRegistrations()
+          await Promise.all(regs.map(r => r.unregister()))
+        }
+      } catch {}
+      try {
+        if ('caches' in window) {
+          const keys = await caches.keys()
+          await Promise.all(keys.map(k => caches.delete(k)))
+        }
+      } catch {}
+    }
+    cleanup()
+  }, [user])
+
   // Close context menu on any click
   useEffect(() => {
     if (contextMenu && typeof window !== 'undefined') {
