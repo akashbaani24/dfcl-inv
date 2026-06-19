@@ -571,6 +571,48 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `NewsTicker_status_idx` ON `NewsTicker`(`status`)',
     description: 'Index on NewsTicker.status',
   },
+  // ★ TailorPayment table (v57): tracks payments to tailors for sales orders
+  {
+    id: '2026_06_19_tailor_payment_table',
+    sql: `CREATE TABLE IF NOT EXISTS "TailorPayment" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "salesOrderId" TEXT NOT NULL,
+      "tailorId" TEXT NOT NULL,
+      "entityId" TEXT NOT NULL,
+      "amount" REAL NOT NULL,
+      "paymentDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "paymentType" TEXT NOT NULL DEFAULT 'cash',
+      "referenceNo" TEXT,
+      "notes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      FOREIGN KEY ("salesOrderId") REFERENCES "SalesOrder"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("tailorId") REFERENCES "Tailor"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("entityId") REFERENCES "Entity"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create TailorPayment table',
+  },
+  {
+    id: '2026_06_19_tp_idx_salesorder',
+    sql: 'CREATE INDEX IF NOT EXISTS `TailorPayment_salesOrderId_idx` ON `TailorPayment`(`salesOrderId`)',
+    description: 'Index on TailorPayment.salesOrderId',
+  },
+  {
+    id: '2026_06_19_tp_idx_tailor',
+    sql: 'CREATE INDEX IF NOT EXISTS `TailorPayment_tailorId_idx` ON `TailorPayment`(`tailorId`)',
+    description: 'Index on TailorPayment.tailorId',
+  },
+  {
+    id: '2026_06_19_tp_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `TailorPayment_entityId_idx` ON `TailorPayment`(`entityId`)',
+    description: 'Index on TailorPayment.entityId',
+  },
+  {
+    id: '2026_06_19_tp_idx_date',
+    sql: 'CREATE INDEX IF NOT EXISTS `TailorPayment_paymentDate_idx` ON `TailorPayment`(`paymentDate`)',
+    description: 'Index on TailorPayment.paymentDate',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser, canMenu } from '@/lib/auth';
+import { applyStockDelta, StockGuardError } from '@/lib/stock-guard';
 
 // GET all item adjustments
 export async function GET(request: NextRequest) {
@@ -86,20 +87,24 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Update stock accordingly
+    // Update stock accordingly — using stock guard to prevent negative stock
     const stockDelta = adjustmentType === 'increase' ? parseInt(quantity) : -parseInt(quantity);
 
-    const existingStock = await db.stock.findUnique({
-      where: { itemId_entityId: { itemId, entityId } },
-    });
-
-    const newQuantity = (existingStock?.quantity || 0) + stockDelta;
-
-    await db.stock.upsert({
-      where: { itemId_entityId: { itemId, entityId } },
-      update: { quantity: newQuantity },
-      create: { itemId, entityId, quantity: newQuantity },
-    });
+    try {
+      await applyStockDelta(db, itemId, entityId, stockDelta);
+    } catch (e) {
+      if (e instanceof StockGuardError) {
+        // Roll back the adjustment record we just created
+        await db.itemAdjustment.delete({ where: { id: itemAdjustment.id } }).catch(() => {});
+        return NextResponse.json(
+          {
+            error: `Cannot decrease stock below 0. Current stock: ${e.currentQty}, attempted to decrease by ${Math.abs(e.attemptedDelta)}.`,
+          },
+          { status: 400 }
+        );
+      }
+      throw e;
+    }
 
     return NextResponse.json({ itemAdjustment });
   } catch (error) {

@@ -131,6 +131,7 @@ model Entity {
   purchases       Purchase[]
   customersCreatedBy Customer[] @relation("CustomerCreatedByEntity")
   supplierPayments SupplierPayment[]
+  tailorPayments   TailorPayment[]
   sentMessages     ChatMessage[]   @relation("ChatFromEntity")
   receivedMessages ChatMessage[]   @relation("ChatToEntity")
 }
@@ -265,8 +266,39 @@ model Tailor {
   updatedAt      DateTime @updatedAt
 
   incentives Incentive[]
+  payments   TailorPayment[]
 
   @@index([status])
+}
+
+// ★ Tailor Payment — tracks payments made to tailors for their work on sales orders.
+// Linked to a specific SalesOrder so we know which sale's tailor is being paid.
+// Supports PARTIAL payments: a tailor may receive multiple payments over time
+// for the same sales order (e.g. advance + final settlement).
+// The total payable for a sales order = sum of SalesMakingEntry (unitPrice × quantity).
+// The total paid = sum of TailorPayment.amount for that sales order + tailor.
+model TailorPayment {
+  id           String   @id @default(cuid())
+  salesOrderId String
+  tailorId     String
+  entityId     String
+  amount       Float   // amount paid in this transaction (partial allowed)
+  paymentDate  DateTime @default(now())
+  paymentType  String   @default("cash") // cash, mobile_banking, bank, cheque
+  referenceNo  String?  // e.g. mobile banking tx id, cheque no
+  notes        String?
+  createdBy    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  salesOrder SalesOrder @relation(fields: [salesOrderId], references: [id], onDelete: Cascade)
+  tailor     Tailor     @relation(fields: [tailorId], references: [id], onDelete: Cascade)
+  entity     Entity     @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([salesOrderId])
+  @@index([tailorId])
+  @@index([entityId])
+  @@index([paymentDate])
 }
 
 model MakingInfo {
@@ -508,6 +540,7 @@ model SalesOrder {
   items       SalesOrderItem[]
   payments   SalesPayment[]
   returns    SalesReturn[]
+  tailorPayments TailorPayment[]
 
   @@index([entityId])
   @@index([customerId])

@@ -165,9 +165,9 @@ interface ReportData {
 type ViewType =
   | 'entitySelect'
   | 'itemPrice' | 'myEntityStock' | 'allEntityStock'
-  | 'itemAdjustment' | 'transfer' | 'receive'
+  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'receive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
-  | 'salesOrder' | 'newSalesOrder' | 'salesReturn'
+  | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'tailorPayment' | 'newTailorPayment'
   | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'userForm' | 'entities'
@@ -207,6 +207,7 @@ const ALL_MENU_ITEMS = [
   { key: 'supplierPayments', label: 'Supplier Payments', group: 'Purchase' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
+  { key: 'tailorPayment', label: 'Tailor Payment', group: 'Sales' },
   { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
@@ -289,6 +290,8 @@ export default function Home() {
 
   const [transfers, setTransfers] = useState<TransferData[]>([])
   const [transferForm, setTransferForm] = useState({ itemId: '', toEntityId: '', quantity: '', notes: '' })
+  const [transferCurrentStock, setTransferCurrentStock] = useState<number | null>(null)
+  const [transferPendingOutgoing, setTransferPendingOutgoing] = useState<number>(0)
   const [showTransferDialog, setShowTransferDialog] = useState(false)
 
   const [receives, setReceives] = useState<ReceiveData[]>([])
@@ -525,6 +528,20 @@ export default function Home() {
   const [spPayments, setSpPayments] = useState<any[]>([])
   const [spLoading, setSpLoading] = useState(false)
   const [showSpDialog, setShowSpDialog] = useState(false)
+
+  // ★ Tailor Payments state
+  const [tailorPayments, setTailorPayments] = useState<any[]>([])
+  const [tailorPaymentLoading, setTailorPaymentLoading] = useState(false)
+  const [tailorPaymentForm, setTailorPaymentForm] = useState({
+    salesOrderId: '',
+    tailorId: '',
+    amount: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentType: 'cash',
+    referenceNo: '',
+    notes: '',
+  })
+  const [tpSearch, setTpSearch] = useState('')
   const [spForm, setSpForm] = useState({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' })
   const [spSearch, setSpSearch] = useState('')
 
@@ -894,6 +911,40 @@ export default function Home() {
   const fetchSalesReturns = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/sales-returns?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setSalesReturns(d.salesReturns.map((s: any) => ({ ...s, itemName: s.item?.itemName || '', entityName: s.entity?.name || '', customerName: s.customer?.name || '' }))) } } catch {} }
   const fetchIncentives = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/incentives?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setIncentives(d.incentives.map((i: any) => ({ ...i, itemName: i.item?.itemName || '', entityName: i.entity?.name || '', tailorName: i.tailor?.name || '' }))) } } catch {} }
 
+  // ★ Fetch current stock + pending outgoing transfers for the transfer form's selected item.
+  // Used to show real-time "available stock" hint and prevent over-transfer.
+  useEffect(() => {
+    if (!workingEntity || !transferForm.itemId) {
+      setTransferCurrentStock(null)
+      setTransferPendingOutgoing(0)
+      return
+    }
+    let cancelled = false
+    const fetchTransferStock = async () => {
+      try {
+        const res = await authFetch(`/api/stock?entityId=${workingEntity.id}`)
+        if (res.ok) {
+          const d = await res.json()
+          const row = (d.stocks || []).find((s: any) => s.itemId === transferForm.itemId)
+          if (!cancelled) setTransferCurrentStock(row?.quantity ?? 0)
+        }
+      } catch {}
+      // Pending outgoing transfers for this item
+      try {
+        const res = await authFetch(`/api/transfers?entityId=${workingEntity.id}`)
+        if (res.ok) {
+          const d = await res.json()
+          const pending = (d.transfers || [])
+            .filter((t: any) => t.itemId === transferForm.itemId && t.fromEntityId === workingEntity.id && t.status === 'pending')
+            .reduce((s: number, t: any) => s + t.quantity, 0)
+          if (!cancelled) setTransferPendingOutgoing(pending)
+        }
+      } catch {}
+    }
+    fetchTransferStock()
+    return () => { cancelled = true }
+  }, [transferForm.itemId, workingEntity])
+
   const fetchBookings = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/bookings?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setBookings(d.bookings) } } catch {} }
 
   const handleSaveBooking = async (e: React.FormEvent) => {
@@ -992,7 +1043,7 @@ export default function Home() {
     if (!workingEntity || !adjustmentForm.itemId || !adjustmentForm.quantity) return
     try {
       const res = await authFetch('/api/item-adjustments', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...adjustmentForm, entityId: workingEntity.id, quantity: parseInt(adjustmentForm.quantity) }) })
-      if (res.ok) { toast({ title: 'Success', description: 'Adjustment saved' }); setShowAdjustmentDialog(false); setAdjustmentForm({ itemId: '', adjustmentType: 'increase', quantity: '', reason: '' }); fetchAdjustments() }
+      if (res.ok) { toast({ title: 'Success', description: 'Adjustment saved' }); setShowAdjustmentDialog(false); setAdjustmentForm({ itemId: '', adjustmentType: 'increase', quantity: '', reason: '' }); setCurrentView('itemAdjustment'); fetchAdjustments() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -1340,6 +1391,55 @@ export default function Home() {
   useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
   useEffect(() => { if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() } }, [currentView, workingEntity?.id])
+  useEffect(() => {
+    if (currentView === 'tailorPayment' && workingEntity) fetchTailorPayments()
+    if (currentView === 'newTailorPayment' && workingEntity) {
+      fetchTailors()
+      fetchSalesOrders() // for sales order dropdown
+    }
+  }, [currentView, workingEntity?.id])
+
+  // ★ Tailor Payments fetch handlers
+  const fetchTailorPayments = async () => {
+    if (!workingEntity) return
+    setTailorPaymentLoading(true)
+    try {
+      const res = await authFetch(`/api/tailor-payments?entityId=${workingEntity.id}`)
+      if (res.ok) { const d = await res.json(); setTailorPayments(d.payments || []) }
+    } catch {} finally { setTailorPaymentLoading(false) }
+  }
+  // ★ fetchTailors already exists above (takes optional entityId param)
+  const handleSaveTailorPayment = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!workingEntity || !tailorPaymentForm.salesOrderId || !tailorPaymentForm.tailorId || !tailorPaymentForm.amount) {
+      toast({ title: 'Error', description: 'All required fields must be filled', variant: 'destructive' })
+      return
+    }
+    try {
+      const res = await authFetch('/api/tailor-payments', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...tailorPaymentForm, entityId: workingEntity.id, amount: parseFloat(tailorPaymentForm.amount) }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Success', description: data.warning ? `Payment saved. ${data.warning}` : 'Tailor payment saved' })
+        setTailorPaymentForm({ salesOrderId: '', tailorId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', referenceNo: '', notes: '' })
+        setCurrentView('tailorPayment')
+        fetchTailorPayments()
+      } else {
+        toast({ title: 'Error', description: data.error, variant: 'destructive' })
+      }
+    } catch { toast({ title: 'Error', description: 'Failed to save payment', variant: 'destructive' }) }
+  }
+  const handleDeleteTailorPayment = async (id: string) => {
+    if (!confirm('Delete this payment record?')) return
+    try {
+      const res = await authFetch(`/api/tailor-payments/${id}`, { method: 'DELETE' })
+      if (res.ok) { toast({ title: 'Success', description: 'Payment deleted' }); fetchTailorPayments() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
 
   // ★ Chat: fetch partner list when chat opened
   const fetchChatPartners = async () => {
@@ -2420,6 +2520,7 @@ export default function Home() {
     { key: 'sales' as ViewType, label: 'Sales', icon: ShoppingCart, isParent: true, children: [
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
+      { key: 'tailorPayment' as ViewType, label: 'Tailor Payment', icon: Scissors },
       { key: 'delivery' as ViewType, label: 'Delivery', icon: Truck },
     ]},
     { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
@@ -2471,7 +2572,7 @@ export default function Home() {
 
   const isMasterDataActive = visibleMasterDataItems.some(item => item.key === currentView)
   const isStockViewActive = ['myEntityStock', 'allEntityStock'].includes(currentView)
-  const isSalesActive = ['salesOrder', 'salesReturn'].includes(currentView)
+  const isSalesActive = ['salesOrder', 'salesReturn', 'tailorPayment', 'newTailorPayment'].includes(currentView)
   const isPurchaseActive = ['purchase', 'newPurchase', 'purchaseApproval', 'purchaseDetail'].includes(currentView)
 
   // Helper: render Master Data section
@@ -2878,7 +2979,11 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Item Adjustment - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowAdjustmentDialog(true); setTxItemSearch(''); setTxItemResults([]) }}><Plus className="w-4 h-4 mr-2" />New Adjustment</Button>
+        <Button onClick={() => {
+          setAdjustmentForm({ itemId: '', adjustmentType: 'increase', quantity: '', reason: '' })
+          setTxItemSearch(''); setTxItemResults([])
+          setCurrentView('newAdjustment')
+        }}><Plus className="w-4 h-4 mr-2" />New Adjustment</Button>
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -2903,19 +3008,66 @@ export default function Home() {
           </TableBody>
         </Table>
       </div>
-      <Dialog open={showAdjustmentDialog} onOpenChange={setShowAdjustmentDialog}>
-        <DialogContent><DialogHeader><DialogTitle>New Item Adjustment</DialogTitle></DialogHeader>
-          <form onSubmit={handleSaveAdjustment} className="space-y-4">
-            {renderItemSearchField(adjustmentForm.itemId, (item) => setAdjustmentForm(f => ({ ...f, itemId: item.id || '' })))}
-            <div className="space-y-2"><Label>Adjustment Type*</Label><Select value={adjustmentForm.adjustmentType} onValueChange={v => setAdjustmentForm(f => ({ ...f, adjustmentType: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="increase">Increase (+)</SelectItem><SelectItem value="decrease">Decrease (-)</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={adjustmentForm.quantity} onChange={e => setAdjustmentForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
-            <div className="space-y-2"><Label>Reason*</Label><Input value={adjustmentForm.reason} onChange={e => setAdjustmentForm(f => ({ ...f, reason: e.target.value }))} required /></div>
-            <DialogFooter><Button type="submit">Save Adjustment</Button></DialogFooter>
-          </form>
-        </DialogContent>
-      </Dialog>
     </div>
   )
+
+  // ★ Full-page form for new item adjustment (was a dialog before)
+  const renderNewAdjustmentPage = () => {
+    // Pre-fetch current stock for selected item to show in the form
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" size="sm" onClick={() => { setShowAdjustmentDialog(false); setCurrentView('itemAdjustment') }}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+            <h2 className="text-xl font-semibold">New Item Adjustment — {workingEntity?.name}</h2>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSaveAdjustment} className="space-y-5">
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold">Item *</Label>
+                {renderItemSearchField(adjustmentForm.itemId, (item) => setAdjustmentForm(f => ({ ...f, itemId: item.id || '' })))}
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Adjustment Type *</Label>
+                  <Select value={adjustmentForm.adjustmentType} onValueChange={v => setAdjustmentForm(f => ({ ...f, adjustmentType: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="increase">Increase (+)</SelectItem>
+                      <SelectItem value="decrease">Decrease (-)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {adjustmentForm.adjustmentType === 'decrease' && (
+                    <p className="text-[11px] text-amber-600">⚠ System will refuse if stock would go below 0.</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Quantity *</Label>
+                  <Input type="number" value={adjustmentForm.quantity} onChange={e => setAdjustmentForm(f => ({ ...f, quantity: e.target.value }))} required min="1" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Reason *</Label>
+                <Input value={adjustmentForm.reason} onChange={e => setAdjustmentForm(f => ({ ...f, reason: e.target.value }))} required placeholder="e.g. Damaged in transit, Stocktake correction, ..." />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => { setShowAdjustmentDialog(false); setCurrentView('itemAdjustment') }}>Cancel</Button>
+                <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Adjustment</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const renderTransferPage = () => (
     <div className="space-y-4">
@@ -2954,6 +3106,31 @@ export default function Home() {
             {renderItemSearchField(transferForm.itemId, (item) => setTransferForm(f => ({ ...f, itemId: item.id || '' })))}
             <div className="space-y-2"><Label>From Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="space-y-2"><Label>To Entity*</Label><Select value={transferForm.toEntityId} onValueChange={v => setTransferForm(f => ({ ...f, toEntityId: v }))}><SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger><SelectContent>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
+
+            {/* Stock hint */}
+            {transferForm.itemId && (
+              <div className={`rounded-md border p-3 text-xs ${(() => {
+                const avail = (transferCurrentStock ?? 0) - transferPendingOutgoing
+                const req = parseInt(transferForm.quantity) || 0
+                if (req > avail) return 'border-red-200 bg-red-50 text-red-800'
+                return 'border-blue-200 bg-blue-50 text-blue-800'
+              })()}`}>
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <span>Current stock: <strong>{transferCurrentStock ?? '—'}</strong></span>
+                  <span>Pending outgoing transfers: <strong>{transferPendingOutgoing}</strong></span>
+                  <span>Available: <strong>{(transferCurrentStock ?? 0) - transferPendingOutgoing}</strong></span>
+                </div>
+                {(() => {
+                  const avail = (transferCurrentStock ?? 0) - transferPendingOutgoing
+                  const req = parseInt(transferForm.quantity) || 0
+                  if (req > 0 && req > avail) {
+                    return <div className="mt-1 font-semibold">⚠ Requested {req} exceeds available {avail}. Transfer will be blocked.</div>
+                  }
+                  return null
+                })()}
+              </div>
+            )}
+
             <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={transferForm.quantity} onChange={e => setTransferForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
             <div className="space-y-2"><Label>Notes</Label><Input value={transferForm.notes} onChange={e => setTransferForm(f => ({ ...f, notes: e.target.value }))} /></div>
             <DialogFooter><Button type="submit">Create Transfer</Button></DialogFooter>
@@ -4330,6 +4507,243 @@ export default function Home() {
       </Dialog>
     </div>
   )
+
+  // ★ Tailor Payment list page
+  const renderTailorPaymentPage = () => {
+    const filteredPayments = tpSearch
+      ? tailorPayments.filter((p: any) =>
+          (p.tailor?.name || '').toLowerCase().includes(tpSearch.toLowerCase()) ||
+          (p.salesOrder?.salesNo || '').toLowerCase().includes(tpSearch.toLowerCase()) ||
+          (p.salesOrder?.customer?.name || '').toLowerCase().includes(tpSearch.toLowerCase())
+        )
+      : tailorPayments
+
+    // Aggregate per tailor
+    const byTailor = new Map<string, { tailorName: string, totalPaid: number, count: number }>()
+    for (const p of tailorPayments) {
+      const key = p.tailorId
+      const entry = byTailor.get(key) || { tailorName: p.tailor?.name || 'Unknown', totalPaid: 0, count: 0 }
+      entry.totalPaid += p.amount
+      entry.count += 1
+      byTailor.set(key, entry)
+    }
+
+    const totalPaidAll = tailorPayments.reduce((s, p) => s + p.amount, 0)
+
+    return (
+      <div className="space-y-4">
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <h2 className="text-xl font-semibold">Tailor Payment — {workingEntity?.name}</h2>
+          <div className="flex items-center gap-2">
+            <Input placeholder="Search tailor / sales no / customer..." value={tpSearch} onChange={e => setTpSearch(e.target.value)} className="w-72" />
+            <Button onClick={() => {
+              setTailorPaymentForm({ salesOrderId: '', tailorId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', referenceNo: '', notes: '' })
+              fetchTailors(); fetchSalesOrders()
+              setCurrentView('newTailorPayment')
+            }}><Plus className="w-4 h-4 mr-2" />New Payment</Button>
+          </div>
+        </div>
+
+        {/* Summary cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card><CardContent className="pt-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Paid (All Time)</p>
+            <p className="text-2xl font-bold text-primary mt-1">{totalPaidAll.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">{tailorPayments.length} payment(s)</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Unique Tailors Paid</p>
+            <p className="text-2xl font-bold text-blue-700 mt-1">{byTailor.size}</p>
+            <p className="text-[11px] text-muted-foreground mt-0.5">Distinct tailors who received payment</p>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5">
+            <p className="text-xs uppercase tracking-wide text-muted-foreground">Highest Paid Tailor</p>
+            <p className="text-base font-semibold mt-1">
+              {(() => {
+                let max = null as null | { name: string, amount: number }
+                for (const v of byTailor.values()) {
+                  if (!max || v.totalPaid > max.amount) max = { name: v.tailorName, amount: v.totalPaid }
+                }
+                return max ? `${max.name} (${max.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })})` : '—'
+              })()}
+            </p>
+          </CardContent></Card>
+        </div>
+
+        {/* Payments table */}
+        <div className="border rounded-lg overflow-x-auto">
+          <Table>
+            <TableHeader><TableRow className="bg-muted/50">
+              <TableHead className="font-semibold">Payment Date</TableHead>
+              <TableHead className="font-semibold">Sales No</TableHead>
+              <TableHead className="font-semibold">Customer</TableHead>
+              <TableHead className="font-semibold">Tailor</TableHead>
+              <TableHead className="font-semibold text-right">Amount</TableHead>
+              <TableHead className="font-semibold">Type</TableHead>
+              <TableHead className="font-semibold">Reference</TableHead>
+              <TableHead className="font-semibold">Notes</TableHead>
+              <TableHead className="font-semibold text-center">Actions</TableHead>
+            </TableRow></TableHeader>
+            <TableBody>
+              {tailorPaymentLoading ? (
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              ) : filteredPayments.length === 0 ? (
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No payments recorded yet</TableCell></TableRow>
+              ) : filteredPayments.map((p: any) => (
+                <TableRow key={p.id} className="hover:bg-muted/30">
+                  <TableCell className="text-xs">{new Date(p.paymentDate).toLocaleDateString()}</TableCell>
+                  <TableCell className="font-mono text-xs">{p.salesOrder?.salesNo || '—'}</TableCell>
+                  <TableCell>{p.salesOrder?.customer?.name || '—'}</TableCell>
+                  <TableCell className="font-medium">
+                    {p.tailor?.name || '—'}
+                    {p.tailor?.phone && <span className="ml-1 text-[11px] text-muted-foreground">({p.tailor.phone})</span>}
+                  </TableCell>
+                  <TableCell className="text-right font-bold">{p.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
+                  <TableCell><Badge variant="outline" className="capitalize">{p.paymentType}</Badge></TableCell>
+                  <TableCell className="font-mono text-xs">{p.referenceNo || '—'}</TableCell>
+                  <TableCell className="text-xs text-muted-foreground">{p.notes || '—'}</TableCell>
+                  <TableCell className="text-center">
+                    <Button variant="ghost" size="sm" onClick={() => handleDeleteTailorPayment(p.id)} title="Delete" className="text-destructive h-7 w-7 p-0"><Trash2 className="w-3.5 h-3.5" /></Button>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      </div>
+    )
+  }
+
+  // ★ New Tailor Payment form — full page
+  const renderNewTailorPaymentPage = () => {
+    // Compute payable/paid for the selected sales order + tailor
+    const selectedSalesOrder = salesOrders.find((s: any) => s.id === tailorPaymentForm.salesOrderId) as any
+    const totalMaking = selectedSalesOrder?.items?.reduce(
+      (sum: number, it: any) => sum + (it.makingEntries?.reduce((s: number, m: any) => s + m.unitPrice * m.quantity, 0) || 0),
+      0
+    ) || 0
+    // Find prior payments for this sales order (regardless of tailor)
+    const priorPaymentsForSalesOrder = tailorPayments.filter((p: any) => p.salesOrderId === tailorPaymentForm.salesOrderId)
+    const priorPaidForSalesOrder = priorPaymentsForSalesOrder.reduce((s, p) => s + p.amount, 0)
+    const priorPaymentsForTailor = priorPaymentsForSalesOrder.filter((p: any) => p.tailorId === tailorPaymentForm.tailorId)
+    const priorPaidForTailor = priorPaymentsForTailor.reduce((s, p) => s + p.amount, 0)
+    const remainingForTailor = totalMaking - priorPaidForTailor
+
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto">
+        <div className="flex items-center justify-between gap-4">
+          <div className="flex items-center gap-3">
+            <Button type="button" variant="outline" size="sm" onClick={() => setCurrentView('tailorPayment')}>
+              <ArrowLeft className="w-4 h-4 mr-1" /> Back
+            </Button>
+            <h2 className="text-xl font-semibold">New Tailor Payment — {workingEntity?.name}</h2>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleSaveTailorPayment} className="space-y-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Sales Order *</Label>
+                  <Select value={tailorPaymentForm.salesOrderId} onValueChange={v => setTailorPaymentForm(f => ({ ...f, salesOrderId: v, tailorId: '', amount: '' }))}>
+                    <SelectTrigger><SelectValue placeholder="Select sales order" /></SelectTrigger>
+                    <SelectContent>
+                      {salesOrders.map((s: any) => (
+                        <SelectItem key={s.id} value={s.id}>{s.salesNo} — {s.customer?.name || 'Walk-in'} ({new Date(s.orderDate).toLocaleDateString()})</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Tailor *</Label>
+                  <Select value={tailorPaymentForm.tailorId} onValueChange={v => setTailorPaymentForm(f => ({ ...f, tailorId: v }))}>
+                    <SelectTrigger><SelectValue placeholder="Select tailor" /></SelectTrigger>
+                    <SelectContent>
+                      {tailors.filter((t: any) => t.status === 'active').map((t: any) => (
+                        <SelectItem key={t.id} value={t.id}>{t.name}{t.phone ? ` (${t.phone})` : ''}</SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+
+              {/* Summary for the selected sales order + tailor */}
+              {tailorPaymentForm.salesOrderId && (
+                <div className="rounded-md border border-blue-200 bg-blue-50/60 p-3 text-xs space-y-1.5">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+                    <div><span className="text-muted-foreground">Total Making (SO):</span> <strong>{totalMaking.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></div>
+                    <div><span className="text-muted-foreground">Paid to all tailors (SO):</span> <strong>{priorPaidForSalesOrder.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></div>
+                    <div><span className="text-muted-foreground">Paid to this tailor (SO):</span> <strong>{priorPaidForTailor.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></div>
+                    <div><span className="text-muted-foreground">Remaining for this tailor:</span> <strong className={remainingForTailor <= 0 ? 'text-green-700' : 'text-amber-700'}>{remainingForTailor.toLocaleString('en-US', { minimumFractionDigits: 2 })}</strong></div>
+                  </div>
+                  {priorPaymentsForTailor.length > 0 && (
+                    <div className="mt-2 pt-2 border-t border-blue-200">
+                      <p className="font-semibold mb-1">Previous payments to this tailor for this sale:</p>
+                      <ul className="space-y-0.5">
+                        {priorPaymentsForTailor.map((p: any) => (
+                          <li key={p.id} className="flex justify-between">
+                            <span>{new Date(p.paymentDate).toLocaleDateString()} — {p.paymentType}</span>
+                            <span className="font-mono">{p.amount.toLocaleString('en-US', { minimumFractionDigits: 2 })}</span>
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  {remainingForTailor <= 0 && (
+                    <p className="mt-2 pt-2 border-t border-amber-200 text-amber-800 font-medium">⚠ This tailor has been fully paid for this sales order. Additional payment will be an overpayment.</p>
+                  )}
+                </div>
+              )}
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Amount *</Label>
+                  <Input type="number" step="0.01" min="0.01" value={tailorPaymentForm.amount} onChange={e => setTailorPaymentForm(f => ({ ...f, amount: e.target.value }))} required placeholder="e.g. 500.00" />
+                  {tailorPaymentForm.salesOrderId && remainingForTailor > 0 && (
+                    <p className="text-[11px] text-muted-foreground">Remaining payable: {remainingForTailor.toLocaleString('en-US', { minimumFractionDigits: 2 })}</p>
+                  )}
+                </div>
+                <div className="space-y-2">
+                  <Label>Payment Date</Label>
+                  <Input type="date" value={tailorPaymentForm.paymentDate} onChange={e => setTailorPaymentForm(f => ({ ...f, paymentDate: e.target.value }))} required />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Payment Type</Label>
+                  <Select value={tailorPaymentForm.paymentType} onValueChange={v => setTailorPaymentForm(f => ({ ...f, paymentType: v }))}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="mobile_banking">Mobile Banking</SelectItem>
+                      <SelectItem value="bank">Bank Transfer</SelectItem>
+                      <SelectItem value="cheque">Cheque</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-2">
+                  <Label>Reference No.</Label>
+                  <Input value={tailorPaymentForm.referenceNo} onChange={e => setTailorPaymentForm(f => ({ ...f, referenceNo: e.target.value }))} placeholder="e.g. bkash TxID, cheque no" />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Notes</Label>
+                <Input value={tailorPaymentForm.notes} onChange={e => setTailorPaymentForm(f => ({ ...f, notes: e.target.value }))} placeholder="Optional notes" />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-4 border-t">
+                <Button type="button" variant="outline" onClick={() => setCurrentView('tailorPayment')}>Cancel</Button>
+                <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Payment</Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const renderBookingPage = () => {
     // Filter bookings by date range
@@ -6282,6 +6696,7 @@ export default function Home() {
       case 'myEntityStock': return renderMyEntityStockPage()
       case 'allEntityStock': return renderAllEntityStockPage()
       case 'itemAdjustment': return renderItemAdjustmentPage()
+      case 'newAdjustment': return renderNewAdjustmentPage()
       case 'transfer': return renderTransferPage()
       case 'receive': return renderReceivePage()
       case 'purchase': return renderPurchaseListPage()
@@ -6291,6 +6706,8 @@ export default function Home() {
       case 'salesOrder': return renderSalesOrderPage()
       case 'newSalesOrder': return renderNewSalesOrderPage()
       case 'salesReturn': return renderSalesReturnPage()
+      case 'tailorPayment': return renderTailorPaymentPage()
+      case 'newTailorPayment': return renderNewTailorPaymentPage()
       case 'booking': return renderBookingPage()
       case 'newBooking': return renderNewBookingPage()
       case 'bookingReasons': return renderBookingReasonsPage()

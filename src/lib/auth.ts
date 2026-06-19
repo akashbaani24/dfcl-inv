@@ -186,6 +186,7 @@ export const MENU_ITEMS = [
   { key: 'supplierPayments', label: 'Supplier Payments', group: 'Purchase' },
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
+  { key: 'tailorPayment', label: 'Tailor Payment', group: 'Sales' },
   { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },

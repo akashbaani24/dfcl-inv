@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser, canMenu } from '@/lib/auth';
+import { applyStockDelta, StockGuardError } from '@/lib/stock-guard';
 
 // GET all receives
 export async function GET(request: NextRequest) {
@@ -94,29 +95,25 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      // 2. Increment receiving entity's stock
-      const existingStock = await tx.stock.findUnique({
-        where: { itemId_entityId: { itemId, entityId } },
-      });
-      const newQuantity = (existingStock?.quantity || 0) + qty;
-      await tx.stock.upsert({
-        where: { itemId_entityId: { itemId, entityId } },
-        update: { quantity: newQuantity },
-        create: { itemId, entityId, quantity: newQuantity },
-      });
+      // 2. Increment receiving entity's stock (always safe — never goes negative)
+      await applyStockDelta(tx, itemId, entityId, qty);
 
-      // 3. If receiving from another entity → decrement source stock + complete matching transfer
+      // 3. If receiving from another entity → decrement source stock (with guard)
+      //    + complete matching transfer
       if (sourceEntityId && sourceEntityId !== entityId) {
-        // Decrement source entity's stock
-        const srcStock = await tx.stock.findUnique({
-          where: { itemId_entityId: { itemId, entityId: sourceEntityId } },
-        });
-        const srcNewQty = (srcStock?.quantity || 0) - qty;
-        await tx.stock.upsert({
-          where: { itemId_entityId: { itemId, entityId: sourceEntityId } },
-          update: { quantity: srcNewQty },
-          create: { itemId, entityId: sourceEntityId, quantity: srcNewQty },
-        });
+        // Decrement source entity's stock — throws StockGuardError if insufficient
+        try {
+          await applyStockDelta(tx, itemId, sourceEntityId, -qty);
+        } catch (e) {
+          if (e instanceof StockGuardError) {
+            throw new Error(
+              `INSUFFICIENT_SOURCE_STOCK: Source entity has ${e.currentQty} units of this item, ` +
+              `but you are trying to receive ${qty} from it. ` +
+              `Transfer not allowed — stock would go below 0.`
+            );
+          }
+          throw e;
+        }
 
         // Find matching pending transfer (either by explicit transferId, or by item+from+to)
         let transfer: any = null;
@@ -150,7 +147,11 @@ export async function POST(request: NextRequest) {
     });
 
     return NextResponse.json({ receive });
-  } catch (error) {
+  } catch (error: any) {
+    // Surface our custom INSUFFICIENT_SOURCE_STOCK error as a 400 (not 500)
+    if (error?.message?.startsWith('INSUFFICIENT_SOURCE_STOCK:')) {
+      return NextResponse.json({ error: error.message.replace('INSUFFICIENT_SOURCE_STOCK: ', '') }, { status: 400 });
+    }
     console.error('Create receive error:', error);
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }

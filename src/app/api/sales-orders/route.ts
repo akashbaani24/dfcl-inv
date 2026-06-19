@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
+import { decrementStock, StockGuardError, getStock } from '@/lib/stock-guard';
 
 export async function GET(request: NextRequest) {
   try {
@@ -25,8 +26,20 @@ export async function GET(request: NextRequest) {
         entity: { select: { name: true } },
         customer: { select: { name: true, phone: true } },
         salesPerson: { select: { name: true } },
-        items: { select: { id: true, itemId: true, quantity: true, unitPrice: true, item: { select: { itemName: true } } } },
+        items: {
+          select: {
+            id: true,
+            itemId: true,
+            quantity: true,
+            unitPrice: true,
+            item: { select: { itemName: true } },
+            // ★ Include making entries so tailor payment page can compute payable
+            makingEntries: { select: { id: true, name: true, unitPrice: true, quantity: true } },
+          },
+        },
         payments: { select: { id: true, amount: true, paymentType: true, paymentMode: true, receiptNo: true, paymentDate: true, chequeNo: true, bankName: true } },
+        // ★ Include tailor payments so the list page can show "fully paid" badges
+        tailorPayments: { select: { id: true, amount: true, tailorId: true, paymentDate: true } },
       },
     });
 
@@ -56,6 +69,28 @@ export async function POST(request: NextRequest) {
     const dateStr = now.getFullYear().toString() + String(now.getMonth() + 1).padStart(2, '0') + String(now.getDate()).padStart(2, '0');
     const randomStr = Math.floor(1000 + Math.random() * 9000).toString();
     const salesNo = `SO-${dateStr}-${randomStr}`;
+
+    // ★ STOCK GUARD — pre-check all items BEFORE creating the order.
+    // Aggregate quantities per (item, entity) so we detect insufficient stock
+    // up front and return a clear error rather than creating a half-order.
+    const aggregated = new Map<string, number>();
+    for (const item of items as any[]) {
+      const key = `${item.itemId}|${entityId}`;
+      aggregated.set(key, (aggregated.get(key) || 0) + (parseInt(item.quantity) || 1));
+    }
+    for (const [key, totalQty] of aggregated.entries()) {
+      const [itemId] = key.split('|');
+      const current = await getStock(db, itemId, entityId);
+      if (current < totalQty) {
+        const itemRow = await db.item.findUnique({ where: { id: itemId }, select: { itemName: true } });
+        return NextResponse.json(
+          {
+            error: `Insufficient stock for "${itemRow?.itemName || itemId}". Available: ${current}, requested: ${totalQty}. Stock cannot go below 0.`,
+          },
+          { status: 400 }
+        );
+      }
+    }
 
     // Create sales order with items and making entries
     const salesOrder = await db.salesOrder.create({
@@ -113,17 +148,24 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Reduce stock for each item
+    // Reduce stock for each item — using stock guard (atomic + race-safe)
     for (const item of items) {
-      const existingStock = await db.stock.findUnique({
-        where: { itemId_entityId: { itemId: item.itemId, entityId } },
-      });
-      const newQty = (existingStock?.quantity || 0) - (parseInt(item.quantity) || 1);
-      await db.stock.upsert({
-        where: { itemId_entityId: { itemId: item.itemId, entityId } },
-        update: { quantity: newQty },
-        create: { itemId: item.itemId, entityId, quantity: newQty },
-      });
+      try {
+        await decrementStock(db, item.itemId, entityId, parseInt(item.quantity) || 1);
+      } catch (e) {
+        if (e instanceof StockGuardError) {
+          // Rollback the sales order we just created (cascade will delete items/payments/etc.)
+          await db.salesOrder.delete({ where: { id: salesOrder.id } }).catch(() => {});
+          const itemRow = await db.item.findUnique({ where: { id: item.itemId }, select: { itemName: true } });
+          return NextResponse.json(
+            {
+              error: `Insufficient stock for "${itemRow?.itemName || item.itemId}". Available: ${e.currentQty}, requested: ${Math.abs(e.attemptedDelta)}. Sales order not created.`,
+            },
+            { status: 400 }
+          );
+        }
+        throw e;
+      }
     }
 
     // ★ Auto-calculate incentives based on IncentiveFormula (multiple ranges + entity type)

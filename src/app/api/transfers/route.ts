@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser, canMenu } from '@/lib/auth';
+import { getStock } from '@/lib/stock-guard';
 
 // GET all transfers
 export async function GET(request: NextRequest) {
@@ -79,12 +80,44 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Source and destination entities cannot be the same' }, { status: 400 });
     }
 
+    const qty = parseInt(quantity);
+
+    // ★ STOCK GUARD — ensure source entity has enough stock (minus pending outbound transfers)
+    // to cover this transfer. This prevents creating transfers that exceed available stock.
+    const currentStock = await getStock(db, itemId, fromEntityId);
+
+    // Sum of all pending outbound transfers for this item from this entity
+    const pendingOutgoing = await db.transfer.aggregate({
+      where: {
+        itemId,
+        fromEntityId,
+        status: 'pending',
+      },
+      _sum: { quantity: true },
+    });
+    const pendingOutgoingQty = pendingOutgoing._sum.quantity || 0;
+    const availableForNewTransfer = currentStock - pendingOutgoingQty;
+
+    if (availableForNewTransfer < qty) {
+      const itemRow = await db.item.findUnique({ where: { id: itemId }, select: { itemName: true } });
+      return NextResponse.json(
+        {
+          error:
+            `Insufficient stock at source entity for "${itemRow?.itemName || 'this item'}". ` +
+            `Current stock: ${currentStock}, pending outgoing transfers: ${pendingOutgoingQty}, ` +
+            `available for new transfer: ${availableForNewTransfer}, requested: ${qty}. ` +
+            `Transfer not created — stock cannot go below 0.`,
+        },
+        { status: 400 }
+      );
+    }
+
     const transfer = await db.transfer.create({
       data: {
         itemId,
         fromEntityId,
         toEntityId,
-        quantity: parseInt(quantity),
+        quantity: qty,
         status: 'pending',
         notes: notes || null,
         createdBy: currentUser.id,
