@@ -97,3 +97,35 @@ Stage Summary:
 - Bug fix is a one-line CSS change: added `display: inline-block` to `.ticker-track` in src/app/globals.css.
 - Applies globally to both the login page ticker and the in-app News Ticker admin live preview.
 - User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh the login page to verify the full ticker message now scrolls across before restarting.
+
+---
+Task ID: 5
+Agent: main
+Task: User request: "system ta jeno bangla and english 2 language e run kora jay, language select korar option kore dio. and typing korle jeno 2 language e support kore entry level and view level e" — bilingual system with language selector + typing support in both languages.
+
+Work Log:
+- Created src/lib/i18n.tsx — LanguageContext provider with lang/banglaInput state, t() helper, localStorage persistence, html lang attribute update.
+- Created src/lib/bangla-phonetic.ts — Bangla phonetic converter (Avro-style). Functions: banglaPhonetic(text) and banglaPhoneticLastWord(text). Maps Latin consonants/vowels/digits to Bangla, handles word boundaries and punctuation.
+- Modified src/app/layout.tsx — Added Noto Sans Bengali via next/font/google (self-hosted). Wrapped children with <LanguageProvider>.
+- Modified src/app/page.tsx:
+  - Added useLanguage() + banglaPhoneticLastWord imports
+  - Added useEffect that listens for 'input' events globally when banglaInput is true. Skips password fields and fields marked data-bangla-skip='true'. Uses native setter + dispatchEvent to preserve React controlled-input behavior.
+  - Added language toggle (বাং/EN) + Bangla input toggle (বাং) buttons on login page top-right of white card.
+  - Added same toggles as floating buttons top-right after login (z-50, print:hidden).
+  - Translated login page text: Welcome back/স্বাগতম, Sign in/সাইন ইন, Username/ইউজারনেম, Password/পাসওয়ার্ড.
+  - Marked username input with data-bangla-skip='true' (usernames are always English identifiers).
+  - Added bnLabel field to all functionItems (14 items + 8 children) and masterDataItems (14 items).
+  - Translated menu rendering via t(item.label, item.bnLabel || item.label) for parents, children, top-level items, and Master Data section header.
+- Verified TypeScript: no new errors from i18n changes (only pre-existing errors remain, which next.config.ts ignores).
+- Committed as ba0aceb v60-fix20: Bilingual system — Bangla + English language support.
+- Pushed to GitHub: d138f5e..ba0aceb main -> main ✅
+
+Stage Summary:
+- Two new toggle buttons appear: বাং/EN (UI language) and বাং (Bangla phonetic input mode).
+- Both states persist in localStorage across sessions.
+- Login page text + sidebar menu (14 function items + 14 master data items) translated.
+- Bangla phonetic typing works in any text field when বাং toggle is on (try typing: ami, bangla, tumi, kemon, acho).
+- Usernames + passwords are always English (auto-skipped).
+- Noto Sans Bengali font loaded via next/font (self-hosted, offline-capable).
+- Pages other than login/sidebar still show English labels — can be translated incrementally using the same t() helper in future commits.
+- User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh to see toggles.
