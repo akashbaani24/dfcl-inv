@@ -171,7 +171,7 @@ type ViewType =
   | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive' | 'newReceive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'newSalesReturn' | 'tailorPayment' | 'newTailorPayment'
-  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
+  | 'booking' | 'newBooking' | 'bookingDetail' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'userForm' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -442,6 +442,7 @@ export default function Home() {
   const [showReasonDialog, setShowReasonDialog] = useState(false)
   const [bookingDateFrom, setBookingDateFrom] = useState('')
   const [bookingDateTo, setBookingDateTo] = useState('')
+  const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
 
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; view: ViewType } | null>(null)
   // Item search for transaction forms
@@ -5847,6 +5848,80 @@ export default function Home() {
     </div>
   )
 
+  // ★ Booking Detail — full page view (not popup)
+  const renderBookingDetailPage = () => {
+    const booking = (bookings || []).find((b: any) => b.id === selectedBookingId)
+    if (!booking) {
+      return (
+        <div className="space-y-4">
+          <Button variant="outline" size="sm" onClick={() => setCurrentView('booking')}><ArrowLeft className="w-4 h-4 mr-1" />Back</Button>
+          <p className="text-muted-foreground">Booking not found.</p>
+        </div>
+      )
+    }
+    const totalQty = (booking.items || []).reduce((s: number, bi: any) => s + bi.quantity, 0)
+    return (
+      <div className="space-y-4 max-w-4xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => setCurrentView('booking')}><ArrowLeft className="w-4 h-4 mr-1" />Back</Button>
+            <h2 className="text-xl font-semibold">Booking Details — {booking.bookingNo}</h2>
+          </div>
+          <Button variant="outline" size="sm" onClick={() => printBooking(booking)}><Printer className="w-4 h-4 mr-1" />Print / PDF</Button>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            {/* Header info */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div><span className="text-muted-foreground">Booking No:</span> <strong className="font-mono">{booking.bookingNo}</strong></div>
+              <div><span className="text-muted-foreground">Customer:</span> <strong>{booking.customer?.name || '—'}</strong></div>
+              <div><span className="text-muted-foreground">Booking Date:</span> {bdDate(new Date(booking.bookingDate))}</div>
+              <div><span className="text-muted-foreground">Till Date:</span> {booking.tillDate ? bdDate(new Date(booking.tillDate)) : '—'}</div>
+              <div><span className="text-muted-foreground">Status:</span> <Badge variant={booking.status === 'delivered' ? 'default' : booking.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{booking.status}</Badge></div>
+              <div><span className="text-muted-foreground">Reason:</span> {booking.reason || '—'}</div>
+              <div><span className="text-muted-foreground">Total Items:</span> <strong>{booking.items?.length || 0}</strong></div>
+              <div><span className="text-muted-foreground">Total Qty:</span> <strong>{totalQty}</strong></div>
+            </div>
+
+            {booking.notes && (
+              <div className="rounded-md border p-3 text-sm">
+                <span className="text-muted-foreground font-semibold">Notes: </span>{booking.notes}
+              </div>
+            )}
+
+            {/* Items table */}
+            <div className="border rounded-lg overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">SL</th>
+                    <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">Item</th>
+                    <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">From Entity</th>
+                    <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Qty</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(booking.items || []).map((bi: any, i: number) => (
+                    <tr key={i} className="border-t hover:bg-muted/20">
+                      <td className="px-3 py-2 text-center text-muted-foreground">{i + 1}</td>
+                      <td className="px-3 py-2 font-medium">{bi.item?.itemName || '—'}</td>
+                      <td className="px-3 py-2">{bi.fromEntity?.name || '—'}</td>
+                      <td className="px-3 py-2 text-right font-bold">{bi.quantity}</td>
+                    </tr>
+                  ))}
+                  {(!booking.items || booking.items.length === 0) && (
+                    <tr><td colSpan={4} className="text-center py-4 text-muted-foreground">No items in this booking</td></tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
+
   const renderBookingPage = () => {
     // Filter bookings by date range
     const filteredBookings = bookings.filter((b: any) => {
@@ -5887,7 +5962,11 @@ export default function Home() {
             {filteredBookings.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
             : filteredBookings.map((b: any) => (
               <TableRow key={b.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{b.bookingNo}</TableCell>
+                <TableCell>
+                  <button type="button" onClick={() => { setSelectedBookingId(b.id); setCurrentView('bookingDetail') }} className="font-mono text-xs text-primary hover:underline" title="Click to view booking details">
+                    {b.bookingNo}
+                  </button>
+                </TableCell>
                 <TableCell>
                   {b.items?.map((bi: any, i: number) => (
                     <div key={i} className="text-xs">
@@ -6367,8 +6446,56 @@ export default function Home() {
 
             {/* Items */}
             <div className="space-y-2">
-              <Label className="text-sm font-bold">Items covered by this formula ({formulaForm.itemIds.length})</Label>
-              <p className="text-[11px] text-muted-foreground">Search and select items. When these items are sold within a range, incentives auto-generate.</p>
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <Label className="text-sm font-bold">Items covered by this formula ({formulaForm.itemIds.length})</Label>
+                {/* ★ CSV upload + format download */}
+                <div className="flex gap-2">
+                  <Button type="button" variant="outline" size="sm" onClick={() => {
+                    const csv = 'itemName\nCotton Shirt\nWool Pant\nSilk Curtain\n'
+                    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+                    const url = URL.createObjectURL(blob)
+                    const a = document.createElement('a'); a.href = url; a.download = 'formula-items-format.csv'; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url)
+                    toast({ title: 'Downloaded', description: 'formula-items-format.csv' })
+                  }}><Download className="w-3.5 h-3.5 mr-1" />Download Format</Button>
+                  <label className="inline-flex items-center gap-1 px-3 py-1.5 text-xs rounded-md border border-input bg-background hover:bg-accent cursor-pointer">
+                    <Upload className="w-3.5 h-3.5" />Upload CSV
+                    <input type="file" accept=".csv" className="hidden" onChange={async (e) => {
+                      const file = e.target.files?.[0]; if (!file) return
+                      const text = await file.text()
+                      const lines = text.split(/\r?\n/).filter(l => l.trim())
+                      if (lines.length < 2) { toast({ title: 'Error', description: 'CSV must have a header + at least 1 row', variant: 'destructive' }); return }
+                      const header = lines[0].toLowerCase().replace(/"/g, '').trim()
+                      const itemCol = header.includes('itemname') ? 'itemName' : header.split(',')[0]
+                      // Search for each item by name and add to formula
+                      let added = 0, notFound = 0
+                      const notFoundNames: string[] = []
+                      for (let i = 1; i < lines.length; i++) {
+                        const name = lines[i].split(',')[0]?.trim().replace(/"/g, '')
+                        if (!name) continue
+                        try {
+                          const res = await authFetch(`/api/items?search=${encodeURIComponent(name)}&pageSize=5`)
+                          if (res.ok) {
+                            const d = await res.json()
+                            const match = (d.items || []).find((it: any) => it.itemName?.toLowerCase() === name.toLowerCase())
+                            if (match && !formulaForm.itemIds.includes(match.id)) {
+                              formulaForm.itemIds.push(match.id)
+                              formulaForm.itemNames[match.id] = match.itemName
+                              added++
+                            } else if (!match) { notFound++; notFoundNames.push(name) }
+                          }
+                        } catch {}
+                      }
+                      setFormulaForm({ ...formulaForm })
+                      toast({ title: 'Upload complete', description: `Added ${added} item(s)${notFound > 0 ? `, ${notFound} not found` : ''}` })
+                      if (notFoundNames.length > 0) {
+                        toast({ title: 'Items not found', description: notFoundNames.slice(0, 5).join(', ') + (notFoundNames.length > 5 ? '...' : ''), variant: 'destructive' })
+                      }
+                      if (e.target) e.target.value = ''
+                    }} />
+                  </label>
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">Search and select items, or upload a CSV with an "itemName" column. When these items are sold within a range, incentives auto-generate.</p>
               <div className="flex gap-2">
                 <Input placeholder="Search item to add..." value={formulaItemSearch} onChange={e => setFormulaItemSearch(e.target.value)} onKeyDown={e => e.key === 'Enter' && (e.preventDefault(), handleFormulaItemSearch())} className="flex-1" />
                 <Button type="button" variant="outline" onClick={handleFormulaItemSearch}><Search className="w-4 h-4" /></Button>
@@ -8141,6 +8268,7 @@ export default function Home() {
       case 'tailorPayment': return renderTailorPaymentPage()
       case 'newTailorPayment': return renderNewTailorPaymentPage()
       case 'booking': return renderBookingPage()
+      case 'bookingDetail': return renderBookingDetailPage()
       case 'newBooking': return renderNewBookingPage()
       case 'bookingReasons': return renderBookingReasonsPage()
       case 'incentive': return renderIncentivePage()
