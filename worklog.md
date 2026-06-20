@@ -45,3 +45,32 @@ Stage Summary:
 - No DB migration required (entityType is a free-text column).
 - Factory commission behaviour: uses headOfficeCommission (matches existing "Head Office and others" branch).
 - User needs to wait for Vercel auto-deploy from main branch (2-3 minutes).
+
+---
+Task ID: 3
+Agent: main
+Task: User wants the News Ticker to only show on the login page's white section, NOT inside the system. Admin should add/update news via the in-app menu, and it should reflect on the login page.
+
+Work Log:
+- Used Explore subagent to map out the entire news ticker feature (5 pieces: Prisma model, API routes, React state, useEffect, JSX render).
+- Found 3 critical blockers for moving ticker to login page:
+  1. GET /api/news-ticker required auth (401 on login page)
+  2. useEffect only fetched when `user` was set
+  3. fetchTickerMessages used authFetch which would fail without token
+- Fixed all three:
+  1. Made GET public (removed getCurrentUser check; POST still requires admin/manager auth)
+  2. Changed useEffect to run unconditionally (polls every 30s always)
+  3. Changed fetchTickerMessages to use plain fetch()
+- Removed the ticker JSX block (with admin "+ Add" controls) from the post-login main layout at line ~10104.
+- Added the ticker JSX inside the login page's white card, between the "Welcome back" header (line 2732) and the login form (line 2737). The login-page version has no admin controls (user is unauthenticated).
+- Used the same tickerSettings state (bgColor/textColor/speed/fontSize) so admin's display customizations done in-app also apply on the login page.
+- TypeScript check: only pre-existing TS errors (about `role`/`id` on `unknown` return type from getCurrentUser) — no new errors introduced. Build will succeed due to next.config.ts ignoreBuildErrors:true.
+- Committed as 73e7586 v60-fix18: Move news ticker from system to login page white card.
+- Pushed to GitHub: f1380d2..73e7586 main -> main ✅
+
+Stage Summary:
+- News ticker is now ONLY visible on the login page (white card area), NOT inside the system after login.
+- Admin workflow: login → News Ticker menu → add/edit/delete messages → save. Within 30s, login page will show updated messages.
+- API: GET /api/news-ticker is now public (no auth); POST remains admin/manager-only.
+- The in-app News Ticker admin page (renderNewsTickerPage) is preserved — admins still use it to manage messages and customize display settings.
+- User needs to wait for Vercel auto-deploy from main (2-3 minutes), then open the login page to see the ticker.
