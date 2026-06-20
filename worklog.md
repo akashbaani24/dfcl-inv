@@ -189,3 +189,35 @@ Stage Summary:
 - Fully bilingual (English/Bangla) using existing t() helper.
 - All illustrations are hand-coded SVGs — feature is fully offline-capable.
 - User needs to wait for Vercel auto-deploy (2-3 minutes), then look for the new 'Fabric Studio' menu item (Wand2 icon) in the sidebar.
+
+---
+Task ID: 8
+Agent: main
+Task: User feedback: "3d look chai" (want 3D look) + "curtain er display koi" (where is the curtain display?) — user wants the chairs and rooms to look 3D, and the rooms should show full scenes with prominent curtains (not just a tiny window).
+
+Work Log:
+- Rewrote all 5 chair SVGs (Office Chair, Dining Chair, Sofa, Armchair, Bar Stool) with:
+  * linearGradient fills for chrome (grad-metal) and dark walnut wood (grad-wood-dark) parts
+  * A grad-fabric-shadow overlay (top-dark → transparent) drawn ON TOP of every fabric-area element to create a "puffed cushion" 3D effect
+  * Ground shadow ellipses under each chair (semi-transparent black, ground-level)
+  * White highlight stripes on backrest edges for 3D depth
+  * Visible caster wheels on office chair
+  * Seam lines between sofa cushions
+  * Dome highlight on bar stool seat
+- Rewrote all 3 room SVGs as FULL SCENES (not just windows):
+  * Living Room: wall + floor + sofa + side table + plant + window with sky + LEFT/RIGHT wavy drape panels + fold shadows + pelmet with scalloped edge
+  * Bedroom: wall + floor + bed (headboard, mattress, 2 pillows, blanket) + window + sheer curtain + LEFT/RIGHT drape panels with wavy folds + gold tiebacks
+  * Office: wall + floor + desk + monitor + floor-to-ceiling window with city skyline + 10 vertical blinds (each fabric) with shadow strips on right edge for 3D
+- Created a SharedDefs component that injects all reusable gradients (grad-metal, grad-wood-dark, grad-fabric-shadow, soft-shadow filter). It's rendered as the first child of every product SVG so the url(#grad-*) references resolve.
+- Added inline drop-shadow filter on preview/gallery SVGs (filter: drop-shadow(0 8px 16px rgba(0,0,0,0.25))) — soft realistic shadow that scales with the SVG, replacing the old Tailwind drop-shadow-xl class.
+- Fixed 6 JSX comment syntax errors ('{/* comment */' instead of '{/* comment */}') that broke TypeScript compilation during the rewrite.
+- Verified TypeScript compiles cleanly with no new errors.
+- Committed as 0f46bb4 v60-fix23: Fabric Studio — 3D look + full room scenes with prominent curtains.
+- Pushed to GitHub: dc6acba..0f46bb4 main -> main ✅
+
+Stage Summary:
+- All chairs now look 3D thanks to gradient fills + fabric-shadow overlays + ground shadows + highlight stripes.
+- All rooms now show the full scene: wall + floor + furniture + window + prominent curtains (the curtains are large and centered, with wavy folds + fold shadows).
+- The grad-fabric-shadow overlay does NOT carry the .fabric-area class, so when a user uploads a fabric, the 3D puff effect stays ON TOP of the fabric pattern.
+- Customer can now clearly see how their fabric would look on a real chair or in a real room context.
+- User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh the Fabric Studio page to see the new 3D look and full room scenes.
