@@ -1920,9 +1920,11 @@ export default function Home() {
   }
 
   // ★ News Ticker: fetch active messages
+  // Uses plain fetch() instead of authFetch — the GET /api/news-ticker endpoint is now public
+  // (no auth required) so it works on the login page where no session exists.
   const fetchTickerMessages = async () => {
     try {
-      const res = await authFetch('/api/news-ticker')
+      const res = await fetch('/api/news-ticker')
       if (res.ok) { const d = await res.json(); setTickerMessages((d.messages || []).map((m: any) => m.message)) }
     } catch {}
   }
@@ -1936,10 +1938,13 @@ export default function Home() {
     } catch {}
   }
 
-  // Poll ticker messages every 30s when logged in
+  // Poll ticker messages every 30s — always (whether logged in or on login page)
+  // On the login page this is what populates the ticker shown in the white card.
   useEffect(() => {
-    if (user) { fetchTickerMessages(); const interval = setInterval(fetchTickerMessages, 30000); return () => clearInterval(interval) }
-  }, [user])
+    fetchTickerMessages()
+    const interval = setInterval(fetchTickerMessages, 30000)
+    return () => clearInterval(interval)
+  }, [])
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
 
@@ -2728,6 +2733,22 @@ export default function Home() {
                 <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
                 <p className="text-slate-500 text-sm mt-1">Sign in to your account to continue</p>
               </div>
+
+              {/* ★ News Ticker — shown on login page (public, no auth needed).
+                  Admin posts/updates messages via the in-app News Ticker menu;
+                  they appear here immediately (polled every 30s). */}
+              {tickerMessages.length > 0 && (
+                <div className="mb-6 -mx-1 overflow-hidden rounded-lg relative" style={{ backgroundColor: tickerSettings.bgColor, color: tickerSettings.textColor }}>
+                  <div className="ticker-track whitespace-nowrap font-semibold py-2" style={{ animationDuration: `${tickerSettings.speed}s`, fontSize: tickerSettings.fontSize === 'lg' ? '16px' : tickerSettings.fontSize === 'sm' ? '13px' : '14px' }}>
+                    {tickerMessages.map((msg, i) => (
+                      <span key={i} className="inline-block px-8">📢 {msg}</span>
+                    ))}
+                    {tickerMessages.map((msg, i) => (
+                      <span key={`d-${i}`} className="inline-block px-8">📢 {msg}</span>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               <form onSubmit={handleLogin} className="space-y-5">
                 {loginError && (
@@ -10096,31 +10117,6 @@ Wool Pant,Head Office,75,PCS`}</pre>
   return (
     <>
     <div className="min-h-screen flex flex-col bg-background">
-      {/* ★ News Ticker — scrolling text at top, right-to-left */}
-      {tickerMessages.length > 0 && (
-        <div className="py-2 overflow-hidden relative shrink-0" style={{ backgroundColor: tickerSettings.bgColor, color: tickerSettings.textColor }}>
-          <div className="ticker-track whitespace-nowrap font-semibold" style={{ animationDuration: `${tickerSettings.speed}s`, fontSize: tickerSettings.fontSize === 'lg' ? '16px' : tickerSettings.fontSize === 'sm' ? '13px' : '14px' }}>
-            {tickerMessages.map((msg, i) => (
-              <span key={i} className="inline-block px-8">📢 {msg}</span>
-            ))}
-            {tickerMessages.map((msg, i) => (
-              <span key={`d-${i}`} className="inline-block px-8">📢 {msg}</span>
-            ))}
-          </div>
-          {/* Admin/Manager controls */}
-          {isManagerOrAdmin && (
-            <div className="absolute right-2 top-1/2 -translate-y-1/2 flex gap-1">
-              <button onClick={() => setShowTickerInput(!showTickerInput)} className="text-xs opacity-80 hover:opacity-100 px-1" title="Add message">+ Add</button>
-            </div>
-          )}
-          {showTickerInput && (
-            <div className="absolute right-2 top-8 z-50 bg-card border rounded-md shadow-lg p-2 flex gap-1">
-              <Input placeholder="Type ticker message..." value={tickerInput} onChange={e => setTickerInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && postTickerMessage()} className="h-7 text-xs w-64" />
-              <Button size="sm" className="h-7 text-xs" onClick={postTickerMessage}>Post</Button>
-            </div>
-          )}
-        </div>
-      )}
       <div className="flex flex-1">
       {/* Mobile overlay */}
       {sidebarOpen && <div className="fixed inset-0 bg-black/40 z-30 md:hidden" onClick={() => setSidebarOpen(false)} />}

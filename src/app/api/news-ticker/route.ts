@@ -3,11 +3,9 @@ import { db } from '@/lib/db';
 import { getCurrentUser } from '@/lib/auth';
 
 // GET — returns all active news ticker messages
+// Public endpoint (no auth required) — used by login page where the user is not yet authenticated.
 export async function GET(request: NextRequest) {
   try {
-    const currentUser = await getCurrentUser(request);
-    if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
-
     const messages = await db.newsTicker.findMany({
       where: { status: 'active' },
       orderBy: { createdAt: 'desc' },
