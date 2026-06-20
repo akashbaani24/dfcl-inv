@@ -1,32 +1,40 @@
 'use client'
 
 /**
- * ★ Fabric Studio — Real GLB 3D Model
+ * ★ Fabric Studio — Real 3D GLB Models
  * -------------------------------------------------------------
- * Loads a REAL 3D couch model (couch.glb) converted from a real FBX
- * file the user provided. This is a true 3D mesh — not procedural
- * geometry, not a flat photo with displacement.
+ * Loads REAL 3D couch models from GLB files. Multiple products can
+ * be added to the PRODUCTS array below — each one shows up in the
+ * gallery and customer can pick any.
  *
  * The customer can:
+ *   - Pick from multiple 3D products (gallery at top)
  *   - Rotate the model 360° (drag)
  *   - Zoom in/out (scroll wheel)
  *   - Pan (right-click drag)
  *   - Upload fabric → applied to ALL meshes in the model as a tiled
  *     texture (auto-repeat)
- *   - Adjust fabric scale + opacity
+ *   - Adjust fabric scale
  *   - Place Order
  *
- * Model source: user-provided couch.fbx (1.1 MB) → converted to
- * couch.glb (953 KB) via Blender headless.
+ * ────────────────────────────────────────────────────────────────────
+ * HOW TO ADD A NEW 3D MODEL:
+ * ────────────────────────────────────────────────────────────────────
+ *   1. Convert your FBX to GLB using the helper script:
+ *        ./scripts/convert-fbx-to-glb.sh input.fbx output.glb
+ *   2. Copy the .glb to /public/fabric-studio/
+ *   3. Add a new entry to the PRODUCTS array below:
+ *        {
+ *          id: 'unique-id',
+ *          nameEn: 'Display Name',
+ *          nameBn: 'বাংলা নাম',
+ *          descEn: 'English description',
+ *          descBn: 'বাংলা বর্ণনা',
+ *          glbUrl: '/fabric-studio/filename.glb',
+ *        }
+ *   4. Commit + push. Done!
  *
- * The model has 4 parts:
- *   - espaldar sofa (backrest)
- *   - sofa-base (seat base)
- *   - sofa-brazos (armrests)
- *   - sofa-cojin (cushion)
- *
- * All parts share the uploaded fabric texture via a shared material
- * override.
+ * Each product gets auto-preloaded on first load (drei useGLTF.preload).
  */
 
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react'
@@ -39,7 +47,55 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { useLanguage } from '@/lib/i18n'
-import { Upload, ShoppingCart, RotateCcw, Wand2, Check, X, Maximize2, Move3d } from 'lucide-react'
+import { Upload, ShoppingCart, RotateCcw, Wand2, Check, X, Maximize2, Move3d, Sofa } from 'lucide-react'
+
+// ────────────────────────────────────────────────────────────────────────
+// ★ Product catalog — ADD NEW 3D MODELS HERE
+// ────────────────────────────────────────────────────────────────────────
+// To add a new model: drop a .glb in /public/fabric-studio/ and add
+// an entry below. That's it — no other code changes needed.
+
+interface ProductDef {
+  id: string
+  nameEn: string
+  nameBn: string
+  descEn: string
+  descBn: string
+  /** Path to the .glb file inside /public/ */
+  glbUrl: string
+  /** Optional scale multiplier (default 1.5) — adjust if model is too big/small */
+  scale?: number
+  /** Optional position offset [x, y, z] (default [0, -0.7, 0]) */
+  position?: [number, number, number]
+}
+
+const PRODUCTS: ProductDef[] = [
+  {
+    id: 'couch',
+    nameEn: 'Couch',
+    nameBn: 'কাউচ',
+    descEn: '3-seater couch with cushions, backrest, and armrests',
+    descBn: 'কুশন, ব্যাকরেস্ট ও আর্মরেস্ট সহ ৩-সিটার কাউচ',
+    glbUrl: '/fabric-studio/couch.glb',
+    scale: 1.5,
+    position: [0, -0.7, 0],
+  },
+  // ★ ADD MORE MODELS HERE ★
+  // Example template:
+  // {
+  //   id: 'armchair',
+  //   nameEn: 'Armchair',
+  //   nameBn: 'আর্মচেয়ার',
+  //   descEn: 'Single-seater armchair',
+  //   descBn: 'সিঙ্গেল-সিটার আর্মচেয়ার',
+  //   glbUrl: '/fabric-studio/armchair.glb',
+  //   scale: 1.5,
+  //   position: [0, -0.7, 0],
+  // },
+]
+
+// Preload all model URLs so they cache on first visit
+PRODUCTS.forEach(p => useGLTF.preload(p.glbUrl))
 
 // ────────────────────────────────────────────────────────────────────────
 // Types
@@ -99,20 +155,20 @@ const PRESET_FABRICS: FabricDef[] = [
 ]
 
 // ────────────────────────────────────────────────────────────────────────
-// Couch 3D model loader
+// Generic GLB Model component — works for any product in the catalog
 // ────────────────────────────────────────────────────────────────────────
-// Loads couch.glb and applies the uploaded fabric texture to ALL
-// meshes in the model. The fabric auto-tiles via RepeatWrapping.
 
-interface CouchModelProps {
+interface GLBModelProps {
+  glbUrl: string
+  scale?: number
+  position?: [number, number, number]
   fabricUrl: string | null
   fabricRepeat: number
-  fabricOpacity: number
 }
 
-function CouchModel({ fabricUrl, fabricRepeat, fabricOpacity }: CouchModelProps) {
+function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fabricRepeat }: GLBModelProps) {
   // Load the GLB model
-  const { scene } = useGLTF('/fabric-studio/couch.glb')
+  const { scene } = useGLTF(glbUrl)
 
   // Clone the scene so we don't mutate the cached original
   const clonedScene = useMemo(() => scene.clone(true), [scene])
@@ -163,11 +219,11 @@ function CouchModel({ fabricUrl, fabricRepeat, fabricOpacity }: CouchModelProps)
         }
       }
     })
-  }, [clonedScene, fabricTexture, fabricOpacity])
+  }, [clonedScene, fabricTexture])
 
   // Scale + position the model nicely in view
   return (
-    <group position={[0, -0.7, 0]} scale={1.5}>
+    <group position={position} scale={scale}>
       <primitive object={clonedScene} />
     </group>
   )
@@ -178,13 +234,13 @@ function CouchModel({ fabricUrl, fabricRepeat, fabricOpacity }: CouchModelProps)
 // ────────────────────────────────────────────────────────────────────────
 
 function Scene({
+  product,
   fabricUrl,
   fabricRepeat,
-  fabricOpacity,
 }: {
+  product: ProductDef
   fabricUrl: string | null
   fabricRepeat: number
-  fabricOpacity: number
 }) {
   return (
     <>
@@ -211,14 +267,16 @@ function Scene({
       <Suspense fallback={
         <Html center>
           <div className="bg-white/90 backdrop-blur px-4 py-3 rounded-lg shadow-lg text-sm font-medium text-slate-700">
-            Loading 3D couch model...
+            Loading 3D model...
           </div>
         </Html>
       }>
-        <CouchModel
+        <GLBModel
+          glbUrl={product.glbUrl}
+          scale={product.scale}
+          position={product.position}
           fabricUrl={fabricUrl}
           fabricRepeat={fabricRepeat}
-          fabricOpacity={fabricOpacity}
         />
       </Suspense>
 
@@ -263,19 +321,16 @@ function Scene({
 // ────────────────────────────────────────────────────────────────────────
 
 interface RealGLBFabricStudioProps {
-  onPlaceOrder?: (fabric: FabricDef | null) => void
+  onPlaceOrder?: (product: ProductDef, fabric: FabricDef | null) => void
 }
 
 export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudioProps) {
   const { t } = useLanguage()
+  const [selectedProductId, setSelectedProductId] = useState<string>(PRODUCTS[0].id)
   const [fabrics, setFabrics] = useState<FabricDef[]>(PRESET_FABRICS)
   const [selectedFabricId, setSelectedFabricId] = useState<string | null>(null)
   const [fabricRepeat, setFabricRepeat] = useState<number>(4)
-  const [fabricOpacity, setFabricOpacity] = useState<number>(100)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
-
-  // Preload the GLB model
-  useGLTF.preload('/fabric-studio/couch.glb')
 
   useEffect(() => {
     try {
@@ -292,6 +347,11 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
   const persistUploads = (uploads: FabricDef[]) => {
     try { localStorage.setItem('dfcl-fabric-studio-glb-uploads', JSON.stringify(uploads)) } catch {}
   }
+
+  const selectedProduct = useMemo(
+    () => PRODUCTS.find(p => p.id === selectedProductId) || PRODUCTS[0],
+    [selectedProductId]
+  )
 
   const selectedFabric = useMemo(
     () => fabrics.find(f => f.id === selectedFabricId) || null,
@@ -339,10 +399,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
     if (selectedFabricId === id) setSelectedFabricId(null)
   }
 
-  const handleReset = () => {
-    setFabricRepeat(4)
-    setFabricOpacity(100)
-  }
+  const handleReset = () => setFabricRepeat(4)
 
   return (
     <div className="space-y-4">
@@ -358,6 +415,24 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
         </p>
       </div>
 
+      {/* ★ Product gallery — pick from multiple 3D models */}
+      <div className="flex gap-3 overflow-x-auto pb-2 -mx-1 px-1">
+        {PRODUCTS.map(p => (
+          <button
+            key={p.id}
+            onClick={() => setSelectedProductId(p.id)}
+            className={`shrink-0 w-44 rounded-xl overflow-hidden border-2 bg-white transition-all text-left ${selectedProductId === p.id ? 'border-indigo-600 ring-2 ring-indigo-200 shadow-md' : 'border-slate-200 hover:border-slate-400'}`}
+          >
+            <div className="aspect-[4/3] flex items-center justify-center" style={{ background: 'linear-gradient(135deg, #f1f5f9, #cbd5e1)' }}>
+              <Sofa className="w-12 h-12 text-slate-500" strokeWidth={1.2} />
+            </div>
+            <div className="p-2 border-t border-slate-100">
+              <p className="text-xs font-medium text-foreground truncate">{t(p.nameEn, p.nameBn)}</p>
+            </div>
+          </button>
+        ))}
+      </div>
+
       {/* Main preview + fabric controls */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
         {/* 3D Preview area */}
@@ -365,11 +440,9 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
           <CardHeader className="pb-3">
             <CardTitle className="text-base flex items-center gap-2">
               <Maximize2 className="w-4 h-4" />
-              {t('Real 3D Couch Model', 'রিয়েল 3D কাউচ মডেল')}
+              {t(selectedProduct.nameEn, selectedProduct.nameBn)}
             </CardTitle>
-            <p className="text-xs text-muted-foreground">
-              {t('True 3D mesh loaded from your provided FBX model — fully rotatable', 'আপনার দেওয়া FBX মডেল থেকে লোড করা সত্যিকারের 3D মেশ — সম্পূর্ণ ঘোরানো যায়')}
-            </p>
+            <p className="text-xs text-muted-foreground">{t(selectedProduct.descEn, selectedProduct.descBn)}</p>
           </CardHeader>
           <CardContent>
             <div
@@ -391,9 +464,9 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                 style={{ width: '100%', height: '500px', cursor: 'grab' }}
               >
                 <Scene
+                  product={selectedProduct}
                   fabricUrl={selectedFabric?.url || null}
                   fabricRepeat={fabricRepeat}
-                  fabricOpacity={fabricOpacity}
                 />
               </Canvas>
               <div className="absolute bottom-3 left-3 bg-white/80 backdrop-blur px-2.5 py-1.5 rounded-md text-[11px] text-slate-700 shadow-sm pointer-events-none">
@@ -496,7 +569,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
             <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
               <p className="text-xs text-indigo-800 leading-relaxed">
                 <strong>{t('💡 Real 3D Model:', '💡 রিয়েল 3D মডেল:')}</strong>{' '}
-                {t('This is a true 3D mesh — drag to rotate 360°, scroll to zoom. Upload a fabric and it auto-repeats across the entire couch.', 'এটি একটি সত্যিকারের 3D মেশ — ঘোরাতে টানুন ৩৬০°, জুম করতে স্ক্রল করুন। একটি ফ্যাব্রিক আপলোড করুন এবং এটি পুরো কাউচ জুড়ে অটো-রিপিট হবে।')}
+                {t('True 3D mesh — drag to rotate 360°, scroll to zoom. Upload a fabric and it auto-repeats across the entire model.', 'সত্যিকারের 3D মেশ — ঘোরাতে টানুন ৩৬০°, জুম করতে স্ক্রল করুন। একটি ফ্যাব্রিক আপলোড করুন এবং এটি পুরো মডেল জুড়ে অটো-রিপিট হবে।')}
               </p>
             </div>
 
@@ -504,7 +577,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
             <Button
               size="lg"
               className="w-full bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800"
-              onClick={() => onPlaceOrder?.(selectedFabric)}
+              onClick={() => onPlaceOrder?.(selectedProduct, selectedFabric)}
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
               {t('Place Order with This Fabric', 'এই ফ্যাব্রিক দিয়ে অর্ডার করুন')}

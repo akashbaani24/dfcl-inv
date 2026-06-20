@@ -8865,12 +8865,12 @@ export default function Home() {
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
-      case 'fabricStudio': return <RealGLBFabricStudio onPlaceOrder={(fabric) => {
+      case 'fabricStudio': return <RealGLBFabricStudio onPlaceOrder={(product, fabric) => {
         toast({
           title: t('Opening Booking Page', 'বুকিং পেজ খোলা হচ্ছে'),
           description: t(
-            `Product: Real 3D Couch${fabric ? ' • Fabric: ' + fabric.nameEn : ''}`,
-            `পণ্য: রিয়েল 3D কাউচ${fabric ? ' • ফ্যাব্রিক: ' + fabric.nameBn : ''}`
+            `Product: ${product.nameEn}${fabric ? ' • Fabric: ' + fabric.nameEn : ''}`,
+            `পণ্য: ${product.nameBn}${fabric ? ' • ফ্যাব্রিক: ' + fabric.nameBn : ''}`
           ),
         })
         setCurrentView('newBooking')
