@@ -77,6 +77,23 @@ export async function GET(request: NextRequest) {
       select: { price: true, quantity: true, createdAt: true },
     });
 
+    // ★ v60: Fetch manual AccountsEntry records (daily sales + income + expense)
+    const accountsEntries = await db.accountsEntry.findMany({
+      where: {
+        entryDate: { gte: startDate, lte: endDate },
+        ...entityFilter,
+      },
+      select: {
+        entryType: true,
+        cashAmount: true,
+        cardAmount: true,
+        chequeAmount: true,
+        mobileAmount: true,
+        amount: true,
+        entryDate: true,
+      },
+    });
+
     // Build daily map
     const dailyMap = new Map<string, { date: string; income: number; expense: number }>();
 
@@ -90,11 +107,24 @@ export async function GET(request: NextRequest) {
       entry[type] += amount;
     };
 
-    // Populate
+    // Populate — system transactions
     for (const p of salesPayments) addToDay(new Date(p.paymentDate), 'income', p.amount);
     for (const p of supplierPayments) addToDay(new Date(p.paymentDate), 'expense', p.amount);
     for (const p of tailorPayments) addToDay(new Date(p.paymentDate), 'expense', p.amount);
     for (const r of salesReturns) addToDay(new Date(r.createdAt), 'expense', r.price * r.quantity);
+
+    // ★ Populate — manual AccountsEntry records
+    for (const e of accountsEntries) {
+      if (e.entryType === 'sales') {
+        // Daily sales entry: total of all payment types = income
+        const total = e.cashAmount + e.cardAmount + e.chequeAmount + e.mobileAmount;
+        addToDay(new Date(e.entryDate), 'income', total);
+      } else if (e.entryType === 'income') {
+        addToDay(new Date(e.entryDate), 'income', e.amount);
+      } else if (e.entryType === 'expense') {
+        addToDay(new Date(e.entryDate), 'expense', e.amount);
+      }
+    }
 
     // Convert to sorted array (oldest first)
     const dailyData = Array.from(dailyMap.values()).sort((a, b) => {
