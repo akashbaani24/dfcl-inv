@@ -7702,7 +7702,7 @@ export default function Home() {
       { key: 'transfer', label: 'Transfer', icon: <ArrowRightLeft className="w-4 h-4" />, permKey: 'transfer' },
       { key: 'adjustment', label: 'Adjustment', icon: <Settings2 className="w-4 h-4" />, permKey: 'adjustment' },
       { key: 'incentive', label: 'Incentive', icon: <DollarSign className="w-4 h-4" />, permKey: 'incentive' },
-    ].filter(t => isManagerOrAdmin || hasPermission('menu', 'reports_' + t.permKey, 'export') || hasPermission('menu', 'reports', 'export'))
+    ].filter(t => isManagerOrAdmin || hasPermission('menu', 'reports_' + t.permKey, 'export'))
 
     return (
       <div className="space-y-6">
@@ -7743,7 +7743,7 @@ export default function Home() {
               </>
             )}
             <Button variant="outline" size="icon" onClick={() => fetchReports()} title="Refresh"><RefreshCw className={`w-4 h-4 ${reportLoading ? 'animate-spin' : ''}`} /></Button>
-            <Button variant="outline" size="sm" onClick={handleExportReports} disabled={reportExporting || !reportData} title="Download current tab as Excel" style={{ display: hasPermission('menu', 'reports', 'export') ? '' : 'none' }}>
+            <Button variant="outline" size="sm" onClick={handleExportReports} disabled={reportExporting || !reportData} title="Download current tab as Excel" style={{ display: (isManagerOrAdmin || hasPermission('menu', 'reports_' + reportTab, 'export')) ? '' : 'none' }}>
               {reportExporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}Excel
             </Button>
           </div>
@@ -7774,7 +7774,7 @@ export default function Home() {
         ) : (
           <>
             {/* OVERVIEW */}
-            {reportTab === 'overview' && (isManagerOrAdmin || hasPermission('menu', 'reports_overview', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'overview' && (isManagerOrAdmin || hasPermission('menu', 'reports_overview', 'export') ) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {renderKPI('Total Stock Value', fmtMoney(reportData.stock?.totalValue || 0), `${fmtNum(reportData.stock?.totalQty || 0)} units`, <Package className="w-5 h-5" />, 'cyan')}
@@ -7868,17 +7868,17 @@ export default function Home() {
             )}
 
             {/* CASH SALES — combined manual + sales order payments */}
-            {reportTab === 'cashSales' && (isManagerOrAdmin || hasPermission('menu', 'reports_cashSales', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'cashSales' && (isManagerOrAdmin || hasPermission('menu', 'reports_cashSales', 'export') ) && (
               <CashSalesReport entityId={reportEntity === '__all__' ? '' : reportEntity} range={reportRange} customFrom={reportCustomFrom} customTo={reportCustomTo} />
             )}
 
             {/* ACCOUNTS — Income & Expense daily chart */}
-            {reportTab === 'accounts' && (isManagerOrAdmin || hasPermission('menu', 'reports_accounts', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'accounts' && (isManagerOrAdmin || hasPermission('menu', 'reports_accounts', 'export') ) && (
               <AccountsChart entityId={reportEntity === '__all__' ? '' : reportEntity} />
             )}
 
             {/* STOCK */}
-            {reportTab === 'stock' && reportData.stock && (isManagerOrAdmin || hasPermission('menu', 'reports_stock', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'stock' && reportData.stock && (isManagerOrAdmin || hasPermission('menu', 'reports_stock', 'export') ) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {renderKPI('Distinct Items', fmtNum(reportData.stock.totalItems), '', <Package className="w-5 h-5" />, 'cyan')}
@@ -7926,7 +7926,7 @@ export default function Home() {
             )}
 
             {/* SALES */}
-            {reportTab === 'sales' && reportData.sales && (isManagerOrAdmin || hasPermission('menu', 'reports_sales', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'sales' && reportData.sales && (isManagerOrAdmin || hasPermission('menu', 'reports_sales', 'export') ) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {renderKPI('Gross Revenue', fmtMoney(reportData.sales.grossRevenue), `${reportData.sales.orderCount} orders`, <ShoppingCart className="w-5 h-5" />, 'green')}
@@ -8008,7 +8008,7 @@ export default function Home() {
             )}
 
             {/* TRANSFER */}
-            {reportTab === 'transfer' && reportData.transfer && (isManagerOrAdmin || hasPermission('menu', 'reports_transfer', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'transfer' && reportData.transfer && (isManagerOrAdmin || hasPermission('menu', 'reports_transfer', 'export') ) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {renderKPI('Total Transfers', fmtNum(reportData.transfer.totalCount), '', <ArrowRightLeft className="w-5 h-5" />, 'violet')}
@@ -8087,7 +8087,7 @@ export default function Home() {
             )}
 
             {/* ADJUSTMENT */}
-            {reportTab === 'adjustment' && reportData.adjustment && (isManagerOrAdmin || hasPermission('menu', 'reports_adjustment', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'adjustment' && reportData.adjustment && (isManagerOrAdmin || hasPermission('menu', 'reports_adjustment', 'export') ) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {renderKPI('Total Adjustments', fmtNum(reportData.adjustment.totalCount), '', <Settings2 className="w-5 h-5" />, 'violet')}
@@ -8153,7 +8153,7 @@ export default function Home() {
             )}
 
             {/* INCENTIVE */}
-            {reportTab === 'incentive' && reportData.incentive && (isManagerOrAdmin || hasPermission('menu', 'reports_incentive', 'export') || hasPermission('menu', 'reports', 'export')) && (
+            {reportTab === 'incentive' && reportData.incentive && (isManagerOrAdmin || hasPermission('menu', 'reports_incentive', 'export') ) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {renderKPI('Total Amount', fmtMoney(reportData.incentive.totalAmount), `${reportData.incentive.totalCount} entries`, <DollarSign className="w-5 h-5" />, 'green')}
