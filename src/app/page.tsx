@@ -16,6 +16,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { useLanguage } from '@/lib/i18n'
 import { banglaPhoneticLastWord } from '@/lib/bangla-phonetic'
 import FabricStudio3D from '@/components/FabricStudio3D'
+import ImageCompositeFabricStudio from '@/components/ImageCompositeFabricStudio'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
@@ -8862,7 +8863,7 @@ export default function Home() {
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
-      case 'fabricStudio': return <FabricStudio3D onPlaceOrder={(product, fabric) => {
+      case 'fabricStudio': return <ImageCompositeFabricStudio onPlaceOrder={(product, fabric) => {
         toast({
           title: t('Opening Booking Page', 'বুকিং পেজ খোলা হচ্ছে'),
           description: t(
