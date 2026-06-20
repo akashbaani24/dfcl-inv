@@ -225,18 +225,23 @@ const BarStool = () => (
 )
 
 // ────────────────────────────────────────────────────────────────────────
-// 3D Room SVG illustrations (with FULL SCENE + PROMINENT curtains)
+// Luxury Room SVG illustrations — styled after user-provided reference photos
 // ────────────────────────────────────────────────────────────────────────
-// Each room shows the ENTIRE room — wall, floor, furniture, AND the
-// curtains are large and centered so the customer can clearly see how
-// their fabric looks in context.
+// Reference style (from 3 uploaded photos):
+//   - Floor-length drapes that puddle slightly at the bottom
+//   - Curtain rod mounted ABOVE the window frame (6-8 inches above)
+//   - Rod extends WIDER than the window (curtains stack on the wall
+//     on either side, framing the window rather than covering it)
+//   - Brass / black metal rod with decorative finials
+//   - Soft, even vertical folds (grommet-top look)
+//   - Tiebacks on one or both sides for elegant drape
+//   - Furniture in the foreground for context
 //
-// Curtain panels use vertical wave paths to simulate fabric folds.
-// The fold shadows use the grad-fabric-shadow gradient for 3D depth.
+// All fabric-area elements get the grad-fabric-shadow overlay on top
+// for 3D fold depth.
 
 const LivingRoom = () => (
   <>
-    {/* Wall (warm beige with subtle vertical gradient for depth) */}
     <defs>
       <linearGradient id="grad-wall-living" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#f5ebd6" />
@@ -251,44 +256,80 @@ const LivingRoom = () => (
         <stop offset="60%" stopColor="#aee3f5" />
         <stop offset="100%" stopColor="#cdeef9" />
       </linearGradient>
+      <linearGradient id="grad-brass" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f5d985" />
+        <stop offset="50%" stopColor="#c9a14a" />
+        <stop offset="100%" stopColor="#8b6914" />
+      </linearGradient>
     </defs>
+    {/* Wall */}
     <rect x="0" y="0" width="260" height="180" fill="url(#grad-wall-living)" />
+    {/* Floor */}
     <rect x="0" y="180" width="260" height="60" fill="url(#grad-floor-living)" />
     {/* Floor perspective line */}
     <line x1="0" y1="180" x2="260" y2="180" stroke="#3e2723" strokeWidth="1" opacity="0.3" />
-    {/* Window — centered, large, with sky view */}
-    <rect x="70" y="40" width="120" height="100" fill="url(#grad-outdoor)" stroke="#3e2723" strokeWidth="4" />
-    <line x1="130" y1="40" x2="130" y2="140" stroke="#3e2723" strokeWidth="3" />
-    <line x1="70" y1="90" x2="190" y2="90" stroke="#3e2723" strokeWidth="3" />
-    {/* Distant landscape hint */}
-    <ellipse cx="100" cy="130" rx="20" ry="6" fill="#7cb342" opacity="0.5" />
-    <ellipse cx="160" cy="130" rx="18" ry="5" fill="#7cb342" opacity="0.5" />
-    {/* Curtain rod (wooden) */}
-    <rect x="40" y="32" width="180" height="6" rx="2" fill="url(#grad-wood-dark)" />
-    <circle cx="40" cy="35" r="5" fill="url(#grad-wood-dark)" />
-    <circle cx="220" cy="35" r="5" fill="url(#grad-wood-dark)" />
-    {/* ★ LEFT CURTAIN PANEL (fabric) — wavy folds for 3D fabric look */}
-    <path d="M 40 38 Q 44 38 46 42 Q 48 50 44 60 Q 40 70 44 80 Q 48 90 44 100 Q 40 110 44 120 Q 48 130 44 140 Q 42 148 40 150 L 40 38 Z"
+
+    {/* Window — centered, moderately sized, with sky + landscape view */}
+    <rect x="80" y="50" width="100" height="100" fill="url(#grad-outdoor)" stroke="#5d4037" strokeWidth="4" />
+    <line x1="130" y1="50" x2="130" y2="150" stroke="#5d4037" strokeWidth="3" />
+    <line x1="80" y1="100" x2="180" y2="100" stroke="#5d4037" strokeWidth="3" />
+    {/* Distant landscape */}
+    <ellipse cx="105" cy="140" rx="18" ry="5" fill="#7cb342" opacity="0.5" />
+    <ellipse cx="155" cy="140" rx="16" ry="4" fill="#7cb342" opacity="0.5" />
+
+    {/* ★ Curtain rod (brass) — mounted ABOVE window, extends WIDER than window */}
+    <rect x="40" y="38" width="180" height="5" rx="2" fill="url(#grad-brass)" />
+    {/* Brass finials (decorative ball ends) */}
+    <circle cx="40" cy="40" r="6" fill="url(#grad-brass)" stroke="#8b6914" strokeWidth="0.5" />
+    <circle cx="220" cy="40" r="6" fill="url(#grad-brass)" stroke="#8b6914" strokeWidth="0.5" />
+
+    {/* ★ LEFT CURTAIN PANEL (fabric) — floor-length, hangs from rod, stacks on wall LEFT of window.
+        Wavy fold path simulates grommet-top soft folds. Puddles slightly at bottom. */}
+    <path d="M 40 43
+             Q 42 50 40 65 Q 38 80 42 95 Q 46 110 40 125 Q 36 140 42 155 Q 46 170 42 180
+             Q 40 182 38 183 L 38 43 Z"
           className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    {/* Fold shadows on left panel */}
-    <path d="M 42 38 Q 43 50 42 80 Q 43 110 42 150 L 42 38 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
-    {/* ★ RIGHT CURTAIN PANEL (fabric) */}
-    <path d="M 220 38 Q 216 38 214 42 Q 212 50 216 60 Q 220 70 216 80 Q 212 90 216 100 Q 220 110 216 120 Q 212 130 216 140 Q 218 148 220 150 L 220 38 Z"
+    {/* Fold shadow overlay (gives 3D depth) */}
+    <path d="M 40 43 Q 42 100 40 183 L 38 183 L 38 43 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* Secondary fold shadow for richer folds */}
+    <path d="M 50 50 Q 48 100 50 175 L 48 175 Q 46 100 48 50 Z" fill="rgba(0,0,0,0.18)" />
+
+    {/* ★ RIGHT CURTAIN PANEL (fabric) — symmetric to left, stacks on wall RIGHT of window.
+        Tied back with a brass tieback for elegance. */}
+    <path d="M 220 43
+             Q 218 50 220 65 Q 222 80 218 95 Q 214 110 220 125 Q 224 140 218 155 Q 214 170 218 180
+             Q 220 182 222 183 L 222 43 Z"
           className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    <path d="M 218 38 Q 217 50 218 80 Q 217 110 218 150 L 218 38 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
-    {/* ★ PELMET (top valance) — fabric, wavy bottom edge */}
-    <path d="M 40 38 Q 50 50 60 40 Q 70 50 80 40 Q 90 50 100 40 Q 110 50 120 40 Q 130 50 140 40 Q 150 50 160 40 Q 170 50 180 40 Q 190 50 200 40 Q 210 50 220 40 L 220 20 L 40 20 Z"
+    <path d="M 220 43 Q 218 100 220 183 L 222 183 L 222 43 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    <path d="M 210 50 Q 212 100 210 175 L 212 175 Q 214 100 212 50 Z" fill="rgba(0,0,0,0.18)" />
+
+    {/* ★ Brass tieback holding right curtain back (decorative) */}
+    <ellipse cx="218" cy="130" rx="6" ry="3" fill="url(#grad-brass)" stroke="#8b6914" strokeWidth="0.5" />
+
+    {/* ★ Pelmet (top valance) — fabric, wavy bottom edge */}
+    <path d="M 40 43 Q 50 55 60 45 Q 70 55 80 45 Q 90 55 100 45 Q 110 55 120 45 Q 130 55 140 45 Q 150 55 160 45 Q 170 55 180 45 Q 190 55 200 45 Q 210 55 220 45 L 220 25 L 40 25 Z"
           className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    {/* Furniture — sofa on the floor (for context) */}
-    <rect x="40" y="190" width="180" height="40" rx="6" fill="#5d4037" />
-    <rect x="40" y="180" width="180" height="14" rx="4" fill="#795548" />
-    <rect x="35" y="190" width="10" height="40" rx="3" fill="#3e2723" />
-    <rect x="215" y="190" width="10" height="40" rx="3" fill="#3e2723" />
-    {/* Side table with plant */}
-    <rect x="10" y="200" width="22" height="30" fill="url(#grad-wood-dark)" />
-    <rect x="14" y="190" width="14" height="14" rx="2" fill="#5d4037" />
-    <ellipse cx="21" cy="180" rx="9" ry="11" fill="#2e7d32" />
-    <ellipse cx="21" cy="175" rx="6" ry="8" fill="#388e3c" />
+
+    {/* Framed artwork on wall (decorative) */}
+    <rect x="20" y="60" width="14" height="20" fill="#3e2723" />
+    <rect x="22" y="62" width="10" height="16" fill="#90caf9" />
+
+    {/* ★ Furniture in foreground — armchair + side table + vase */}
+    {/* Armchair (beige, with dark wood legs) */}
+    <g>
+      <rect x="14" y="195" width="3" height="22" fill="#3e2723" />
+      <rect x="40" y="195" width="3" height="22" fill="#3e2723" />
+      <rect x="12" y="170" width="32" height="35" rx="6" fill="#a1887f" />
+      <rect x="12" y="170" width="32" height="14" rx="4" fill="#bcaaa4" />
+      <rect x="9" y="175" width="6" height="22" rx="3" fill="#a1887f" />
+      {/* Decorative pillow with gold pattern */}
+      <rect x="16" y="178" width="14" height="10" rx="2" fill="#d4af37" opacity="0.7" />
+    </g>
+    {/* Side table (white marble top, dark wood) */}
+    <rect x="225" y="190" width="22" height="22" fill="url(#grad-wood-dark)" />
+    <rect x="222" y="187" width="28" height="6" fill="#fafafa" stroke="#bdbdbd" strokeWidth="0.3" />
+    {/* Vase on table */}
+    <rect x="232" y="175" width="8" height="12" rx="1" fill="#ffffff" stroke="#bdbdbd" strokeWidth="0.3" />
   </>
 )
 
@@ -296,8 +337,8 @@ const Bedroom = () => (
   <>
     <defs>
       <linearGradient id="grad-wall-bedroom" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#f0e6e0" />
-        <stop offset="100%" stopColor="#d7c4b8" />
+        <stop offset="0%" stopColor="#eceff1" />
+        <stop offset="100%" stopColor="#cfd8dc" />
       </linearGradient>
       <linearGradient id="grad-floor-bedroom" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#bcaaa4" />
@@ -308,29 +349,51 @@ const Bedroom = () => (
         <stop offset="100%" stopColor="#e3f2fd" />
       </linearGradient>
     </defs>
-    <rect x="0" y="0" width="260" height="170" fill="url(#grad-wall-bedroom)" />
-    <rect x="0" y="170" width="260" height="70" fill="url(#grad-floor-bedroom)" />
-    {/* Window */}
-    <rect x="70" y="30" width="120" height="100" fill="url(#grad-outdoor-bd)" stroke="#3e2723" strokeWidth="4" />
-    <line x1="130" y1="30" x2="130" y2="130" stroke="#3e2723" strokeWidth="3" />
-    {/* Curtain rod (metallic) */}
-    <rect x="40" y="22" width="180" height="5" rx="2" fill="url(#grad-metal)" />
-    <circle cx="40" cy="25" r="4" fill="url(#grad-metal)" />
-    <circle cx="220" cy="25" r="4" fill="url(#grad-metal)" />
-    {/* ★ SHEER CURTAIN (semi-transparent — fabric) covering full window */}
-    <rect x="40" y="27" width="180" height="115" className="fabric-area" fill="#ffffff" opacity="0.5" stroke="#3e2723" strokeWidth="0.5" />
-    {/* ★ LEFT DRAPE PANEL (fabric) — full fold waves */}
-    <path d="M 40 27 Q 44 35 42 50 Q 40 65 44 80 Q 48 95 44 110 Q 40 125 44 140 L 44 27 Z"
-          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    <path d="M 42 27 Q 43 50 42 90 Q 43 120 43 140 L 43 27 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
-    {/* ★ RIGHT DRAPE PANEL (fabric) */}
-    <path d="M 220 27 Q 216 35 218 50 Q 220 65 216 80 Q 212 95 216 110 Q 220 125 216 140 L 216 27 Z"
-          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    <path d="M 218 27 Q 217 50 218 90 Q 217 120 217 140 L 217 27 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
-    {/* ★ TIEBACKS (gold, decorative — non-fabric) holding the drapes back */}
-    <ellipse cx="44" cy="100" rx="5" ry="3" fill="#d4af37" stroke="#a67c00" strokeWidth="0.5" />
-    <ellipse cx="216" cy="100" rx="5" ry="3" fill="#d4af37" stroke="#a67c00" strokeWidth="0.5" />
-    {/* Bed — headboard + mattress + pillows at the bottom for context */}
+    {/* Wall */}
+    <rect x="0" y="0" width="260" height="180" fill="url(#grad-wall-bedroom)" />
+    {/* Floor */}
+    <rect x="0" y="180" width="260" height="60" fill="url(#grad-floor-bedroom)" />
+
+    {/* Tall rectangular window */}
+    <rect x="80" y="40" width="100" height="110" fill="url(#grad-outdoor-bd)" stroke="#3e2723" strokeWidth="4" />
+    {/* Vertical divider (double-hung look) */}
+    <line x1="130" y1="40" x2="130" y2="150" stroke="#3e2723" strokeWidth="3" />
+    {/* Greenery hint outside */}
+    <ellipse cx="95" cy="142" rx="12" ry="5" fill="#7cb342" opacity="0.5" />
+    <ellipse cx="165" cy="142" rx="14" ry="5" fill="#7cb342" opacity="0.5" />
+
+    {/* ★ Black metal curtain rod with spherical finials — above window, extends wider */}
+    <rect x="40" y="30" width="180" height="5" rx="2" fill="#263238" />
+    <circle cx="40" cy="33" r="6" fill="#263238" />
+    <circle cx="220" cy="33" r="6" fill="#263238" />
+
+    {/* ★ LEFT CURTAIN PANEL (fabric) — grommet-top, floor-length, soft folds.
+        Hangs straight down on the LEFT of the window. */}
+    <path d="M 40 35
+             Q 44 50 40 70 Q 36 90 44 110 Q 48 130 40 150 Q 36 168 42 180
+             L 42 35 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#263238" strokeWidth="1" />
+    <path d="M 42 35 Q 43 100 42 180 L 40 180 Q 39 100 40 35 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* Grommet rings (decorative metal rings along the top edge) */}
+    {[44, 52, 60, 68, 76].map((x, i) => (
+      <circle key={i} cx={x} cy="38" r="2.5" fill="#263238" stroke="#424242" strokeWidth="0.4" />
+    ))}
+
+    {/* ★ RIGHT CURTAIN PANEL (fabric) — partially drawn back, revealing black lining on inner edge.
+        This simulates the "black inner lining visible when pulled back" look from the reference photo. */}
+    <path d="M 220 35
+             Q 216 50 220 70 Q 224 90 216 110 Q 212 130 220 150 Q 224 168 218 180
+             L 218 35 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#263238" strokeWidth="1" />
+    <path d="M 218 35 Q 217 100 218 180 L 220 180 Q 221 100 220 35 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* Black inner lining visible on inner edge (right side of right panel) */}
+    <rect x="215" y="38" width="3" height="142" fill="#212121" opacity="0.7" />
+    {/* Grommet rings on right panel */}
+    {[216, 208, 200, 192, 184].map((x, i) => (
+      <circle key={i} cx={x} cy="38" r="2.5" fill="#263238" stroke="#424242" strokeWidth="0.4" />
+    ))}
+
+    {/* ★ Bed in foreground — headboard, mattress, 2 pillows, blanket */}
     <rect x="60" y="170" width="140" height="60" rx="4" fill="#efebe9" stroke="#3e2723" strokeWidth="1" />
     <rect x="55" y="160" width="150" height="14" rx="6" fill="#795548" stroke="#3e2723" strokeWidth="1" />
     {/* Pillows */}
@@ -349,50 +412,83 @@ const OfficeRoom = () => (
         <stop offset="100%" stopColor="#cfd8dc" />
       </linearGradient>
       <linearGradient id="grad-floor-office" x1="0" y1="0" x2="0" y2="1">
-        <stop offset="0%" stopColor="#78909c" />
-        <stop offset="100%" stopColor="#455a64" />
+        <stop offset="0%" stopColor="#d7ccc8" />
+        <stop offset="100%" stopColor="#a1887f" />
       </linearGradient>
       <linearGradient id="grad-outdoor-office" x1="0" y1="0" x2="0" y2="1">
         <stop offset="0%" stopColor="#64b5f6" />
         <stop offset="100%" stopColor="#bbdefb" />
       </linearGradient>
     </defs>
-    <rect x="0" y="0" width="260" height="170" fill="url(#grad-wall-office)" />
-    <rect x="0" y="170" width="260" height="70" fill="url(#grad-floor-office)" />
-    {/* Floor reflection hint */}
-    <rect x="0" y="170" width="260" height="3" fill="rgba(255,255,255,0.3)" />
-    {/* LARGE FLOOR-TO-CEILING WINDOW */}
-    <rect x="50" y="25" width="160" height="150" fill="url(#grad-outdoor-office)" stroke="#263238" strokeWidth="5" />
-    {/* Window cross */}
-    <line x1="130" y1="25" x2="130" y2="175" stroke="#263238" strokeWidth="4" />
-    <line x1="50" y1="100" x2="210" y2="100" stroke="#263238" strokeWidth="3" />
-    {/* Distant buildings hint */}
-    <rect x="60" y="130" width="20" height="40" fill="#90a4ae" opacity="0.5" />
-    <rect x="85" y="110" width="15" height="60" fill="#90a4ae" opacity="0.5" />
-    <rect x="170" y="120" width="20" height="50" fill="#90a4ae" opacity="0.5" />
-    <rect x="195" y="135" width="12" height="35" fill="#90a4ae" opacity="0.5" />
-    {/* Top + bottom rails (track) */}
-    <rect x="46" y="22" width="168" height="7" fill="url(#grad-metal)" />
-    <rect x="46" y="173" width="168" height="7" fill="url(#grad-metal)" />
-    {/* ★ VERTICAL BLINDS — 12 strips (all fabric) covering the window */}
-    {[50, 64, 78, 92, 106, 138, 152, 166, 180, 194].map((x, i) => (
-      <g key={i}>
-        <rect x={x} y={29} width="11" height="143" className="fabric-area" fill="#bdc3c7" stroke="#37474f" strokeWidth="0.4" />
-        {/* Shadow strip on right edge of each blind for 3D */}
-        <rect x={x + 7} y={29} width="4" height="143" fill="url(#grad-fabric-shadow)" opacity="0.4" />
-      </g>
+    {/* Wall */}
+    <rect x="0" y="0" width="260" height="180" fill="url(#grad-wall-office)" />
+    {/* Light wood floor */}
+    <rect x="0" y="180" width="260" height="60" fill="url(#grad-floor-office)" />
+    {/* Floor planks hint */}
+    {[0, 30, 60, 90, 120, 150, 180, 210, 240].map((x, i) => (
+      <line key={i} x1={x} y1="180" x2={x} y2="240" stroke="rgba(0,0,0,0.15)" strokeWidth="0.5" />
     ))}
-    {/* Office desk in foreground */}
-    <rect x="20" y="180" width="80" height="40" fill="url(#grad-wood-dark)" />
-    <rect x="20" y="180" width="80" height="6" fill="#3e2723" />
-    {/* Desk legs */}
-    <rect x="22" y="220" width="4" height="20" fill="#3e2723" />
-    <rect x="94" y="220" width="4" height="20" fill="#3e2723" />
-    {/* Computer monitor on desk */}
-    <rect x="40" y="160" width="40" height="28" rx="2" fill="#263238" />
-    <rect x="42" y="162" width="36" height="22" fill="#1565c0" />
-    <rect x="55" y="188" width="10" height="6" fill="#263238" />
-    <rect x="45" y="194" width="30" height="3" fill="#263238" />
+
+    {/* Tall narrow window (modern double-hung) */}
+    <rect x="95" y="35" width="70" height="120" fill="url(#grad-outdoor-office)" stroke="#fafafa" strokeWidth="4" />
+    <line x1="130" y1="35" x2="130" y2="155" stroke="#fafafa" strokeWidth="3" />
+    <line x1="95" y1="95" x2="165" y2="95" stroke="#fafafa" strokeWidth="2" />
+    {/* Greenery outside */}
+    <ellipse cx="105" cy="148" rx="10" ry="4" fill="#7cb342" opacity="0.5" />
+    <ellipse cx="155" cy="148" rx="10" ry="4" fill="#7cb342" opacity="0.5" />
+
+    {/* ★ Black metal rod with ornate spherical finials — above window, extends wider */}
+    <rect x="55" y="25" width="150" height="5" rx="2" fill="#263238" />
+    <circle cx="55" cy="28" r="6" fill="#263238" />
+    <circle cx="205" cy="28" r="6" fill="#263238" />
+
+    {/* ★ LEFT CURTAIN PANEL (fabric) — grommet-top, floor-length, covers LEFT half of window.
+        Soft vertical folds with grommet rings visible at top. */}
+    <path d="M 55 30
+             Q 60 50 56 75 Q 52 100 60 125 Q 64 150 56 175 Q 52 178 56 180
+             L 56 30 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#263238" strokeWidth="1" />
+    <path d="M 56 30 Q 58 100 56 180 L 54 180 Q 52 100 54 30 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* Grommet rings */}
+    {[60, 68, 76, 84, 92, 100, 108, 116].map((x, i) => (
+      <circle key={i} cx={x} cy="33" r="2" fill="#263238" stroke="#424242" strokeWidth="0.4" />
+    ))}
+
+    {/* ★ RIGHT CURTAIN PANEL (fabric) — drawn back to the RIGHT, stacked on wall.
+        Creates a partially-open look (window visible in the middle). */}
+    <path d="M 205 30
+             Q 200 50 204 75 Q 208 100 200 125 Q 196 150 204 175 Q 208 178 204 180
+             L 204 30 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#263238" strokeWidth="1" />
+    <path d="M 204 30 Q 202 100 204 180 L 206 180 Q 208 100 206 30 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* Grommet rings on right panel */}
+    {[200, 192, 184, 176, 168, 160, 152, 144].map((x, i) => (
+      <circle key={i} cx={x} cy="33" r="2" fill="#263238" stroke="#424242" strokeWidth="0.4" />
+    ))}
+
+    {/* Framed landscape print on left wall (decorative) */}
+    <rect x="15" y="65" width="22" height="28" fill="#3e2723" />
+    <rect x="17" y="67" width="18" height="24" fill="#a5d6a7" />
+
+    {/* ★ Furniture — modern side table + curved-frame chair in foreground */}
+    {/* Side table (white, slim metal legs) */}
+    <rect x="20" y="200" width="30" height="20" fill="#fafafa" stroke="#bdbdbd" strokeWidth="0.5" />
+    <rect x="22" y="220" width="2" height="20" fill="#9e9e9e" />
+    <rect x="46" y="220" width="2" height="20" fill="#9e9e9e" />
+    {/* Lamp on table */}
+    <rect x="32" y="186" width="6" height="14" fill="#fafafa" stroke="#263238" strokeWidth="0.5" />
+    <path d="M 26 186 L 44 186 L 42 178 L 28 178 Z" fill="#fafafa" stroke="#263238" strokeWidth="0.5" />
+    {/* Mug with polka dots */}
+    <rect x="38" y="194" width="6" height="6" rx="1" fill="#ffffff" stroke="#263238" strokeWidth="0.5" />
+    <circle cx="40" cy="196" r="0.6" fill="#263238" />
+    <circle cx="42" cy="198" r="0.6" fill="#263238" />
+
+    {/* Modern chair (curved silver metal frame + beige cushion) on the right */}
+    <g>
+      <path d="M 215 230 Q 215 200 230 200 Q 245 200 245 230" fill="none" stroke="#9e9e9e" strokeWidth="2" />
+      <rect x="222" y="205" width="22" height="22" rx="4" fill="#d7ccc8" stroke="#9e9e9e" strokeWidth="0.5" />
+      <rect x="222" y="200" width="22" height="8" rx="4" fill="#d7ccc8" stroke="#9e9e9e" strokeWidth="0.5" />
+    </g>
   </>
 )
 
