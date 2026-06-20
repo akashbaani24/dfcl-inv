@@ -47,6 +47,29 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'At least one range is required' }, { status: 400 });
     }
 
+    // ★ v60: Check for duplicate items — an item can only belong to ONE active formula
+    if (itemIds && itemIds.length > 0) {
+      const existingItems = await db.incentiveFormulaItem.findMany({
+        where: { itemId: { in: itemIds }, formula: { status: 'active' } },
+        include: { formula: { select: { id: true, name: true } } },
+      });
+      if (existingItems.length > 0) {
+        const duplicates = existingItems.map(ei => {
+          const item = ei;
+          return `${ei.formula.name}`;
+        });
+        // Get item names for the error message
+        const itemIdsDup = existingItems.map(ei => ei.itemId);
+        const items = await db.item.findMany({ where: { id: { in: itemIdsDup } }, select: { id: true, itemName: true } });
+        const itemMap = new Map(items.map(i => [i.id, i.itemName]));
+        const detail = existingItems.map(ei => `"${itemMap.get(ei.itemId) || ei.itemId}" is already in formula "${ei.formula.name}"`).slice(0, 10);
+        return NextResponse.json(
+          { error: `Some items are already assigned to another active formula. Each item can only belong to one active formula at a time. Conflicts: ${detail.join('; ')}${existingItems.length > 10 ? '...' : ''}` },
+          { status: 400 }
+        );
+      }
+    }
+
     const formula = await db.incentiveFormula.create({
       data: {
         name,

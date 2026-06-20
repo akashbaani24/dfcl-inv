@@ -570,7 +570,7 @@ export default function Home() {
   // Reports state
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
-  const [reportTab, setReportTab] = useState<'overview' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive'>('overview')
+  const [reportTab, setReportTab] = useState<'overview' | 'accounts' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive'>('overview')
   const [reportRange, setReportRange] = useState<'7' | '30' | '90' | '365' | 'all' | 'custom'>('30')
   const [reportEntity, setReportEntity] = useState<string>('__all__') // '__all__' = all my entities
   const [reportCustomFrom, setReportCustomFrom] = useState('') // YYYY-MM-DD
@@ -6464,29 +6464,36 @@ export default function Home() {
                       const text = await file.text()
                       const lines = text.split(/\r?\n/).filter(l => l.trim())
                       if (lines.length < 2) { toast({ title: 'Error', description: 'CSV must have a header + at least 1 row', variant: 'destructive' }); return }
-                      const header = lines[0].toLowerCase().replace(/"/g, '').trim()
-                      const itemCol = header.includes('itemname') ? 'itemName' : header.split(',')[0]
                       // Search for each item by name and add to formula
-                      let added = 0, notFound = 0
+                      let added = 0, notFound = 0, duplicate = 0
                       const notFoundNames: string[] = []
+                      const seenInThisUpload = new Set<string>() // ★ prevent duplicates within same upload
                       for (let i = 1; i < lines.length; i++) {
                         const name = lines[i].split(',')[0]?.trim().replace(/"/g, '')
                         if (!name) continue
+                        // ★ Skip if already seen in this upload (duplicate row)
+                        if (seenInThisUpload.has(name.toLowerCase())) { duplicate++; continue }
                         try {
                           const res = await authFetch(`/api/items?search=${encodeURIComponent(name)}&pageSize=5`)
                           if (res.ok) {
                             const d = await res.json()
                             const match = (d.items || []).find((it: any) => it.itemName?.toLowerCase() === name.toLowerCase())
-                            if (match && !formulaForm.itemIds.includes(match.id)) {
+                            if (match) {
+                              seenInThisUpload.add(name.toLowerCase())
+                              // ★ Skip if already in formulaForm (added manually or from a previous upload)
+                              if (formulaForm.itemIds.includes(match.id)) { duplicate++; continue }
                               formulaForm.itemIds.push(match.id)
                               formulaForm.itemNames[match.id] = match.itemName
                               added++
-                            } else if (!match) { notFound++; notFoundNames.push(name) }
+                            } else { notFound++; notFoundNames.push(name) }
                           }
                         } catch {}
                       }
                       setFormulaForm({ ...formulaForm })
-                      toast({ title: 'Upload complete', description: `Added ${added} item(s)${notFound > 0 ? `, ${notFound} not found` : ''}` })
+                      const parts = [`Added ${added} item(s)`]
+                      if (notFound > 0) parts.push(`${notFound} not found`)
+                      if (duplicate > 0) parts.push(`${duplicate} duplicate skipped`)
+                      toast({ title: 'Upload complete', description: parts.join(', ') })
                       if (notFoundNames.length > 0) {
                         toast({ title: 'Items not found', description: notFoundNames.slice(0, 5).join(', ') + (notFoundNames.length > 5 ? '...' : ''), variant: 'destructive' })
                       }
@@ -7192,12 +7199,134 @@ export default function Home() {
     </Card>
   )
 
+  // ★ AccountsChart component — daily income vs expense chart
+  const AccountsChart = ({ entityId }: { entityId: string }) => {
+    const [data, setData] = useState<{ dailyData: any[]; summary: any } | null>(null)
+    const [loading, setLoading] = useState(true)
+    const [days, setDays] = useState(30)
+
+    useEffect(() => {
+      setLoading(true)
+      const params = new URLSearchParams({ days: String(days) })
+      if (entityId) params.set('entityId', entityId)
+      authFetch(`/api/reports/daily-income-expense?${params}`)
+        .then(r => r.json())
+        .then(d => { setData(d); setLoading(false) })
+        .catch(() => setLoading(false))
+    }, [entityId, days])
+
+    if (loading) return <div className="text-center py-8 text-muted-foreground">Loading chart...</div>
+    if (!data || data.dailyData.length === 0) return <div className="text-center py-8 text-muted-foreground">No income/expense data for this period.</div>
+
+    const maxVal = Math.max(...data.dailyData.flatMap(d => [d.income, d.expense]), 1)
+
+    return (
+      <div className="space-y-4">
+        {/* Summary cards */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <Card><CardContent className="pt-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Income</p>
+                <p className="text-2xl font-bold text-green-600 mt-1">{data.summary.totalIncome.toFixed(2)}</p>
+              </div>
+              <div className="w-10 h-10 bg-green-100 rounded-lg flex items-center justify-center"><TrendingUp className="w-5 h-5 text-green-600" /></div>
+            </div>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Total Expense</p>
+                <p className="text-2xl font-bold text-red-600 mt-1">{data.summary.totalExpense.toFixed(2)}</p>
+              </div>
+              <div className="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center"><TrendingUp className="w-5 h-5 text-red-600 rotate-180" /></div>
+            </div>
+          </CardContent></Card>
+          <Card><CardContent className="pt-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-wide text-muted-foreground">Net (Income - Expense)</p>
+                <p className={`text-2xl font-bold mt-1 ${data.summary.net >= 0 ? 'text-green-600' : 'text-red-600'}`}>{data.summary.net.toFixed(2)}</p>
+              </div>
+              <div className="w-10 h-10 bg-blue-100 rounded-lg flex items-center justify-center"><DollarSign className="w-5 h-5 text-blue-600" /></div>
+            </div>
+          </CardContent></Card>
+        </div>
+
+        {/* Days selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Period:</span>
+          {['7', '30', '90'].map(d => (
+            <Button key={d} size="sm" variant={days === parseInt(d) ? 'default' : 'outline'} onClick={() => setDays(parseInt(d))}>{d} days</Button>
+          ))}
+        </div>
+
+        {/* Bar chart — daily income vs expense */}
+        <div className="border rounded-lg p-4 bg-white">
+          <p className="text-sm font-semibold mb-3">Daily Income vs Expense</p>
+          <div className="overflow-x-auto">
+            <div className="flex items-end gap-1 h-64 min-w-full" style={{ minWidth: `${data.dailyData.length * 30}px` }}>
+              {data.dailyData.map((d, i) => (
+                <div key={i} className="flex flex-col items-center gap-0.5 flex-1 min-w-[20px]" title={`${d.date}\nIncome: ${d.income.toFixed(2)}\nExpense: ${d.expense.toFixed(2)}`}>
+                  <div className="flex flex-col items-center justify-end h-full w-full gap-0.5">
+                    {/* Income bar */}
+                    <div
+                      className="w-full bg-green-500 rounded-t-sm transition-all hover:bg-green-600"
+                      style={{ height: `${(d.income / maxVal) * 200}px`, minHeight: d.income > 0 ? '2px' : '0' }}
+                    />
+                    {/* Expense bar */}
+                    <div
+                      className="w-full bg-red-500 rounded-b-sm transition-all hover:bg-red-600"
+                      style={{ height: `${(d.expense / maxVal) * 50}px`, minHeight: d.expense > 0 ? '2px' : '0' }}
+                    />
+                  </div>
+                  {data.dailyData.length <= 30 && (
+                    <span className="text-[8px] text-muted-foreground rotate-90 origin-bottom-left whitespace-nowrap mt-1">{d.date.split(' ').slice(0, 2).join(' ')}</span>
+                  )}
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="flex items-center justify-center gap-4 mt-3 text-xs">
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-green-500 rounded"></span>Income</span>
+            <span className="flex items-center gap-1"><span className="w-3 h-3 bg-red-500 rounded"></span>Expense</span>
+          </div>
+        </div>
+
+        {/* Daily breakdown table */}
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold text-xs uppercase">Date</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase">Income</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase">Expense</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase">Net</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.dailyData.slice().reverse().map((d, i) => (
+                <tr key={i} className="border-t hover:bg-muted/20">
+                  <td className="px-3 py-2 font-medium">{d.date}</td>
+                  <td className="px-3 py-2 text-right text-green-600 font-semibold">{d.income.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-red-600 font-semibold">{d.expense.toFixed(2)}</td>
+                  <td className={`px-3 py-2 text-right font-bold ${(d.income - d.expense) >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(d.income - d.expense).toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    )
+  }
+
   const renderReportsPage = () => {
     const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager'
     const entityOptions = isManagerOrAdmin ? entities : entities.filter(e => user?.entityAccess.some(ea => ea.entityId === e.id))
 
     const tabs: { key: typeof reportTab; label: string; icon: React.ReactNode }[] = [
       { key: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
+      { key: 'accounts', label: 'Income & Expense', icon: <DollarSign className="w-4 h-4" /> },
       { key: 'stock', label: 'Stock', icon: <BarChart3 className="w-4 h-4" /> },
       { key: 'sales', label: 'Sales', icon: <ShoppingCart className="w-4 h-4" /> },
       { key: 'transfer', label: 'Transfer', icon: <ArrowRightLeft className="w-4 h-4" /> },
@@ -7366,6 +7495,11 @@ export default function Home() {
                   ))
                 )}
               </div>
+            )}
+
+            {/* ACCOUNTS — Income & Expense daily chart */}
+            {reportTab === 'accounts' && (
+              <AccountsChart entityId={reportEntity === '__all__' ? '' : reportEntity} />
             )}
 
             {/* STOCK */}
