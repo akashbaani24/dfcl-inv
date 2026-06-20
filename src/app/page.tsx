@@ -8307,11 +8307,12 @@ export default function Home() {
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     <SelectItem value="outlet">Outlet (Shop/Branch)</SelectItem>
+                    <SelectItem value="factory">Factory</SelectItem>
                     <SelectItem value="warehouse">Warehouse</SelectItem>
                     <SelectItem value="head_office">Head Office</SelectItem>
                   </SelectContent>
                 </Select>
-                <p className="text-[11px] text-muted-foreground">Used by incentive formula: outlet → outletCommission, head_office/warehouse → headOfficeCommission</p>
+                <p className="text-[11px] text-muted-foreground">Used by incentive formula: outlet → outletCommission, factory/head_office/warehouse → headOfficeCommission</p>
               </div>
               <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEntityId ? 'Update' : 'Create'}</Button></DialogFooter>
             </form>
@@ -9190,7 +9191,7 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
               <TableRow key={entity.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{entity.name}</TableCell>
                 <TableCell>
-                  <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : 'bg-green-50 text-green-700'}`}>
+                  <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : (entity as any).entityType === 'factory' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
                     {((entity as any).entityType || 'outlet').replace('_', ' ')}
                   </Badge>
                 </TableCell>
@@ -9220,11 +9221,12 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
                 <SelectTrigger><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="outlet">Outlet (Shop/Branch)</SelectItem>
+                  <SelectItem value="factory">Factory</SelectItem>
                   <SelectItem value="warehouse">Warehouse</SelectItem>
                   <SelectItem value="head_office">Head Office</SelectItem>
                 </SelectContent>
               </Select>
-              <p className="text-[11px] text-muted-foreground">Outlet → uses outletCommission from incentive formulas. Head Office & Warehouse → uses headOfficeCommission.</p>
+              <p className="text-[11px] text-muted-foreground">Outlet → uses outletCommission from incentive formulas. Factory, Head Office & Warehouse → uses headOfficeCommission.</p>
             </div>
             <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEntityId ? 'Update' : 'Create'}</Button></DialogFooter>
           </form>

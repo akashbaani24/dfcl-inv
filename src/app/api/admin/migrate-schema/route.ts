@@ -329,11 +329,11 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE PurchaseItem ADD COLUMN landedCostPerUnit REAL NOT NULL DEFAULT 0',
     description: 'Add landedCostPerUnit column to PurchaseItem',
   },
-  // v50: Entity type (outlet/warehouse/head_office)
+  // v50: Entity type (outlet/factory/warehouse/head_office) — free-text, no migration needed when adding new types
   {
     id: '2026_06_19_entity_type',
     sql: 'ALTER TABLE Entity ADD COLUMN entityType TEXT NOT NULL DEFAULT \'outlet\'',
-    description: 'Add entityType column to Entity (outlet/warehouse/head_office)',
+    description: 'Add entityType column to Entity (outlet/factory/warehouse/head_office)',
   },
   // v50: Item optional descriptive fields
   {

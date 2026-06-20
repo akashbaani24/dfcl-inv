@@ -109,9 +109,10 @@ model Entity {
   id          String   @id @default(cuid())
   name        String   @unique
   description String?
-  // ★ Entity type: "outlet" (shop/branch), "warehouse", "head_office"
+  // ★ Entity type: "outlet" (shop/branch), "factory", "warehouse", "head_office"
   // Used by incentive formula to determine which commission rate applies:
   //   - outlet → use outletCommission
+  //   - factory → use headOfficeCommission (falls under "Head Office and others")
   //   - head_office → use headOfficeCommission
   //   - warehouse → use headOfficeCommission (falls under "Head Office and others")
   entityType  String   @default("outlet")
@@ -758,7 +759,7 @@ model Incentive {
 // A single formula can have MULTIPLE ranges (e.g. 700-1000, 1001-1500, 1501-2000)
 // Each range has two commission rates:
 //   - outletCommission: applies to all entities of type "outlet"
-//   - headOfficeCommission: applies to entities of type "head_office" and "warehouse" (Head Office and others)
+//   - headOfficeCommission: applies to entities of type "head_office", "factory" and "warehouse" (Head Office and others)
 // A single formula can include multiple items (via IncentiveFormulaItem).
 model IncentiveFormula {
   id              String   @id @default(cuid())
