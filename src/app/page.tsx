@@ -2717,11 +2717,6 @@ export default function Home() {
               </div>
             </div>
             <h1 className="text-2xl font-bold leading-tight mb-2">Akash Digital System</h1>
-            <div className="flex flex-wrap gap-1.5 mt-3">
-              {['Multi-Entity', 'Sales & POS', 'Purchase', 'Incentive', 'Delivery'].map(feature => (
-                <span key={feature} className="text-[10px] font-medium px-2.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">{feature}</span>
-              ))}
-            </div>
           </div>
         </div>
 
@@ -2861,18 +2856,6 @@ export default function Home() {
               <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-4">
                 Akash Digital System
               </h1>
-
-              {/* Feature pills */}
-              <div className="flex flex-wrap gap-2 mt-6">
-                {['Multi-Entity', 'Sales & POS', 'Purchase & COGS', 'Incentive Engine', 'Approval Workflow'].map(feature => (
-                  <span
-                    key={feature}
-                    className="text-xs font-medium px-3 py-1.5 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm"
-                  >
-                    {feature}
-                  </span>
-                ))}
-              </div>
             </div>
 
             {/* Bottom: developer credit + contact */}
