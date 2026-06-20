@@ -74,3 +74,26 @@ Stage Summary:
 - API: GET /api/news-ticker is now public (no auth); POST remains admin/manager-only.
 - The in-app News Ticker admin page (renderNewsTickerPage) is preserved — admins still use it to manage messages and customize display settings.
 - User needs to wait for Vercel auto-deploy from main (2-3 minutes), then open the login page to see the ticker.
+
+---
+Task ID: 4
+Agent: main
+Task: User reported bug: "ticker run howar somoy full message show kore na, olpo run howar por abar start kore" — ticker doesn't show the full message, restarts after scrolling only a little.
+
+Work Log:
+- Inspected src/app/globals.css. Found the .ticker-track CSS class:
+    .ticker-track { animation: ticker-scroll 30s linear infinite; }
+  No display property set — defaults to display:block.
+- Identified the root cause: as a block element, the track's width = parent (container) width, NOT its content width. The keyframe `translateX(-50%)` moves by 50% of the ELEMENT's width = 50% of container width. This is much less than one full copy of the messages, so the animation loops back before the full message has scrolled past.
+- Initially added `display: inline-block; min-width: 100%;` but realized min-width:100% introduces a NEW bug for short content (track would be container-width with content+empty-space, and at animation end the user would see only empty space).
+- Revised to just `display: inline-block` (no min-width). This makes the track's width = its content's width. translateX(-50%) then moves by exactly one full copy of the messages, creating a correct seamless loop.
+- For long messages (the reported bug): now scrolls fully across the visible area before looping.
+- For short messages: may show some empty space to the right of the duplicated content, but the animation itself is correct (no broken/empty frames).
+- Added a detailed comment in globals.css explaining the rationale so future maintainers don't accidentally remove the display:inline-block.
+- Committed as d138f5e v60-fix19: Fix news ticker not showing full message before restarting.
+- Pushed to GitHub: 73e7586..d138f5e main -> main ✅
+
+Stage Summary:
+- Bug fix is a one-line CSS change: added `display: inline-block` to `.ticker-track` in src/app/globals.css.
+- Applies globally to both the login page ticker and the in-app News Ticker admin live preview.
+- User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh the login page to verify the full ticker message now scrolls across before restarting.
