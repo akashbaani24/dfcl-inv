@@ -15,7 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useLanguage } from '@/lib/i18n'
 import { banglaPhoneticLastWord } from '@/lib/bangla-phonetic'
-import FabricStudio from '@/components/FabricStudio'
+import FabricStudio3D from '@/components/FabricStudio3D'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
@@ -3080,7 +3080,7 @@ export default function Home() {
     { key: 'damage' as ViewType, label: 'Damage/Wastage', bnLabel: 'ক্ষতি/অপচয়', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', bnLabel: 'ইনসেনটিভ', icon: DollarSign },
     { key: 'newsTicker' as ViewType, label: 'News Ticker', bnLabel: 'নিউজ টিকার', icon: FileText },
-    { key: 'fabricStudio' as ViewType, label: 'Fabric Studio', bnLabel: 'ফ্যাব্রিক স্টুডিও', icon: Wand2 },
+    { key: 'fabricStudio' as ViewType, label: 'Fabric Studio (3D)', bnLabel: 'ফ্যাব্রিক স্টুডিও (3D)', icon: Wand2 },
     { key: 'accounts' as ViewType, label: 'Income/Expense', bnLabel: 'আয়/ব্যয়', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', bnLabel: 'রিপোর্ট', icon: FileText },
   ].filter(item => {
@@ -8862,7 +8862,7 @@ export default function Home() {
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
-      case 'fabricStudio': return <FabricStudio onPlaceOrder={(product, fabric) => {
+      case 'fabricStudio': return <FabricStudio3D onPlaceOrder={(product, fabric) => {
         toast({
           title: t('Opening Booking Page', 'বুকিং পেজ খোলা হচ্ছে'),
           description: t(

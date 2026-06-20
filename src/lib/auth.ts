@@ -193,7 +193,7 @@ export const MENU_ITEMS = [
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
-  { key: 'fabricStudio', label: 'Fabric Studio', group: 'Studio' },
+  { key: 'fabricStudio', label: 'Fabric Studio (3D)', group: 'Studio' },
   { key: 'accounts', label: 'Income/Expense', group: 'Function' },
   { key: 'reports', label: 'Reports (All)', group: 'Function' },
   { key: 'reports_overview', label: 'Report: Overview', group: 'Function' },
