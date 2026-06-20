@@ -15,6 +15,7 @@ import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useLanguage } from '@/lib/i18n'
 import { banglaPhoneticLastWord } from '@/lib/bangla-phonetic'
+import FabricStudio from '@/components/FabricStudio'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
@@ -70,6 +71,7 @@ import {
   Phone,
   Mail,
   Barcode,
+  Wand2,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import {
@@ -173,7 +175,7 @@ type ViewType =
   | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive' | 'newReceive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'newSalesReturn' | 'tailorPayment' | 'newTailorPayment'
-  | 'booking' | 'newBooking' | 'bookingDetail' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'accounts' | 'dailySales' | 'reports'
+  | 'booking' | 'newBooking' | 'bookingDetail' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'fabricStudio' | 'accounts' | 'dailySales' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'userForm' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -3078,6 +3080,7 @@ export default function Home() {
     { key: 'damage' as ViewType, label: 'Damage/Wastage', bnLabel: 'ক্ষতি/অপচয়', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', bnLabel: 'ইনসেনটিভ', icon: DollarSign },
     { key: 'newsTicker' as ViewType, label: 'News Ticker', bnLabel: 'নিউজ টিকার', icon: FileText },
+    { key: 'fabricStudio' as ViewType, label: 'Fabric Studio', bnLabel: 'ফ্যাব্রিক স্টুডিও', icon: Wand2 },
     { key: 'accounts' as ViewType, label: 'Income/Expense', bnLabel: 'আয়/ব্যয়', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', bnLabel: 'রিপোর্ট', icon: FileText },
   ].filter(item => {
@@ -8859,6 +8862,16 @@ export default function Home() {
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
+      case 'fabricStudio': return <FabricStudio onPlaceOrder={(product, fabric) => {
+        toast({
+          title: t('Opening Booking Page', 'বুকিং পেজ খোলা হচ্ছে'),
+          description: t(
+            `Product: ${product.nameEn}${fabric ? ' • Fabric: ' + fabric.nameEn : ''}`,
+            `পণ্য: ${product.nameBn}${fabric ? ' • ফ্যাব্রিক: ' + fabric.nameBn : ''}`
+          ),
+        })
+        setCurrentView('newBooking')
+      }} />
       case 'accounts': return renderAccountsPage()
       case 'dailySales': return renderDailySalesPage()
       case 'reports': return renderReportsPage()
@@ -10255,6 +10268,7 @@ Wool Pant,Head Office,75,PCS`}</pre>
             <Button variant={currentView === 'booking' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('booking')} title="Booking"><Receipt className="w-4 h-4" /></Button>
             <Button variant={currentView === 'bookingReasons' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('bookingReasons')} title="Booking Reasons"><FileText className="w-4 h-4" /></Button>
             <Button variant={currentView === 'incentive' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('incentive')} title="Incentive"><DollarSign className="w-4 h-4" /></Button>
+            <Button variant={currentView === 'fabricStudio' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('fabricStudio')} title="Fabric Studio"><Wand2 className="w-4 h-4" /></Button>
             <Button variant={currentView === 'reports' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('reports')} title="Reports"><FileText className="w-4 h-4" /></Button>
             {(isManagerOrAdmin || visibleMasterDataItems.length > 0) && <Button variant={isMasterDataActive ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => { const firstVisible = visibleMasterDataItems[0]; if (firstVisible) setCurrentView(firstVisible.key); }} title="Master Data"><Database className="w-4 h-4" /></Button>}
             {isAdmin && <Button variant={currentView === 'settings' ? 'default' : 'ghost'} size="icon" className="my-1" onClick={() => setCurrentView('settings')} title="Settings"><Settings2 className="w-4 h-4" /></Button>}
