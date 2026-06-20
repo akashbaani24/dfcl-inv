@@ -729,6 +729,27 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE "UserMenuAccess" ADD COLUMN "canApprove" BOOLEAN NOT NULL DEFAULT 0',
     description: 'Add canApprove column to UserMenuAccess',
   },
+  // ★ v59: Add foreign purchase fields + shippingTo to Purchase
+  {
+    id: '2026_06_20_purchase_lcno',
+    sql: 'ALTER TABLE "Purchase" ADD COLUMN "lcNo" TEXT',
+    description: 'Add lcNo column to Purchase (foreign purchases)',
+  },
+  {
+    id: '2026_06_20_purchase_pino',
+    sql: 'ALTER TABLE "Purchase" ADD COLUMN "piNo" TEXT',
+    description: 'Add piNo column to Purchase (foreign purchases)',
+  },
+  {
+    id: '2026_06_20_purchase_bankname',
+    sql: 'ALTER TABLE "Purchase" ADD COLUMN "bankName" TEXT',
+    description: 'Add bankName column to Purchase (foreign purchases)',
+  },
+  {
+    id: '2026_06_20_purchase_shippingto',
+    sql: 'ALTER TABLE "Purchase" ADD COLUMN "shippingTo" TEXT',
+    description: 'Add shippingTo column to Purchase (both local and foreign)',
+  },
 ];
 
 export async function POST(request: NextRequest) {

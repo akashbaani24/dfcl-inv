@@ -66,7 +66,7 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { purchaseDate, purchaseType, entityId, supplierId, billNo, notes, items } = body;
+    const { purchaseDate, purchaseType, entityId, supplierId, billNo, notes, items, lcNo, piNo, bankName, shippingTo } = body;
 
     if (!entityId) return NextResponse.json({ error: 'Entity (Purchase For) is required' }, { status: 400 });
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -107,6 +107,10 @@ export async function POST(request: NextRequest) {
         entityId,
         supplierId: supplierId || null,
         billNo: billNo || null,
+        lcNo: lcNo || null,
+        piNo: piNo || null,
+        bankName: bankName || null,
+        shippingTo: shippingTo || null,
         notes: notes || null,
         status: 'pending',
         createdBy: currentUser.id,

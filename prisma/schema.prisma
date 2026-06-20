@@ -444,6 +444,12 @@ model Purchase {
   entityId     String   // "Purchase For" — which entity is receiving the items
   supplierId   String?
   billNo       String?
+  // ★ v59: Foreign purchase additional fields
+  lcNo         String?  // LC Number (foreign only)
+  piNo         String?  // P.I. Number (foreign only)
+  bankName     String?  // Bank Name (foreign only)
+  // ★ v59: Shipping To (for both local and foreign)
+  shippingTo   String?  // Shipping destination address/entity
   status       String   @default("pending")  // "pending", "approved", "cancelled"
   notes        String?
   createdBy    String?

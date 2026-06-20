@@ -168,10 +168,10 @@ interface ReportData {
 type ViewType =
   | 'entitySelect'
   | 'itemPrice' | 'myEntityStock' | 'allEntityStock'
-  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive'
+  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive' | 'newReceive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
-  | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'tailorPayment' | 'newTailorPayment'
-  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
+  | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'newSalesReturn' | 'tailorPayment' | 'newTailorPayment'
+  | 'booking' | 'newBooking' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'userForm' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -293,6 +293,10 @@ export default function Home() {
   const [adjustments, setAdjustments] = useState<ItemAdjustmentData[]>([])
   const [adjustmentForm, setAdjustmentForm] = useState({ itemId: '', adjustmentType: 'increase', quantity: '', reason: '' })
   const [showAdjustmentDialog, setShowAdjustmentDialog] = useState(false)
+  // ★ Multi-item adjustment state
+  const [multiAdjustmentRows, setMultiAdjustmentRows] = useState<Array<{ itemId: string; itemName: string; barcode: string; itemCode: string; uom: string; quantity: string; currentStock: number | null }>>([])
+  const [multiAdjustmentType, setMultiAdjustmentType] = useState<'increase' | 'decrease'>('increase')
+  const [multiAdjustmentReason, setMultiAdjustmentReason] = useState('')
 
   const [transfers, setTransfers] = useState<TransferData[]>([])
   const [transferForm, setTransferForm] = useState({ itemId: '', toEntityId: '', quantity: '', notes: '' })
@@ -338,6 +342,10 @@ export default function Home() {
     entityId: '',
     supplierId: '',
     billNo: '',
+    lcNo: '',
+    piNo: '',
+    bankName: '',
+    shippingTo: '',
     notes: '',
     items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; uom: string }>,
   })
@@ -3468,8 +3476,10 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Item Adjustment - {workingEntity?.name}</h2>
         <Button onClick={() => {
-          setAdjustmentForm({ itemId: '', adjustmentType: 'increase', quantity: '', reason: '' })
-          setTxItemSearch(''); setTxItemResults([])
+          setMultiAdjustmentRows([])
+          setMultiAdjustmentType('increase')
+          setMultiAdjustmentReason('')
+          setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null)
           setCurrentView('newAdjustment')
         }}><Plus className="w-4 h-4 mr-2" />New Adjustment</Button>
       </div>
@@ -3499,56 +3509,144 @@ export default function Home() {
     </div>
   )
 
-  // ★ Full-page form for new item adjustment (was a dialog before)
+  // ★ Full-page multi-item adjustment form
   const renderNewAdjustmentPage = () => {
-    // Pre-fetch current stock for selected item to show in the form
-    return (
-      <div className="space-y-4 max-w-3xl mx-auto">
-        <div className="flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3">
-            <Button type="button" variant="outline" size="sm" onClick={() => { setShowAdjustmentDialog(false); setCurrentView('itemAdjustment') }}>
-              <ArrowLeft className="w-4 h-4 mr-1" /> Back
-            </Button>
-            <h2 className="text-xl font-semibold">New Item Adjustment — {workingEntity?.name}</h2>
-          </div>
-        </div>
+    const addAdjustmentRow = (item: any) => {
+      if (multiAdjustmentRows.find(r => r.itemId === item.id)) {
+        toast({ title: 'Already added', description: `${item.itemName} is already in the adjustment list.`, variant: 'destructive' })
+        return
+      }
+      setMultiAdjustmentRows(rows => [...rows, {
+        itemId: item.id,
+        itemName: item.itemName || '',
+        barcode: item.barcode || '',
+        itemCode: item.itemCode || '',
+        uom: item.uom || 'PCS',
+        quantity: '1',
+        currentStock: null,
+      }])
+      // Fetch current stock for this item
+      if (workingEntity) {
+        authFetch(`/api/stock/by-entity?entityId=${workingEntity.id}`)
+          .then(r => r.json())
+          .then(d => {
+            const row = (d.stocks || []).find((s: any) => s.itemId === item.id)
+            if (row) {
+              setMultiAdjustmentRows(rows => rows.map(r => r.itemId === item.id ? { ...r, currentStock: row.quantity } : r))
+            }
+          })
+          .catch(() => {})
+      }
+    }
 
+    const handleSaveMultiAdjustment = async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!workingEntity) return
+      if (multiAdjustmentRows.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
+      if (!multiAdjustmentReason) { toast({ title: 'Error', description: 'Reason is required', variant: 'destructive' }); return }
+      const ok = await confirm({
+        title: `Save ${multiAdjustmentType === 'increase' ? 'Increase' : 'Decrease'} Adjustments?`,
+        message: `This will ${multiAdjustmentType} stock for ${multiAdjustmentRows.length} item(s) at "${workingEntity?.name}". ${multiAdjustmentType === 'decrease' ? 'System will refuse if any item would go below 0.' : ''} Do you want to continue?`,
+        confirmLabel: 'Save Adjustments',
+      })
+      if (!ok) return
+      let success = 0
+      const failures: string[] = []
+      for (const row of multiAdjustmentRows) {
+        try {
+          const res = await authFetch('/api/item-adjustments', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ itemId: row.itemId, entityId: workingEntity.id, adjustmentType: multiAdjustmentType, quantity: parseInt(row.quantity), reason: multiAdjustmentReason }),
+          })
+          if (res.ok) success++
+          else {
+            const d = await res.json().catch(() => ({}))
+            failures.push(`${row.itemName}: ${d.error || 'failed'}`)
+          }
+        } catch { failures.push(`${row.itemName}: network error`) }
+      }
+      if (success > 0) toast({ title: 'Success', description: `${success} of ${multiAdjustmentRows.length} adjustment(s) saved` })
+      if (failures.length > 0) toast({ title: 'Some failed', description: failures.slice(0, 3).join(' | '), variant: 'destructive' })
+      if (success === multiAdjustmentRows.length) {
+        setMultiAdjustmentRows([]); setMultiAdjustmentReason(''); setCurrentView('itemAdjustment'); fetchAdjustments()
+      }
+    }
+
+    return (
+      <div className="space-y-4 max-w-5xl mx-auto">
+        <div className="flex items-center gap-3">
+          <Button type="button" variant="outline" size="sm" onClick={() => setCurrentView('itemAdjustment')}>
+            <ArrowLeft className="w-4 h-4 mr-1" /> Back
+          </Button>
+          <h2 className="text-xl font-semibold">New Item Adjustment — {workingEntity?.name}</h2>
+        </div>
         <Card>
           <CardContent className="pt-6">
-            <form onSubmit={handleSaveAdjustment} className="space-y-5">
-              <div className="space-y-2">
-                <Label className="text-sm font-semibold">Item *</Label>
-                {renderItemSearchField(adjustmentForm.itemId, (item) => setAdjustmentForm(f => ({ ...f, itemId: item.id || '' })))}
-              </div>
-
+            <form onSubmit={handleSaveMultiAdjustment} className="space-y-5">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <Label>Adjustment Type *</Label>
-                  <Select value={adjustmentForm.adjustmentType} onValueChange={v => setAdjustmentForm(f => ({ ...f, adjustmentType: v }))}>
+                  <Select value={multiAdjustmentType} onValueChange={v => setMultiAdjustmentType(v as 'increase' | 'decrease')}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
                       <SelectItem value="increase">Increase (+)</SelectItem>
                       <SelectItem value="decrease">Decrease (-)</SelectItem>
                     </SelectContent>
                   </Select>
-                  {adjustmentForm.adjustmentType === 'decrease' && (
-                    <p className="text-[11px] text-amber-600">⚠ System will refuse if stock would go below 0.</p>
-                  )}
+                  {multiAdjustmentType === 'decrease' && <p className="text-[11px] text-amber-600">⚠ System will refuse if stock would go below 0.</p>}
                 </div>
                 <div className="space-y-2">
-                  <Label>Quantity *</Label>
-                  <Input type="number" value={adjustmentForm.quantity} onChange={e => setAdjustmentForm(f => ({ ...f, quantity: e.target.value }))} required min="1" />
+                  <Label>Reason *</Label>
+                  <Input value={multiAdjustmentReason} onChange={e => setMultiAdjustmentReason(e.target.value)} required placeholder="e.g. Damaged in transit, Stocktake correction, ..." />
                 </div>
               </div>
 
-              <div className="space-y-2">
-                <Label>Reason *</Label>
-                <Input value={adjustmentForm.reason} onChange={e => setAdjustmentForm(f => ({ ...f, reason: e.target.value }))} required placeholder="e.g. Damaged in transit, Stocktake correction, ..." />
+              <div className="space-y-3">
+                <Label className="text-sm font-semibold">Add Items (scan barcode or search)</Label>
+                {renderItemSearchField('', (item) => { addAdjustmentRow(item); setTxSelectedItem(null) })}
               </div>
 
+              {multiAdjustmentRows.length > 0 ? (
+                <div className="border rounded-md overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead className="bg-primary text-primary-foreground">
+                      <tr>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-10">SL</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-32">Barcode</th>
+                        <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Current Stock</th>
+                        <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-24">Qty *</th>
+                        <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-16">UoM</th>
+                        <th className="px-2 py-2 w-10"></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {multiAdjustmentRows.map((row, i) => (
+                        <tr key={row.itemId} className="border-t hover:bg-muted/20">
+                          <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
+                          <td className="px-2 py-2 font-medium">{row.itemName}</td>
+                          <td className="px-2 py-2 font-mono text-xs">{row.barcode || row.itemCode || '—'}</td>
+                          <td className="px-2 py-2 text-right">{row.currentStock === null ? '…' : row.currentStock}</td>
+                          <td className="px-2 py-2 text-right">
+                            <Input type="number" min="1" value={row.quantity} onChange={e => setMultiAdjustmentRows(rows => rows.map(r => r.itemId === row.itemId ? { ...r, quantity: e.target.value } : r))} className="h-8 text-right text-sm w-full min-w-[70px]" />
+                          </td>
+                          <td className="px-2 py-2">{row.uom}</td>
+                          <td className="px-2 py-2 text-center">
+                            <Button type="button" variant="ghost" size="sm" onClick={() => setMultiAdjustmentRows(rows => rows.filter(r => r.itemId !== row.itemId))} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <p className="text-sm text-muted-foreground text-center py-6 border rounded-md border-dashed">No items added yet. Scan a barcode or search for an item above.</p>
+              )}
+
               <div className="flex items-center justify-end gap-2 pt-4 border-t">
-                <Button type="button" variant="outline" onClick={() => { setShowAdjustmentDialog(false); setCurrentView('itemAdjustment') }}>Cancel</Button>
-                <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Adjustment</Button>
+                <Button type="button" variant="outline" onClick={() => { setMultiAdjustmentRows([]); setMultiAdjustmentReason(''); setCurrentView('itemAdjustment') }}>Cancel</Button>
+                <Button type="submit" disabled={multiAdjustmentRows.length === 0}><Save className="w-4 h-4 mr-2" />Save {multiAdjustmentRows.length} Adjustment{multiAdjustmentRows.length !== 1 ? 's' : ''}</Button>
               </div>
             </form>
           </CardContent>
@@ -3921,7 +4019,7 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Receive - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowReceiveDialog(true); setTxItemSearch(''); setTxItemResults([]) }}><Plus className="w-4 h-4 mr-2" />New Receive</Button>
+        <Button onClick={() => { setReceiveForm({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' }); setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null); setCurrentView('newReceive') }}><Plus className="w-4 h-4 mr-2" />New Receive</Button>
       </div>
 
       {/* ★ Incoming Transfers panel — pending transfers destined TO this entity.
@@ -4658,6 +4756,10 @@ export default function Home() {
       entityId: workingEntity?.id || '',
       supplierId: '',
       billNo: '',
+      lcNo: '',
+      piNo: '',
+      bankName: '',
+      shippingTo: '',
       notes: '',
       items: [],
     })
@@ -4728,6 +4830,10 @@ export default function Home() {
         entityId: purchaseForm.entityId,
         supplierId: purchaseForm.supplierId || undefined,
         billNo: purchaseForm.billNo || undefined,
+        lcNo: purchaseForm.lcNo || undefined,
+        piNo: purchaseForm.piNo || undefined,
+        bankName: purchaseForm.bankName || undefined,
+        shippingTo: purchaseForm.shippingTo || undefined,
         notes: purchaseForm.notes || undefined,
         items: purchaseForm.items.map(i => ({
           itemId: i.itemId,
@@ -5138,6 +5244,30 @@ export default function Home() {
                 </div>
               </div>
 
+              {/* Shipping To (both local & foreign) */}
+              <div className="space-y-2">
+                <Label>Shipping To</Label>
+                <Input placeholder="Shipping destination (e.g. warehouse address, entity name)" value={purchaseForm.shippingTo} onChange={e => setPurchaseForm({ ...purchaseForm, shippingTo: e.target.value })} />
+              </div>
+
+              {/* Foreign-only fields — shown when purchaseType is 'foreign' */}
+              {purchaseForm.purchaseType === 'foreign' && (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4 p-4 rounded-lg border border-blue-200 bg-blue-50/40">
+                  <div className="space-y-2">
+                    <Label className="text-blue-900">LC Number</Label>
+                    <Input placeholder="Letter of Credit number" value={purchaseForm.lcNo} onChange={e => setPurchaseForm({ ...purchaseForm, lcNo: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-blue-900">P.I. Number</Label>
+                    <Input placeholder="Proforma Invoice number" value={purchaseForm.piNo} onChange={e => setPurchaseForm({ ...purchaseForm, piNo: e.target.value })} />
+                  </div>
+                  <div className="space-y-2">
+                    <Label className="text-blue-900">Bank Name</Label>
+                    <Input placeholder="Bank name for LC" value={purchaseForm.bankName} onChange={e => setPurchaseForm({ ...purchaseForm, bankName: e.target.value })} />
+                  </div>
+                </div>
+              )}
+
               <Separator />
 
               {/* Items */}
@@ -5323,7 +5453,7 @@ export default function Home() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Sales Return - {workingEntity?.name}</h2>
-        <Button onClick={() => { setShowSalesReturnDialog(true); setTxItemSearch(''); setTxItemResults([]); fetchCustomers() }}><Plus className="w-4 h-4 mr-2" />New Return</Button>
+        <Button onClick={() => { setSalesReturnForm({ itemId: '', customerId: '', salesOrderId: '', quantity: '', price: '', reason: '' }); setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null); fetchCustomers(); setCurrentView('newSalesReturn') }}><Plus className="w-4 h-4 mr-2" />New Return</Button>
       </div>
       <div className="border rounded-lg overflow-hidden">
         <Table>
@@ -5605,6 +5735,117 @@ export default function Home() {
       </div>
     )
   }
+
+  // ★ New Receive — full page (not popup)
+  const renderNewReceivePage = () => (
+    <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" size="sm" onClick={() => setCurrentView('receive')}>
+          <ArrowLeft className="w-4 h-4 mr-1" /> Back
+        </Button>
+        <h2 className="text-xl font-semibold">New Receive — {workingEntity?.name}</h2>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveReceive} className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Item *</Label>
+              {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '' })))}
+            </div>
+            <div className="space-y-2"><Label>Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Quantity *</Label><Input type="number" value={receiveForm.quantity} onChange={e => setReceiveForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
+              <div className="space-y-2"><Label>Source Entity</Label><Select value={receiveForm.sourceEntityId || '__none__'} onValueChange={v => setReceiveForm(f => ({ ...f, sourceEntityId: v === '__none__' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
+            </div>
+            <div className="space-y-2"><Label>Reference No</Label><Input value={receiveForm.referenceNo} onChange={e => setReceiveForm(f => ({ ...f, referenceNo: e.target.value }))} /></div>
+            <div className="space-y-2"><Label>Notes</Label><Input value={receiveForm.notes} onChange={e => setReceiveForm(f => ({ ...f, notes: e.target.value }))} /></div>
+            <div className="flex items-center justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setCurrentView('receive')}>Cancel</Button>
+              <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Receive</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+
+  // ★ New Sales Return — full page (not popup)
+  const renderNewSalesReturnPage = () => (
+    <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" size="sm" onClick={() => setCurrentView('salesReturn')}>
+          <ArrowLeft className="w-4 h-4 mr-1" /> Back
+        </Button>
+        <h2 className="text-xl font-semibold">New Sales Return — {workingEntity?.name}</h2>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveSalesReturn} className="space-y-5">
+            <div className="space-y-2">
+              <Label className="text-sm font-semibold">Item *</Label>
+              {renderItemSearchField(salesReturnForm.itemId, (item) => setSalesReturnForm(f => ({ ...f, itemId: item.id || '', price: item.price?.toString() || '' })))}
+            </div>
+            <div className="space-y-2"><Label>Customer *</Label><Select value={salesReturnForm.customerId} onValueChange={v => setSalesReturnForm(f => ({ ...f, customerId: v }))}><SelectTrigger><SelectValue placeholder="Select customer" /></SelectTrigger><SelectContent>{customers.map(c => <SelectItem key={c.id} value={c.id}>{c.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Quantity *</Label><Input type="number" value={salesReturnForm.quantity} onChange={e => setSalesReturnForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
+              <div className="space-y-2"><Label>Price *</Label><Input type="number" step="0.01" value={salesReturnForm.price} onChange={e => setSalesReturnForm(f => ({ ...f, price: e.target.value }))} required /></div>
+            </div>
+            <div className="space-y-2"><Label>Reason *</Label><Input value={salesReturnForm.reason} onChange={e => setSalesReturnForm(f => ({ ...f, reason: e.target.value }))} required /></div>
+            <div className="flex items-center justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setCurrentView('salesReturn')}>Cancel</Button>
+              <Button type="submit"><Save className="w-4 h-4 mr-2" />Create Return</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
+
+  // ★ New Supplier Payment — full page (not popup)
+  const renderNewSupplierPaymentPage = () => (
+    <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3">
+        <Button type="button" variant="outline" size="sm" onClick={() => setCurrentView('supplierPayments')}>
+          <ArrowLeft className="w-4 h-4 mr-1" /> Back
+        </Button>
+        <h2 className="text-xl font-semibold">New Supplier Payment — {workingEntity?.name}</h2>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveSp} className="space-y-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Supplier</Label>
+                <Select value={spForm.supplierId || '__none__'} onValueChange={v => setSpForm(f => ({ ...f, supplierId: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select supplier" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    {(suppliers || []).filter(s => s.status === 'active').map(s => <SelectItem key={s.id} value={s.id}>{s.name}</SelectItem>)}
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2"><Label>Amount *</Label><Input type="number" step="0.01" value={spForm.amount} onChange={e => setSpForm(f => ({ ...f, amount: e.target.value }))} required /></div>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2"><Label>Payment Date</Label><Input type="date" value={spForm.paymentDate} onChange={e => setSpForm(f => ({ ...f, paymentDate: e.target.value }))} required /></div>
+              <div className="space-y-2"><Label>Payment Type</Label><Select value={spForm.paymentType} onValueChange={v => setSpForm(f => ({ ...f, paymentType: v }))}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="cheque">Cheque</SelectItem><SelectItem value="bank">Bank Transfer</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem></SelectContent></Select></div>
+            </div>
+            {spForm.paymentType === 'cheque' && (
+              <div className="grid grid-cols-2 gap-4">
+                <div className="space-y-2"><Label>Cheque No</Label><Input value={spForm.chequeNo} onChange={e => setSpForm(f => ({ ...f, chequeNo: e.target.value }))} /></div>
+                <div className="space-y-2"><Label>Bank Name</Label><Input value={spForm.bankName} onChange={e => setSpForm(f => ({ ...f, bankName: e.target.value }))} /></div>
+              </div>
+            )}
+            <div className="space-y-2"><Label>Notes</Label><Input value={spForm.notes} onChange={e => setSpForm(f => ({ ...f, notes: e.target.value }))} /></div>
+            <div className="flex items-center justify-end gap-2 pt-4 border-t">
+              <Button type="button" variant="outline" onClick={() => setCurrentView('supplierPayments')}>Cancel</Button>
+              <Button type="submit"><Save className="w-4 h-4 mr-2" />Save Payment</Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
 
   const renderBookingPage = () => {
     // Filter bookings by date range
@@ -6198,7 +6439,7 @@ export default function Home() {
       <div className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">Supplier Payments - {workingEntity?.name}</h2>
-          <Button onClick={() => setShowSpDialog(true)}><Plus className="w-4 h-4 mr-2" />New Payment</Button>
+          <Button onClick={() => { setSpForm({ supplierId: '', purchaseId: '', amount: '', paymentDate: new Date().toISOString().split('T')[0], paymentType: 'cash', chequeNo: '', bankName: '', notes: '' }); setCurrentView('newSupplierPayment') }}><Plus className="w-4 h-4 mr-2" />New Payment</Button>
         </div>
         <div className="flex gap-3 items-center">
           <Input placeholder="Search supplier..." value={spSearch} onChange={e => setSpSearch(e.target.value)} className="w-64" />
@@ -7888,6 +8129,7 @@ export default function Home() {
       case 'transfer': return renderTransferPage()
       case 'newTransfer': return renderNewTransferPage()
       case 'receive': return renderReceivePage()
+      case 'newReceive': return renderNewReceivePage()
       case 'purchase': return renderPurchaseListPage()
       case 'newPurchase': return renderNewPurchasePage()
       case 'purchaseApproval': return renderPurchaseApprovalPage()
@@ -7895,6 +8137,7 @@ export default function Home() {
       case 'salesOrder': return renderSalesOrderPage()
       case 'newSalesOrder': return renderNewSalesOrderPage()
       case 'salesReturn': return renderSalesReturnPage()
+      case 'newSalesReturn': return renderNewSalesReturnPage()
       case 'tailorPayment': return renderTailorPaymentPage()
       case 'newTailorPayment': return renderNewTailorPaymentPage()
       case 'booking': return renderBookingPage()
@@ -7904,6 +8147,7 @@ export default function Home() {
       case 'newFormula': return renderNewFormulaPage()
       case 'cogsPage': return renderCogsPage()
       case 'supplierPayments': return renderSupplierPaymentsPage()
+      case 'newSupplierPayment': return renderNewSupplierPaymentPage()
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
