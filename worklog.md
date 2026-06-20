@@ -129,3 +129,28 @@ Stage Summary:
 - Noto Sans Bengali font loaded via next/font (self-hosted, offline-capable).
 - Pages other than login/sidebar still show English labels — can be translated incrementally using the same t() helper in future commits.
 - User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh to see toggles.
+
+---
+Task ID: 6
+Agent: main
+Task: User reported: "item code column dorkar nai, jehetu new item create e ei jinis already baad disi" — Remove the Item Code column from the stock view since the New Item form no longer collects itemCode.
+
+Work Log:
+- Used VLM to analyze the uploaded screenshot (pasted_image_1781951131688.png). Identified it as the 'My Entity Stock - Head Office' page showing columns: Item Name, Barcode, Item Code (highlighted with red border indicating user's cursor/focus), Group, Sub Group, UoM, In Stock, Booked, Available.
+- Located the StockTable component in src/app/page.tsx at line 3418.
+- Found the Item Code column definition: <TableHead>Item Code</TableHead> at line 3531 and <TableCell>{s.itemCode || '—'}</TableCell> at line 3549.
+- Made three changes:
+  1. Removed the 'Item Code' column header (line 3531)
+  2. Removed the 'Item Code' data cell in each row (line 3549)
+  3. Adjusted colSpan for the Loading row and 'No stock data' row from (entityId ? 9 : 10) to (entityId ? 8 : 9) so the empty-state cells span the right number of columns.
+- Also updated the search input placeholder from 'Search by item name, barcode, item code...' to 'Search by item name, barcode...' since itemCode is no longer a visible column.
+- Kept the itemCode field in the stockData state and in the filter logic — this way, users can still find an item by typing its code in the search box (matched silently), but the code is not displayed. This matches how itemCode is handled elsewhere in the app and avoids breaking search behavior.
+- Committed as f8c53f1 v60-fix21: Remove 'Item Code' column from My Entity Stock table.
+- Pushed to GitHub: ba0aceb..f8c53f1 main -> main ✅
+
+Stage Summary:
+- 'Item Code' column removed from the My Entity Stock table (and All Entity Stock since both use the same StockTable component).
+- Search by item code still works silently (typing an item code in the search box will still find matching items).
+- Loading/empty rows now have the correct colSpan matching the new 8-9 column layout.
+- New Item form was already clean (no itemCode input) — no change needed there.
+- User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh the stock page to see the cleaner table without the Item Code column.
