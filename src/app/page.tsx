@@ -18,6 +18,7 @@ import { banglaPhoneticLastWord } from '@/lib/bangla-phonetic'
 import FabricStudio3D from '@/components/FabricStudio3D'
 import ImageCompositeFabricStudio from '@/components/ImageCompositeFabricStudio'
 import DepthMapFabricStudio from '@/components/DepthMapFabricStudio'
+import RealGLBFabricStudio from '@/components/RealGLBFabricStudio'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
@@ -8864,12 +8865,12 @@ export default function Home() {
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
-      case 'fabricStudio': return <DepthMapFabricStudio onPlaceOrder={(product, fabric) => {
+      case 'fabricStudio': return <RealGLBFabricStudio onPlaceOrder={(fabric) => {
         toast({
           title: t('Opening Booking Page', 'বুকিং পেজ খোলা হচ্ছে'),
           description: t(
-            `Product: ${product.nameEn}${fabric ? ' • Fabric: ' + fabric.nameEn : ''}`,
-            `পণ্য: ${product.nameBn}${fabric ? ' • ফ্যাব্রিক: ' + fabric.nameBn : ''}`
+            `Product: Real 3D Couch${fabric ? ' • Fabric: ' + fabric.nameEn : ''}`,
+            `পণ্য: রিয়েল 3D কাউচ${fabric ? ' • ফ্যাব্রিক: ' + fabric.nameBn : ''}`
           ),
         })
         setCurrentView('newBooking')
