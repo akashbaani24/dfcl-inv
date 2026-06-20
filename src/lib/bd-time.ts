@@ -65,11 +65,18 @@ export function bdNow(): string {
 }
 
 /**
+ * Format a number as BDT (Bangladeshi Taka) currency string.
+ * Example: 50000 → "৳ 50,000.00"
+ */
+export function fmtBDT(n: number): string {
+  return '৳ ' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(n || 0);
+}
+
+/**
  * Get today's date in BD time as YYYY-MM-DD (for <input type="date"> defaults).
  */
 export function bdTodayISO(): string {
   const now = new Date();
-  // Format in BD timezone
   const bdStr = now.toLocaleDateString('en-CA', { timeZone: BD_TZ, year: 'numeric', month: '2-digit', day: '2-digit' });
-  return bdStr; // en-CA gives YYYY-MM-DD
+  return bdStr;
 }

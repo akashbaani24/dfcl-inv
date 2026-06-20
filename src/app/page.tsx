@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Combobox, type ComboOption } from '@/components/ui/combobox'
 import { useConfirmAction } from '@/hooks/use-confirm-action'
-import { bdDate, bdDateTime, bdTime, bdNow, bdTodayISO } from '@/lib/bd-time'
+import { bdDate, bdDateTime, bdTime, bdNow, bdTodayISO, fmtBDT } from '@/lib/bd-time'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
@@ -995,7 +995,7 @@ export default function Home() {
   const handleSaveDailySales = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!workingEntity) return
-    const ok = await confirm({ title: 'Save Daily Sales?', message: `This will record daily sales for ${dailySalesForm.entryDate}. Total: ${(parseFloat(dailySalesForm.cashAmount||'0') + parseFloat(dailySalesForm.cardAmount||'0') + parseFloat(dailySalesForm.chequeAmount||'0') + parseFloat(dailySalesForm.mobileAmount||'0')).toFixed(2)}. Continue?`, confirmLabel: 'Save' })
+    const ok = await confirm({ title: 'Save Daily Sales?', message: `This will record daily sales for ${dailySalesForm.entryDate}. Total: ৳ ${(parseFloat(dailySalesForm.cashAmount||'0') + parseFloat(dailySalesForm.cardAmount||'0') + parseFloat(dailySalesForm.chequeAmount||'0') + parseFloat(dailySalesForm.mobileAmount||'0')).toFixed(2)}. Continue?`, confirmLabel: 'Save' })
     if (!ok) return
     try {
       const res = await authFetch('/api/accounts-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityId: workingEntity.id, entryType: 'sales', entryDate: dailySalesForm.entryDate, cashAmount: dailySalesForm.cashAmount || 0, cardAmount: dailySalesForm.cardAmount || 0, chequeAmount: dailySalesForm.chequeAmount || 0, mobileAmount: dailySalesForm.mobileAmount || 0, description: dailySalesForm.description }) })
@@ -1492,7 +1492,7 @@ export default function Home() {
     const totalAmount = salesOrderForm.items.reduce((s, it: any) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0) - (parseFloat(salesOrderForm.discount) || 0)
     const ok = await confirm({
       title: editingSalesOrderId ? 'Update Sales Order?' : 'Create Sales Order?',
-      message: `This will ${editingSalesOrderId ? 'update' : 'create'} a sales order with ${itemCount} item line(s), ${totalQty} unit(s) total, and a net amount of ${totalAmount.toFixed(2)}. Stock will be reduced and incentives will be auto-calculated. Regular users will not be able to modify this order afterwards. (Admins can still edit.) Do you want to continue?`,
+      message: `This will ${editingSalesOrderId ? 'update' : 'create'} a sales order with ${itemCount} item line(s), ${totalQty} unit(s) total, and a net amount of ${fmtBDT(totalAmount)}. Stock will be reduced and incentives will be auto-calculated. Regular users will not be able to modify this order afterwards. (Admins can still edit.) Do you want to continue?`,
       confirmLabel: editingSalesOrderId ? 'Update Order' : 'Create Order',
     })
     if (!ok) return
@@ -1550,18 +1550,18 @@ export default function Home() {
         const meTotal = (me.quantity || 0) * (me.unitPrice || 0)
         return `<tr class="making-row">
           <td style="text-align:center;color:#666">↳</td>
-          <td><span class="making-label">Making:</span> ${me.name || '—'} <span class="qty-price">(${me.quantity} × ${(me.unitPrice || 0).toFixed(2)})</span></td>
-          <td class="num">${(me.unitPrice || 0).toFixed(2)}</td>
-          <td class="num">${meTotal.toFixed(2)}</td>
+          <td><span class="making-label">Making:</span> ${me.name || '—'} <span class="qty-price">(${me.quantity} × ৳ $৳ {(me.unitPrice || 0).toFixed(2)})</span></td>
+          <td class="num">৳ $৳ {(me.unitPrice || 0).toFixed(2)}</td>
+          <td class="num">৳ $৳ {meTotal.toFixed(2)}</td>
         </tr>`
       }).join('')
       const itemBaseTotal = (si.quantity || 0) * (si.unitPrice || 0)
       const itemTotal = itemBaseTotal + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0)
       return `<tr class="item-row">
         <td class="num">${i + 1}</td>
-        <td><strong>${si.item?.itemName || '—'}</strong><br><span class="qty-price">Quantity: ${si.quantity} × Unit Price: ${(si.unitPrice || 0).toFixed(2)}</span></td>
-        <td class="num">${(si.unitPrice || 0).toFixed(2)}</td>
-        <td class="num bold">${itemTotal.toFixed(2)}</td>
+        <td><strong>${si.item?.itemName || '—'}</strong><br><span class="qty-price">Quantity: ${si.quantity} × Unit Price: ৳ $৳ {(si.unitPrice || 0).toFixed(2)}</span></td>
+        <td class="num">৳ $৳ {(si.unitPrice || 0).toFixed(2)}</td>
+        <td class="num bold">৳ $৳ {itemTotal.toFixed(2)}</td>
       </tr>${makingRows}`
     }).join('')
 
@@ -1581,7 +1581,7 @@ export default function Home() {
       return `<tr>
         <td>${pdStr}</td>
         <td>${methodStr}</td>
-        <td class="num">${(p.amount || 0).toFixed(2)}</td>
+        <td class="num">৳ $৳ {(p.amount || 0).toFixed(2)}</td>
       </tr>`
     }).join('')
 
@@ -1672,11 +1672,11 @@ export default function Home() {
       <div class="summary-section">
         <div class="summary">
           <table>
-            <tr><td class="label">Sub Total</td><td class="num">${subTotal.toFixed(2)}</td></tr>
-            <tr><td class="label">Making Charges</td><td class="num">${makingTotal.toFixed(2)}</td></tr>
-            <tr><td class="label">Total Amount</td><td class="num">${grandTotalPreDiscount.toFixed(2)}</td></tr>
-            ${discount > 0 ? `<tr><td class="label">Discount</td><td class="num">-${discount.toFixed(2)}</td></tr>` : ''}
-            <tr class="grand"><td>GRAND TOTAL</td><td class="num">${grandTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Sub Total</td><td class="num">৳ $৳ {subTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Making Charges</td><td class="num">৳ $৳ {makingTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Total Amount</td><td class="num">৳ ${grandTotalPreDiscount.toFixed(2)}</td></tr>
+            ${discount > 0 ? `<tr><td class="label">Discount</td><td class="num">-৳ ${discount.toFixed(2)}</td></tr>` : ''}
+            <tr class="grand"><td>GRAND TOTAL</td><td class="num">৳ ${fmtBDT(grandTotal)}</td></tr>
           </table>
         </div>
       </div>
@@ -1695,12 +1695,12 @@ export default function Home() {
         <div class="summary-section">
           <div class="summary">
             <table>
-              <tr><td class="label">Total Paid</td><td class="num">${totalPaid.toFixed(2)}</td></tr>
-              <tr class="due"><td>DUE AMOUNT</td><td class="num">${due.toFixed(2)}</td></tr>
+              <tr><td class="label">Total Paid</td><td class="num">৳ $৳ {totalPaid.toFixed(2)}</td></tr>
+              <tr class="due"><td>DUE AMOUNT</td><td class="num">৳ $৳ {due.toFixed(2)}</td></tr>
             </table>
           </div>
         </div>
-      </div>` : `<div class="summary-section"><div class="summary"><table><tr class="due"><td>DUE AMOUNT</td><td class="num">${due.toFixed(2)}</td></tr></table></div></div>`}
+      </div>` : `<div class="summary-section"><div class="summary"><table><tr class="due"><td>DUE AMOUNT</td><td class="num">৳ $৳ {due.toFixed(2)}</td></tr></table></div></div>`}
 
       <div class="sign-row">
         <div>Authorized Signature</div>
@@ -1725,7 +1725,7 @@ export default function Home() {
   const printMoneyReceipt = (s: any, p: any) => {
     const win = window.open('', '_blank', 'width=600,height=500')
     if (!win) return
-    win.document.write(`<html><head><title>Money Receipt ${p.receiptNo}</title><style>body{font-family:Arial;padding:40px}h1{font-size:20px;text-align:center}.info{margin:20px 0;font-size:14px}.amt{font-size:24px;font-weight:bold;text-align:center;margin:20px 0}.sig{margin-top:50px;text-align:center;border-top:1px solid #000;padding-top:5px;width:250px;margin-left:auto;margin-right:auto;font-size:12px}</style></head><body><h1>MONEY RECEIPT</h1><div class="info"><strong>Receipt No:</strong> ${p.receiptNo}<br><strong>Sales Order:</strong> ${s.salesNo||''}<br><strong>Customer:</strong> ${s.customer?.name||'—'}<br><strong>Date:</strong> ${bdDate(new Date(p.paymentDate))}<br><strong>Payment Type:</strong> ${p.paymentType}<br><strong>Payment Mode:</strong> ${p.paymentMode}${p.chequeNo?`<br><strong>Cheque No:</strong> ${p.chequeNo}`:''}${p.bankName?`<br><strong>Bank:</strong> ${p.bankName}`:''}</div><div class="amt">Amount: ${p.amount.toFixed(2)}</div>${p.notes?`<p><strong>Notes:</strong> ${p.notes}</p>`:''}<div class="sig">Authorized Signature</div><script>window.onload=()=>window.print()</script></body></html>`)
+    win.document.write(`<html><head><title>Money Receipt ${p.receiptNo}</title><style>body{font-family:Arial;padding:40px}h1{font-size:20px;text-align:center}.info{margin:20px 0;font-size:14px}.amt{font-size:24px;font-weight:bold;text-align:center;margin:20px 0}.sig{margin-top:50px;text-align:center;border-top:1px solid #000;padding-top:5px;width:250px;margin-left:auto;margin-right:auto;font-size:12px}</style></head><body><h1>MONEY RECEIPT</h1><div class="info"><strong>Receipt No:</strong> ${p.receiptNo}<br><strong>Sales Order:</strong> ${s.salesNo||''}<br><strong>Customer:</strong> ${s.customer?.name||'—'}<br><strong>Date:</strong> ${bdDate(new Date(p.paymentDate))}<br><strong>Payment Type:</strong> ${p.paymentType}<br><strong>Payment Mode:</strong> ${p.paymentMode}${p.chequeNo?`<br><strong>Cheque No:</strong> ${p.chequeNo}`:''}${p.bankName?`<br><strong>Bank:</strong> ${p.bankName}`:''}</div><div class="amt">Amount: $৳ {p.amount.toFixed(2)}</div>${p.notes?`<p><strong>Notes:</strong> ${p.notes}</p>`:''}<div class="sig">Authorized Signature</div><script>window.onload=()=>window.print()</script></body></html>`)
     win.document.close()
   }
 
@@ -1805,7 +1805,7 @@ export default function Home() {
     }
     const ok = await confirm({
       title: 'Save Tailor Payment?',
-      message: `This will record a payment of ${parseFloat(tailorPaymentForm.amount).toFixed(2)} to the selected tailor for the selected sales order. The payment will be recorded permanently and used in the tailor's payment history. Regular users will not be able to modify this payment afterwards. (Admins can still edit.) Do you want to continue?`,
+      message: `This will record a payment of ${fmtBDT(parseFloat(tailorPaymentForm.amount))} to the selected tailor for the selected sales order. The payment will be recorded permanently and used in the tailor's payment history. Regular users will not be able to modify this payment afterwards. (Admins can still edit.) Do you want to continue?`,
       confirmLabel: 'Save Payment',
     })
     if (!ok) return
@@ -4230,8 +4230,8 @@ export default function Home() {
                 <TableCell className="font-medium">{s.salesNo || s.id?.slice(0,8)}</TableCell>
                 <TableCell>{s.customer?.name || '—'}</TableCell>
                 <TableCell className="text-xs">{(s.items||[]).map((si:any,i:number)=>(<div key={i}>{si.item?.itemName||'—'} ×{si.quantity}</div>))}</TableCell>
-                <TableCell className="text-right font-semibold">{total.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{paid.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-semibold">৳ {fmtBDT(total)}</TableCell>
+                <TableCell className="text-right">৳ {fmtBDT(paid)}</TableCell>
                 <TableCell className="text-xs">{bdDate(new Date(s.orderDate||s.createdAt))}</TableCell>
                 <TableCell className="text-xs">{s.deliveryDate?bdDate(new Date(s.deliveryDate)):'—'}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
@@ -4436,18 +4436,18 @@ export default function Home() {
                             <React.Fragment key={i}>
                               <tr className="border-t">
                                 <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
-                                <td className="px-2 py-2"><strong>{si.item?.itemName || '—'}</strong><br /><span className="text-[10.5px] text-muted-foreground">Quantity: {si.quantity} × Unit Price: {(si.unitPrice || 0).toFixed(2)}</span></td>
-                                <td className="px-2 py-2 text-right">{(si.unitPrice || 0).toFixed(2)}</td>
-                                <td className="px-2 py-2 text-right font-bold">{itemTotal.toFixed(2)}</td>
+                                <td className="px-2 py-2"><strong>{si.item?.itemName || '—'}</strong><br /><span className="text-[10.5px] text-muted-foreground">Quantity: {si.quantity} × Unit Price: ৳ {(si.unitPrice || 0).toFixed(2)}</span></td>
+                                <td className="px-2 py-2 text-right">৳ {(si.unitPrice || 0).toFixed(2)}</td>
+                                <td className="px-2 py-2 text-right font-bold">৳ {itemTotal.toFixed(2)}</td>
                               </tr>
                               {(si.makingEntries || []).map((me: any, mi: number) => {
                                 const meTotal = (me.quantity || 0) * (me.unitPrice || 0)
                                 return (
                                   <tr key={`m-${i}-${mi}`} className="border-t bg-muted/20">
                                     <td className="px-2 py-1.5 text-center text-muted-foreground">↳</td>
-                                    <td className="px-2 py-1.5 text-muted-foreground"><em className="text-[11px]">Making:</em> {me.name || '—'} <span className="text-[10.5px] text-muted-foreground">({me.quantity} × {(me.unitPrice || 0).toFixed(2)})</span></td>
-                                    <td className="px-2 py-1.5 text-right text-muted-foreground">{(me.unitPrice || 0).toFixed(2)}</td>
-                                    <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">{meTotal.toFixed(2)}</td>
+                                    <td className="px-2 py-1.5 text-muted-foreground"><em className="text-[11px]">Making:</em> {me.name || '—'} <span className="text-[10.5px] text-muted-foreground">({me.quantity} × ৳ {(me.unitPrice || 0).toFixed(2)})</span></td>
+                                    <td className="px-2 py-1.5 text-right text-muted-foreground">৳ {(me.unitPrice || 0).toFixed(2)}</td>
+                                    <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">৳ {meTotal.toFixed(2)}</td>
                                   </tr>
                                 )
                               })}
@@ -4464,10 +4464,10 @@ export default function Home() {
                   <div className="w-[280px] border border-primary rounded-md overflow-hidden">
                     <table className="w-full text-sm">
                       <tbody>
-                        <tr><td className="px-3 py-1.5 text-muted-foreground">Sub Total</td><td className="px-3 py-1.5 text-right font-mono">{subTotal.toFixed(2)}</td></tr>
-                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Making Charges</td><td className="px-3 py-1.5 text-right font-mono">{makingTotal.toFixed(2)}</td></tr>
-                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Total Amount</td><td className="px-3 py-1.5 text-right font-mono">{grandTotal.toFixed(2)}</td></tr>
-                        <tr className="bg-primary text-primary-foreground"><td className="px-3 py-2 font-bold">GRAND TOTAL</td><td className="px-3 py-2 text-right font-mono font-bold">{grandTotal.toFixed(2)}</td></tr>
+                        <tr><td className="px-3 py-1.5 text-muted-foreground">Sub Total</td><td className="px-3 py-1.5 text-right font-mono">৳ {subTotal.toFixed(2)}</td></tr>
+                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Making Charges</td><td className="px-3 py-1.5 text-right font-mono">৳ {makingTotal.toFixed(2)}</td></tr>
+                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Total Amount</td><td className="px-3 py-1.5 text-right font-mono">{fmtBDT(grandTotal)}</td></tr>
+                        <tr className="bg-primary text-primary-foreground"><td className="px-3 py-2 font-bold">GRAND TOTAL</td><td className="px-3 py-2 text-right font-mono font-bold">{fmtBDT(grandTotal)}</td></tr>
                       </tbody>
                     </table>
                   </div>
@@ -4500,7 +4500,7 @@ export default function Home() {
                                 <td className="px-2 py-2 font-mono text-xs">{p.receiptNo}</td>
                                 <td className="px-2 py-2 text-xs">{bdDate(new Date(p.paymentDate))}</td>
                                 <td className="px-2 py-2 text-xs">{methodStr} <span className="text-[10px] text-muted-foreground">({p.paymentMode})</span></td>
-                                <td className="px-2 py-2 text-right font-semibold">{(p.amount || 0).toFixed(2)}</td>
+                                <td className="px-2 py-2 text-right font-semibold">৳ {(p.amount || 0).toFixed(2)}</td>
                                 <td className="px-2 py-2 text-center"><Button variant="ghost" size="sm" onClick={() => printMoneyReceipt(so, p)} title="Print Receipt"><FileText className="w-3 h-3" /></Button></td>
                               </tr>
                             )
@@ -4512,8 +4512,8 @@ export default function Home() {
                       <div className="w-[280px] border border-red-300 rounded-md overflow-hidden">
                         <table className="w-full text-sm">
                           <tbody>
-                            <tr><td className="px-3 py-1.5 text-muted-foreground">Total Paid</td><td className="px-3 py-1.5 text-right font-mono">{totalPaid.toFixed(2)}</td></tr>
-                            <tr className="bg-red-50 text-red-700 border-t-2 border-red-300"><td className="px-3 py-2 font-bold">DUE AMOUNT</td><td className="px-3 py-2 text-right font-mono font-bold">{due.toFixed(2)}</td></tr>
+                            <tr><td className="px-3 py-1.5 text-muted-foreground">Total Paid</td><td className="px-3 py-1.5 text-right font-mono">৳ {totalPaid.toFixed(2)}</td></tr>
+                            <tr className="bg-red-50 text-red-700 border-t-2 border-red-300"><td className="px-3 py-2 font-bold">DUE AMOUNT</td><td className="px-3 py-2 text-right font-mono font-bold">৳ {due.toFixed(2)}</td></tr>
                           </tbody>
                         </table>
                       </div>
@@ -4707,7 +4707,7 @@ export default function Home() {
                               <td className="px-2 py-2 font-medium">{item.itemName}</td>
                               <td className="px-2 py-2 text-right"><Input type="number" min="1" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-right text-sm w-full min-w-[70px]" /></td>
                               <td className="px-2 py-2 text-right"><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
-                              <td className="px-2 py-2 text-right font-bold">{itemBaseTotal.toFixed(2)}</td>
+                              <td className="px-2 py-2 text-right font-bold">৳ {itemBaseTotal.toFixed(2)}</td>
                               <td className="px-2 py-2 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button></td>
                             </tr>
                             {/* Making entries — same column style */}
@@ -4724,7 +4724,7 @@ export default function Home() {
                                   </td>
                                   <td className="px-2 py-1.5 text-right"><Input type="number" min="1" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-right text-xs w-full min-w-[70px]" /></td>
                                   <td className="px-2 py-1.5 text-right"><Input type="number" step="0.01" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-right text-xs w-full min-w-[90px]" /></td>
-                                  <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">{meTotal.toFixed(2)}</td>
+                                  <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">৳ {meTotal.toFixed(2)}</td>
                                   <td className="px-2 py-1.5 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-6 w-6 p-0"><X className="w-3 h-3" /></Button></td>
                                 </tr>
                               )
@@ -4736,7 +4736,7 @@ export default function Home() {
                             </tr>
                             <tr className="border-t bg-muted/5">
                               <td colSpan={4} className="px-2 py-1.5 text-right text-[11px] text-muted-foreground font-medium">Item Total (incl. making):</td>
-                              <td className="px-2 py-1.5 text-right font-bold text-primary">{itemTotal.toFixed(2)}</td>
+                              <td className="px-2 py-1.5 text-right font-bold text-primary">৳ {itemTotal.toFixed(2)}</td>
                               <td></td>
                             </tr>
                             </React.Fragment>
@@ -4782,21 +4782,21 @@ export default function Home() {
               <div className="bg-card rounded-lg border border-primary overflow-hidden">
                 <div className="text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-2 border-l-[3px] border-primary">Order Summary</div>
                 <div className="p-4 space-y-2 text-sm">
-                  <div className="flex justify-between text-muted-foreground"><span>Sub Total</span><span className="font-mono">{subTotal.toFixed(2)}</span></div>
-                  <div className="flex justify-between text-muted-foreground"><span>Making Charges</span><span className="font-mono">{makingTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Sub Total</span><span className="font-mono">৳ {subTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-muted-foreground"><span>Making Charges</span><span className="font-mono">৳ {makingTotal.toFixed(2)}</span></div>
                   <Separator className="my-2" />
-                  <div className="flex justify-between text-base"><span className="font-semibold">Total Amount</span><span className="font-mono">{grandTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between text-base"><span className="font-semibold">Total Amount</span><span className="font-mono">{fmtBDT(grandTotal)}</span></div>
                   <div className="space-y-1 pt-1">
                     <Label className="text-xs text-muted-foreground">Discount</Label>
                     <Input type="number" step="0.01" placeholder="0.00" value={salesOrderForm.discount} onChange={e => setSalesOrderForm({ ...salesOrderForm, discount: e.target.value })} className="h-8 text-right text-sm" />
                   </div>
-                  <div className="flex justify-between bg-primary text-primary-foreground px-3 py-2 rounded-md text-base font-bold mt-2"><span>GRAND TOTAL</span><span className="font-mono">{netTotal.toFixed(2)}</span></div>
+                  <div className="flex justify-between bg-primary text-primary-foreground px-3 py-2 rounded-md text-base font-bold mt-2"><span>GRAND TOTAL</span><span className="font-mono">৳ {netTotal.toFixed(2)}</span></div>
                   {totalPaid > 0 && (
                     <>
-                      <div className="flex justify-between text-muted-foreground mt-2"><span>Total Paid</span><span className="font-mono">{totalPaid.toFixed(2)}</span></div>
+                      <div className="flex justify-between text-muted-foreground mt-2"><span>Total Paid</span><span className="font-mono">৳ {totalPaid.toFixed(2)}</span></div>
                       <div className={`flex justify-between px-3 py-2 rounded-md text-base font-bold ${due > 0 ? 'bg-red-50 text-red-700 border border-red-300' : 'bg-green-50 text-green-700 border border-green-300'}`}>
                         <span>{due > 0 ? 'DUE' : 'CHANGE'}</span>
-                        <span className="font-mono">{Math.abs(due).toFixed(2)}</span>
+                        <span className="font-mono">৳ {Math.abs(due).toFixed(2)}</span>
                       </div>
                     </>
                   )}
@@ -4894,7 +4894,7 @@ export default function Home() {
     const grandTotal = purchaseForm.items.reduce((s, it) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0)
     const ok = await confirm({
       title: 'Create Purchase?',
-      message: `This will create a purchase with ${purchaseForm.items.length} item line(s) and a grand total of ${grandTotal.toFixed(2)}. The purchase will be created as "pending" and will need approval before stock is added. Regular users will not be able to modify this purchase afterwards. (Admins can still edit.) Do you want to continue?`,
+      message: `This will create a purchase with ${purchaseForm.items.length} item line(s) and a grand total of ৳ ${fmtBDT(grandTotal)}. The purchase will be created as "pending" and will need approval before stock is added. Regular users will not be able to modify this purchase afterwards. (Admins can still edit.) Do you want to continue?`,
       confirmLabel: 'Create Purchase',
     })
     if (!ok) return
@@ -5115,7 +5115,7 @@ export default function Home() {
                 <TableCell>{p.supplier?.name || '—'}</TableCell>
                 <TableCell className="text-xs font-mono">{p.billNo || '—'}</TableCell>
                 <TableCell className="text-center">{p.itemCount || 0}</TableCell>
-                <TableCell className="text-right font-semibold">{(p.grandTotal || 0).toFixed(2)}</TableCell>
+                <TableCell className="text-right font-semibold">৳ {(p.grandTotal || 0).toFixed(2)}</TableCell>
                 <TableCell>{statusBadge(p.status)}</TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
@@ -5162,8 +5162,8 @@ export default function Home() {
                           </TableCell>
                           <TableCell className="text-xs text-right">{pi.quantity}</TableCell>
                           <TableCell className="text-xs">{pi.uom}</TableCell>
-                          <TableCell className="text-xs text-right">{pi.unitPrice.toFixed(2)}</TableCell>
-                          <TableCell className="text-xs text-right font-semibold">{pi.total.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs text-right">৳ {pi.unitPrice.toFixed(2)}</TableCell>
+                          <TableCell className="text-xs text-right font-semibold">৳ {pi.total.toFixed(2)}</TableCell>
                         </TableRow>
                       ))}
                     </TableBody>
@@ -5171,7 +5171,7 @@ export default function Home() {
                 </div>
                 <div className="flex justify-end">
                   <div className="text-right border rounded-lg p-3 bg-muted/30 min-w-[200px]">
-                    <p className="text-sm">Grand Total: <span className="font-bold text-lg">{(selectedPurchase.grandTotal || 0).toFixed(2)}</span></p>
+                    <p className="text-sm">Grand Total: <span className="font-bold text-lg">৳ {(selectedPurchase.grandTotal || 0).toFixed(2)}</span></p>
                   </div>
                 </div>
                 {selectedPurchase.status === 'approved' && (
@@ -5225,7 +5225,7 @@ export default function Home() {
                 <tr key={it.id} className="border-t hover:bg-muted/20">
                   <td className="px-2 py-2 font-medium text-xs">{it.itemName}</td>
                   <td className="px-2 py-2 text-right text-xs">{it.quantity}</td>
-                  <td className="px-2 py-2 text-right text-xs">{it.unitPrice.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right text-xs">৳ {it.unitPrice.toFixed(2)}</td>
                   <td className="px-2 py-2 text-right">
                     <Input type="number" step="0.01" value={it.cogsPerUnit} onChange={e => {
                       const val = e.target.value
@@ -5238,8 +5238,8 @@ export default function Home() {
                       setCogsItems(arr => arr.map((x, i) => i === idx ? { ...x, cogsNotes: val } : x))
                     }} className="h-8 text-xs w-full min-w-[140px]" />
                   </td>
-                  <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">{landed.toFixed(2)}</td>
-                  <td className="px-2 py-2 text-right text-xs font-bold">{totalLanded.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right text-xs font-semibold text-blue-700">৳ {landed.toFixed(2)}</td>
+                  <td className="px-2 py-2 text-right text-xs font-bold">৳ {totalLanded.toFixed(2)}</td>
                 </tr>
               )
             })}
@@ -5417,14 +5417,14 @@ export default function Home() {
                               <td className="px-2 py-2 text-right"><Input type="number" min="1" value={item.quantity} onChange={e => updatePurchaseItem(i, 'quantity', e.target.value)} className="h-8 text-right text-sm w-full min-w-[70px]" /></td>
                               <td className="px-2 py-2 text-right"><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updatePurchaseItem(i, 'unitPrice', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
                               <td className="px-2 py-2"><Input value={item.uom} onChange={e => updatePurchaseItem(i, 'uom', e.target.value)} className="h-8 text-sm w-full min-w-[60px]" /></td>
-                              <td className="px-2 py-2 text-right font-bold">{total.toFixed(2)}</td>
+                              <td className="px-2 py-2 text-right font-bold">{fmtBDT(total)}</td>
                               <td className="px-2 py-2 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removePurchaseItem(i)} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button></td>
                             </tr>
                           )
                         })}
                         <tr className="border-t bg-muted/30">
                           <td colSpan={5} className="px-2 py-2 text-right text-sm font-semibold">GRAND TOTAL:</td>
-                          <td className="px-2 py-2 text-right font-bold text-primary text-base">{grandTotal.toFixed(2)}</td>
+                          <td className="px-2 py-2 text-right font-bold text-primary text-base">{fmtBDT(grandTotal)}</td>
                           <td></td>
                         </tr>
                       </tbody>
@@ -5500,7 +5500,7 @@ export default function Home() {
                 <TableCell>{p.supplier?.name || '—'}</TableCell>
                 <TableCell>{p.entity?.name}</TableCell>
                 <TableCell className="text-center">{p.itemCount || 0}</TableCell>
-                <TableCell className="text-right font-semibold">{(p.grandTotal || 0).toFixed(2)}</TableCell>
+                <TableCell className="text-right font-semibold">৳ {(p.grandTotal || 0).toFixed(2)}</TableCell>
                 <TableCell>{statusBadge(p.status)}</TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
@@ -6627,7 +6627,7 @@ export default function Home() {
     e.preventDefault()
     const ok = await confirm({
       title: 'Save Supplier Payment?',
-      message: `This will record a payment of ${parseFloat(spForm.amount || '0').toFixed(2)} to the selected supplier${spForm.purchaseId ? ' for the selected purchase' : ''}. The payment will be recorded permanently. Regular users will not be able to modify this payment afterwards. (Admins can still edit.) Do you want to continue?`,
+      message: `This will record a payment of ${fmtBDT(parseFloat(spForm.amount || '0'))} to the selected supplier${spForm.purchaseId ? ' for the selected purchase' : ''}. The payment will be recorded permanently. Regular users will not be able to modify this payment afterwards. (Admins can still edit.) Do you want to continue?`,
       confirmLabel: 'Save Payment',
     })
     if (!ok) return
@@ -6651,7 +6651,7 @@ export default function Home() {
         </div>
         <div className="flex gap-3 items-center">
           <Input placeholder="Search supplier..." value={spSearch} onChange={e => setSpSearch(e.target.value)} className="w-64" />
-          <Badge variant="outline" className="bg-blue-50 text-blue-700">Total Paid: {totalPaid.toFixed(2)}</Badge>
+          <Badge variant="outline" className="bg-blue-50 text-blue-700">Total Paid: ৳ {totalPaid.toFixed(2)}</Badge>
         </div>
         <div className="border rounded-lg overflow-hidden">
           <Table>
@@ -6672,7 +6672,7 @@ export default function Home() {
                   <TableCell className="text-xs font-mono">{p.purchase?.purchaseNo || '—'}</TableCell>
                   <TableCell className="text-xs">{new Date(p.paymentDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
                   <TableCell><Badge variant="outline" className="text-xs">{p.paymentType}</Badge></TableCell>
-                  <TableCell className="text-right font-semibold">{p.amount.toFixed(2)}</TableCell>
+                  <TableCell className="text-right font-semibold">৳ {p.amount.toFixed(2)}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{p.notes || '—'}</TableCell>
                 </TableRow>
               ))}
@@ -7233,7 +7233,7 @@ export default function Home() {
   )
 
   // ---- Reports page helpers ----
-  const fmtMoney = (n: number) => '৳ ' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(n || 0)
+  const fmtMoney = (n: number) => fmtBDT(n || 0)
   const fmtNum = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
   const fmtDate = (s: string) => { try { return new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) } catch { return s } }
   const fmtDay = (s: string) => { try { return new Date(s).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }) } catch { return s } }
@@ -7307,12 +7307,12 @@ export default function Home() {
             <CardHeader><CardTitle className="text-base">Summary</CardTitle></CardHeader>
             <CardContent className="space-y-2">
               <div className="grid grid-cols-2 gap-2">
-                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Cash</p><p className="text-lg font-bold text-green-600">{totalCash.toFixed(2)}</p></div>
-                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Card</p><p className="text-lg font-bold text-blue-600">{totalCard.toFixed(2)}</p></div>
-                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Cheque</p><p className="text-lg font-bold text-purple-600">{totalCheque.toFixed(2)}</p></div>
-                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Mobile</p><p className="text-lg font-bold text-orange-600">{totalMobile.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Cash</p><p className="text-lg font-bold text-green-600">৳ {totalCash.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Card</p><p className="text-lg font-bold text-blue-600">৳ {totalCard.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Cheque</p><p className="text-lg font-bold text-purple-600">৳ {totalCheque.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Mobile</p><p className="text-lg font-bold text-orange-600">৳ {totalMobile.toFixed(2)}</p></div>
               </div>
-              <div className="rounded-lg border p-3 bg-muted/30"><p className="text-xs text-muted-foreground">Grand Total</p><p className="text-xl font-bold text-primary">{(totalCash + totalCard + totalCheque + totalMobile).toFixed(2)}</p></div>
+              <div className="rounded-lg border p-3 bg-muted/30"><p className="text-xs text-muted-foreground">Grand Total</p><p className="text-xl font-bold text-primary">৳ {(totalCash + totalCard + totalCheque + totalMobile).toFixed(2)}</p></div>
             </CardContent>
           </Card>
         </div>
@@ -7333,11 +7333,11 @@ export default function Home() {
             : salesEntries.map((e: any) => (
               <TableRow key={e.id} className="hover:bg-muted/30">
                 <TableCell className="text-xs">{bdDate(new Date(e.entryDate))}</TableCell>
-                <TableCell className="text-right">{e.cashAmount.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{e.cardAmount.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{e.chequeAmount.toFixed(2)}</TableCell>
-                <TableCell className="text-right">{e.mobileAmount.toFixed(2)}</TableCell>
-                <TableCell className="text-right font-bold">{(e.cashAmount + e.cardAmount + e.chequeAmount + e.mobileAmount).toFixed(2)}</TableCell>
+                <TableCell className="text-right">৳ {e.cashAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">৳ {e.cardAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">৳ {e.chequeAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">৳ {e.mobileAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-bold">৳ {(e.cashAmount + e.cardAmount + e.chequeAmount + e.mobileAmount).toFixed(2)}</TableCell>
                 <TableCell className="text-xs">{e.description || '—'}</TableCell>
                 <TableCell className="text-center"><Button variant="ghost" size="sm" onClick={() => handleDeleteAccountsEntry(e.id)} className="text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></TableCell>
               </TableRow>
@@ -7401,9 +7401,9 @@ export default function Home() {
           <Card>
             <CardHeader><CardTitle className="text-base">Summary</CardTitle></CardHeader>
             <CardContent className="space-y-2">
-              <div className="rounded-lg border p-3 bg-green-50/50"><p className="text-xs text-muted-foreground">Total Income</p><p className="text-xl font-bold text-green-600">{totalIncome.toFixed(2)}</p></div>
-              <div className="rounded-lg border p-3 bg-red-50/50"><p className="text-xs text-muted-foreground">Total Expense</p><p className="text-xl font-bold text-red-600">{totalExpense.toFixed(2)}</p></div>
-              <div className="rounded-lg border p-3 bg-blue-50/50"><p className="text-xs text-muted-foreground">Net (Income − Expense)</p><p className={`text-xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(totalIncome - totalExpense).toFixed(2)}</p></div>
+              <div className="rounded-lg border p-3 bg-green-50/50"><p className="text-xs text-muted-foreground">Total Income</p><p className="text-xl font-bold text-green-600">৳ {totalIncome.toFixed(2)}</p></div>
+              <div className="rounded-lg border p-3 bg-red-50/50"><p className="text-xs text-muted-foreground">Total Expense</p><p className="text-xl font-bold text-red-600">৳ {totalExpense.toFixed(2)}</p></div>
+              <div className="rounded-lg border p-3 bg-blue-50/50"><p className="text-xs text-muted-foreground">Net (Income − Expense)</p><p className={`text-xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-green-600' : 'text-red-600'}`}>৳ {(totalIncome - totalExpense).toFixed(2)}</p></div>
             </CardContent>
           </Card>
         </div>
@@ -7425,7 +7425,7 @@ export default function Home() {
                 <TableCell className="text-xs">{bdDate(new Date(e.entryDate))}</TableCell>
                 <TableCell><Badge variant="outline" className={e.entryType === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{e.entryType}</Badge></TableCell>
                 <TableCell>{e.category}</TableCell>
-                <TableCell className={`text-right font-bold ${e.entryType === 'income' ? 'text-green-600' : 'text-red-600'}`}>{e.amount.toFixed(2)}</TableCell>
+                <TableCell className={`text-right font-bold ${e.entryType === 'income' ? 'text-green-600' : 'text-red-600'}`}>৳ {e.amount.toFixed(2)}</TableCell>
                 <TableCell className="text-xs capitalize">{e.paymentType || '—'}</TableCell>
                 <TableCell className="text-xs">{e.description || '—'}</TableCell>
                 <TableCell className="text-center"><Button variant="ghost" size="sm" onClick={() => handleDeleteAccountsEntry(e.id)} className="text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></TableCell>
@@ -7517,11 +7517,11 @@ export default function Home() {
       <div className="space-y-4">
         {/* Summary cards */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
-          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Cash</p><p className="text-lg font-bold text-green-600">{data.grandTotal.cash.toFixed(2)}</p></CardContent></Card>
-          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Card</p><p className="text-lg font-bold text-blue-600">{data.grandTotal.card.toFixed(2)}</p></CardContent></Card>
-          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Cheque</p><p className="text-lg font-bold text-purple-600">{data.grandTotal.cheque.toFixed(2)}</p></CardContent></Card>
-          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Mobile Bank</p><p className="text-lg font-bold text-orange-600">{data.grandTotal.mobile.toFixed(2)}</p></CardContent></Card>
-          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Grand Total</p><p className="text-lg font-bold text-primary">{data.grandTotal.total.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Cash</p><p className="text-lg font-bold text-green-600">৳ ৳ {data.grandTotal.cash.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Card</p><p className="text-lg font-bold text-blue-600">৳ {data.grandTotal.card.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Cheque</p><p className="text-lg font-bold text-purple-600">৳ {data.grandTotal.cheque.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Mobile Bank</p><p className="text-lg font-bold text-orange-600">৳ {data.grandTotal.mobile.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Grand Total</p><p className="text-lg font-bold text-primary">৳ {data.grandTotal.total.toFixed(2)}</p></CardContent></Card>
         </div>
 
         {/* Detail table */}
@@ -7543,22 +7543,22 @@ export default function Home() {
                 <tr key={i} className="border-t hover:bg-muted/20">
                   <td className="px-3 py-2 font-medium">{r.entityName}</td>
                   <td className="px-3 py-2 text-xs">{r.date}</td>
-                  <td className="px-3 py-2 text-right text-green-600">{r.cash.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right text-blue-600">{r.card.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right text-purple-600">{r.cheque.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right text-orange-600">{r.mobile.toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right font-bold">{r.total.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-green-600">৳ {r.cash.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-blue-600">৳ {r.card.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-purple-600">৳ {r.cheque.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-orange-600">৳ {r.mobile.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right font-bold">৳ {r.total.toFixed(2)}</td>
                 </tr>
               ))}
             </tbody>
             <tfoot>
               <tr className="border-t-2 border-primary bg-primary/5">
                 <td className="px-3 py-2 font-bold" colSpan={2}>Total</td>
-                <td className="px-3 py-2 text-right font-bold text-green-600">{data.grandTotal.cash.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right font-bold text-blue-600">{data.grandTotal.card.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right font-bold text-purple-600">{data.grandTotal.cheque.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right font-bold text-orange-600">{data.grandTotal.mobile.toFixed(2)}</td>
-                <td className="px-3 py-2 text-right font-bold text-primary">{data.grandTotal.total.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-green-600">৳ ৳ {data.grandTotal.cash.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-blue-600">৳ {data.grandTotal.card.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-purple-600">৳ {data.grandTotal.cheque.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-orange-600">৳ {data.grandTotal.mobile.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-primary">৳ {data.grandTotal.total.toFixed(2)}</td>
               </tr>
             </tfoot>
           </table>
