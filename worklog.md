@@ -154,3 +154,38 @@ Stage Summary:
 - Loading/empty rows now have the correct colSpan matching the new 8-9 column layout.
 - New Item form was already clean (no itemCode input) — no change needed there.
 - User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh the stock page to see the cleaner table without the Item Code column.
+
+---
+Task ID: 7
+Agent: main
+Task: User requested a separate menu/app where customers can browse different types of chairs (big/small) and room scenes with curtains, upload their own fabric, preview how it looks on the product, then place an order.
+
+Work Log:
+- Created src/components/FabricStudio.tsx — a self-contained interactive product visualizer with:
+  * 5 chair SVG illustrations: Office Chair (high-back executive), Dining Chair, 3-Seater Sofa, Armchair, Bar Stool. Each has seat + backrest (and arms where applicable) marked as className="fabric-area".
+  * 3 room SVG illustrations: Living Room (drapes + pelmet + plant), Bedroom (sheer + drape with tiebacks), Office (vertical blinds). The curtain panels are fabric-areas.
+  * 6 preset fabric patterns stored as data-URL SVGs (no network needed): Floral Cream, Navy Stripes, Checkered Gray, Burgundy Velvet, Geometric Teal, Natural Linen.
+  * Upload button: accepts JPG/PNG/WebP up to 5MB, converts to data URL via FileReader, persists to localStorage so uploads survive refresh.
+  * Delete button on each uploaded fabric.
+  * Scale slider (30%-200%), horizontal offset (-100 to 100), vertical offset (-100 to 100), and Reset button.
+  * Place Order button — calls onPlaceOrder(product, fabric) callback.
+- Fabric overlay technique: when a fabric is selected, an SVG <pattern> is injected into <defs> with the fabric image, and a scoped <style> block sets `.fabric-area { fill: url(#fabric-pattern) !important; }` so all fabric surfaces instantly show the uploaded pattern.
+- Wired into the existing system:
+  * Added 'fabricStudio' to ViewType in src/app/page.tsx.
+  * Added 'fabricStudio' to MENU_ITEMS in src/lib/auth.ts (group: 'Studio').
+  * Added to functionItems array with bnLabel 'ফ্যাব্রিক স্টুডিও' and Wand2 icon.
+  * Added to collapsed sidebar icon rail.
+  * Imported FabricStudio + Wand2 icon at the top of page.tsx.
+  * Added case 'fabricStudio' in the renderContent switch — renders <FabricStudio> with an onPlaceOrder callback that shows a bilingual toast ('Opening Booking Page' / 'বুকিং পেজ খোলা হচ্ছে') and calls setCurrentView('newBooking').
+- TypeScript: resolved FC<> vs () => ReactNode conflicts by changing chair/room components from `React.FC` to plain arrow functions. All TS errors cleared.
+- Committed as dc6acba v60-fix22: Add Fabric Studio — interactive product visualizer with fabric upload.
+- Pushed to GitHub: f8c53f1..dc6acba main -> main ✅
+
+Stage Summary:
+- New 'Fabric Studio' menu visible in sidebar between 'News Ticker' and 'Income/Expense'.
+- Customer can: pick from 5 chairs OR 3 room scenes → upload or pick a fabric → see instant preview with fabric applied → adjust scale/offset → click 'Place Order' → redirected to Booking page with a toast confirmation.
+- 6 preset fabrics available for instant demo without upload.
+- Uploaded fabrics persist in localStorage (up to 5MB total).
+- Fully bilingual (English/Bangla) using existing t() helper.
+- All illustrations are hand-coded SVGs — feature is fully offline-capable.
+- User needs to wait for Vercel auto-deploy (2-3 minutes), then look for the new 'Fabric Studio' menu item (Wand2 icon) in the sidebar.
