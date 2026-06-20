@@ -579,7 +579,7 @@ export default function Home() {
   // Reports state
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
-  const [reportTab, setReportTab] = useState<'overview' | 'accounts' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive'>('overview')
+  const [reportTab, setReportTab] = useState<'overview' | 'accounts' | 'cashSales' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive'>('overview')
   const [reportRange, setReportRange] = useState<'7' | '30' | '90' | '365' | 'all' | 'custom'>('30')
   const [reportEntity, setReportEntity] = useState<string>('__all__') // '__all__' = all my entities
   const [reportCustomFrom, setReportCustomFrom] = useState('') // YYYY-MM-DD
@@ -7484,6 +7484,89 @@ export default function Home() {
     )
   }
 
+  // ★ CashSalesReport — combined manual + sales order payments, by payment type
+  const CashSalesReport = ({ entityId, range, customFrom, customTo }: { entityId: string; range: string; customFrom: string; customTo: string }) => {
+    const [data, setData] = useState<{ rows: any[]; grandTotal: any } | null>(null)
+    const [loading, setLoading] = useState(true)
+
+    useEffect(() => {
+      setLoading(true)
+      const params = new URLSearchParams()
+      if (entityId) params.set('entityId', entityId)
+      if (range === 'custom') {
+        if (customFrom) params.set('from', customFrom + 'T00:00:00')
+        if (customTo) params.set('to', customTo + 'T23:59:59')
+      } else if (range !== 'all') {
+        const days = parseInt(range)
+        const to = new Date()
+        const from = new Date(to.getTime() - days * 24 * 60 * 60 * 1000)
+        params.set('from', from.toISOString())
+        params.set('to', to.toISOString())
+      }
+      authFetch(`/api/reports/cash-sales-summary?${params}`)
+        .then(r => r.json())
+        .then(d => { setData(d); setLoading(false) })
+        .catch(() => setLoading(false))
+    }, [entityId, range, customFrom, customTo])
+
+    if (loading) return <div className="text-center py-8 text-muted-foreground">Loading cash sales report...</div>
+    if (!data || data.rows.length === 0) return <div className="text-center py-8 text-muted-foreground">No sales data for this period.</div>
+
+    return (
+      <div className="space-y-4">
+        {/* Summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Cash</p><p className="text-lg font-bold text-green-600">{data.grandTotal.cash.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Card</p><p className="text-lg font-bold text-blue-600">{data.grandTotal.card.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Cheque</p><p className="text-lg font-bold text-purple-600">{data.grandTotal.cheque.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Mobile Bank</p><p className="text-lg font-bold text-orange-600">{data.grandTotal.mobile.toFixed(2)}</p></CardContent></Card>
+          <Card><CardContent className="pt-4 pb-4"><p className="text-xs text-muted-foreground">Grand Total</p><p className="text-lg font-bold text-primary">{data.grandTotal.total.toFixed(2)}</p></CardContent></Card>
+        </div>
+
+        {/* Detail table */}
+        <div className="border rounded-lg overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50">
+              <tr>
+                <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">Entity</th>
+                <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">Date</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Cash</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Card</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Cheque</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Mobile Bank</th>
+                <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              {data.rows.map((r, i) => (
+                <tr key={i} className="border-t hover:bg-muted/20">
+                  <td className="px-3 py-2 font-medium">{r.entityName}</td>
+                  <td className="px-3 py-2 text-xs">{r.date}</td>
+                  <td className="px-3 py-2 text-right text-green-600">{r.cash.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-blue-600">{r.card.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-purple-600">{r.cheque.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right text-orange-600">{r.mobile.toFixed(2)}</td>
+                  <td className="px-3 py-2 text-right font-bold">{r.total.toFixed(2)}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="border-t-2 border-primary bg-primary/5">
+                <td className="px-3 py-2 font-bold" colSpan={2}>Total</td>
+                <td className="px-3 py-2 text-right font-bold text-green-600">{data.grandTotal.cash.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-blue-600">{data.grandTotal.card.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-purple-600">{data.grandTotal.cheque.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-orange-600">{data.grandTotal.mobile.toFixed(2)}</td>
+                <td className="px-3 py-2 text-right font-bold text-primary">{data.grandTotal.total.toFixed(2)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <p className="text-[11px] text-muted-foreground">This report combines manual daily sales entries (Daily Sales page) and sales order payments (Sales Order page), broken down by payment type.</p>
+      </div>
+    )
+  }
+
   // ★ AccountsChart component — daily income vs expense chart
   const AccountsChart = ({ entityId }: { entityId: string }) => {
     const [data, setData] = useState<{ dailyData: any[]; summary: any } | null>(null)
@@ -7611,6 +7694,7 @@ export default function Home() {
 
     const tabs: { key: typeof reportTab; label: string; icon: React.ReactNode; permKey: string }[] = [
       { key: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" />, permKey: 'overview' },
+      { key: 'cashSales', label: 'Cash Sales', icon: <DollarSign className="w-4 h-4" />, permKey: 'cashSales' },
       { key: 'accounts', label: 'Income & Expense', icon: <DollarSign className="w-4 h-4" />, permKey: 'accounts' },
       { key: 'stock', label: 'Stock', icon: <BarChart3 className="w-4 h-4" />, permKey: 'stock' },
       { key: 'sales', label: 'Sales', icon: <ShoppingCart className="w-4 h-4" />, permKey: 'sales' },
@@ -7780,6 +7864,11 @@ export default function Home() {
                   ))
                 )}
               </div>
+            )}
+
+            {/* CASH SALES — combined manual + sales order payments */}
+            {reportTab === 'cashSales' && (isManagerOrAdmin || hasPermission('menu', 'reports_cashSales', 'export') || hasPermission('menu', 'reports', 'export')) && (
+              <CashSalesReport entityId={reportEntity === '__all__' ? '' : reportEntity} range={reportRange} customFrom={reportCustomFrom} customTo={reportCustomTo} />
             )}
 
             {/* ACCOUNTS — Income & Expense daily chart */}
