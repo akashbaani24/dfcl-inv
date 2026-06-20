@@ -3,12 +3,19 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/* ★ News Ticker — right-to-left scrolling animation */
+/* ★ News Ticker — right-to-left scrolling animation.
+   The track must be display:inline-block (NOT block) so its width
+   grows to fit its content. Otherwise translateX(-50%) would move
+   by 50% of the CONTAINER width (because block elements take the
+   parent's width), which is far less than one full copy of the
+   messages — causing the animation to loop back before the user
+   has seen the full message. */
 @keyframes ticker-scroll {
   0% { transform: translateX(0); }
   100% { transform: translateX(-50%); }
 }
 .ticker-track {
+  display: inline-block;
   animation: ticker-scroll 30s linear infinite;
 }
 .ticker-track:hover {
