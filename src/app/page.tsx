@@ -13,6 +13,8 @@ import { useConfirmAction } from '@/hooks/use-confirm-action'
 import { bdDate, bdDateTime, bdTime, bdNow, bdTodayISO, fmtBDT } from '@/lib/bd-time'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
+import { useLanguage } from '@/lib/i18n'
+import { banglaPhoneticLastWord } from '@/lib/bangla-phonetic'
 import { Badge } from '@/components/ui/badge'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Separator } from '@/components/ui/separator'
@@ -281,6 +283,8 @@ async function authFetch(url: string, options: RequestInit = {}): Promise<Respon
 export default function Home() {
   // ★ Global confirmation dialog for Create/Submit/Approve actions
   const { confirm, ConfirmHost } = useConfirmAction()
+  // ★ Bilingual support — language toggle (en/bn) + Bangla phonetic input mode
+  const { lang, toggle: toggleLanguage, banglaInput, toggleBanglaInput, t } = useLanguage()
 
   const [user, setUser] = useState<UserData | null>(null)
   const [loginUsername, setLoginUsername] = useState('')
@@ -1945,6 +1949,54 @@ export default function Home() {
     const interval = setInterval(fetchTickerMessages, 30000)
     return () => clearInterval(interval)
   }, [])
+
+  // ★ Bangla phonetic input mode — when enabled, attach a global 'input' event listener
+  // that converts the last word of any text/textarea/input to Bangla phonetic.
+  // Skip password fields (always English) and fields explicitly marked with data-bangla-skip.
+  useEffect(() => {
+    if (!banglaInput) return
+
+    const handler = (e: Event) => {
+      const target = e.target as HTMLInputElement | HTMLTextAreaElement
+      if (!target) return
+      // Only handle text-like inputs
+      const type = (target.type || '').toLowerCase()
+      if (type !== 'text' && type !== 'search' && type !== 'url' && type !== '' && target.tagName !== 'TEXTAREA') return
+      // Never convert password fields
+      if (type === 'password') return
+      // Skip fields explicitly marked
+      if (target.dataset.banglaSkip === 'true') return
+      // Skip if user has selected a range (don't disturb their selection)
+      if (target.selectionStart !== target.selectionEnd) return
+
+      const original = target.value
+      const converted = banglaPhoneticLastWord(original)
+      if (converted === original) return
+
+      // Preserve cursor position relative to the end of the value
+      const cursorPos = target.selectionStart || original.length
+      const lengthDiff = converted.length - original.length
+      const newCursorPos = cursorPos + lengthDiff
+
+      // Use native setter so React's controlled input updates correctly
+      const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+        target.tagName === 'TEXTAREA' ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype,
+        'value'
+      )?.set
+      if (nativeInputValueSetter) {
+        nativeInputValueSetter.call(target, converted)
+      } else {
+        target.value = converted
+      }
+      target.setSelectionRange(newCursorPos, newCursorPos)
+      // Dispatch an input event so React's onChange picks up the new value
+      target.dispatchEvent(new Event('input', { bubbles: true }))
+    }
+
+    document.addEventListener('input', handler, true)
+    return () => document.removeEventListener('input', handler, true)
+  }, [banglaInput])
+
   useEffect(() => { if (currentView === 'salesReturn') fetchSalesReturns() }, [currentView])
   useEffect(() => { if (currentView === 'incentive') fetchIncentives() }, [currentView])
 
@@ -2729,9 +2781,28 @@ export default function Home() {
         <div className="flex-1 flex items-center justify-center p-6 sm:p-10 order-1 lg:order-1">
           <div className="w-full max-w-md">
             <div className="bg-white rounded-2xl shadow-xl border border-slate-200/70 p-7 sm:p-9">
+              {/* ★ Language + Bangla input toggles — top-right of login card */}
+              <div className="flex justify-end items-center gap-2 mb-4 -mt-2">
+                <button
+                  type="button"
+                  onClick={toggleLanguage}
+                  className="px-3 py-1.5 text-xs font-semibold rounded-md border border-slate-200 bg-slate-50 hover:bg-slate-100 text-slate-700 transition-colors"
+                  title={lang === 'bn' ? 'Switch to English' : 'বাংলায় চলুন'}
+                >
+                  {lang === 'bn' ? 'EN' : 'বাং'}
+                </button>
+                <button
+                  type="button"
+                  onClick={toggleBanglaInput}
+                  className={`px-3 py-1.5 text-xs font-semibold rounded-md border transition-colors ${banglaInput ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700' : 'bg-slate-50 text-slate-700 border-slate-200 hover:bg-slate-100'}`}
+                  title={banglaInput ? 'Bangla typing on — click to turn off' : 'Turn on Bangla phonetic typing'}
+                >
+                  {banglaInput ? 'বাং কীবোর্ড ✅' : 'বাং কীবোর্ড'}
+                </button>
+              </div>
               <div className="mb-7">
-                <h2 className="text-2xl font-bold text-slate-900">Welcome back</h2>
-                <p className="text-slate-500 text-sm mt-1">Sign in to your account to continue</p>
+                <h2 className="text-2xl font-bold text-slate-900">{t('Welcome back', 'স্বাগতম')}</h2>
+                <p className="text-slate-500 text-sm mt-1">{t('Sign in to your account to continue', 'চালিয়ে যেতে আপনার অ্যাকাউন্টে সাইন ইন করুন')}</p>
               </div>
 
               {/* ★ News Ticker — shown on login page (public, no auth needed).
@@ -2759,24 +2830,25 @@ export default function Home() {
                 )}
 
                 <div className="space-y-2">
-                  <Label htmlFor="username" className="text-sm font-medium text-slate-700">Username</Label>
+                  <Label htmlFor="username" className="text-sm font-medium text-slate-700">{t('Username', 'ইউজারনেম')}</Label>
                   <Input
                     id="username"
-                    placeholder="Enter your username"
+                    placeholder={t('Enter your username', 'আপনার ইউজারনেম লিখুন')}
                     value={loginUsername}
                     onChange={e => setLoginUsername(e.target.value)}
                     required
+                    data-bangla-skip="true"
                     className="h-11 bg-slate-50 border-slate-200 focus:bg-white focus:border-indigo-500 focus:ring-indigo-500/20"
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">Password</Label>
+                  <Label htmlFor="password" className="text-sm font-medium text-slate-700">{t('Password', 'পাসওয়ার্ড')}</Label>
                   <div className="relative">
                     <Input
                       id="password"
                       type={showPassword ? 'text' : 'password'}
-                      placeholder="Enter your password"
+                      placeholder={t('Enter your password', 'আপনার পাসওয়ার্ড লিখুন')}
                       value={loginPassword}
                       onChange={e => setLoginPassword(e.target.value)}
                       required
@@ -2798,7 +2870,7 @@ export default function Home() {
                   size="lg"
                   className="w-full h-11 bg-gradient-to-r from-indigo-600 to-blue-700 hover:from-indigo-700 hover:to-blue-800 shadow-md shadow-indigo-500/30 text-white font-medium"
                 >
-                  Sign In
+                  {t('Sign In', 'সাইন ইন')}
                 </Button>
               </form>
             </div>
@@ -2984,30 +3056,30 @@ export default function Home() {
 
   // Function menu items (main working area, shown after entity selection)
   const functionItems = [
-    { key: 'itemPrice' as ViewType, label: 'Item Price', icon: TrendingUp },
-    { key: 'myEntityStock' as ViewType, label: 'My Entity Stock', icon: Warehouse },
-    { key: 'allEntityStock' as ViewType, label: 'All Entity Stock', icon: BarChart3 },
-    { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', icon: Settings2 },
-    { key: 'transfer' as ViewType, label: 'Transfer', icon: ArrowRightLeft },
-    { key: 'receive' as ViewType, label: 'Receive', icon: ArrowDownToLine },
-    { key: 'purchase' as ViewType, label: 'Purchase', icon: ShoppingCart, isParent: true, children: [
-      { key: 'purchase' as ViewType, label: 'Purchase List', icon: ClipboardList },
-      { key: 'purchaseApproval' as ViewType, label: 'Purchase Approval', icon: CheckCircle2 },
-      { key: 'supplierPayments' as ViewType, label: 'Supplier Payments', icon: DollarSign },
+    { key: 'itemPrice' as ViewType, label: 'Item Price', bnLabel: 'আইটেম মূল্য', icon: TrendingUp },
+    { key: 'myEntityStock' as ViewType, label: 'My Entity Stock', bnLabel: 'আমার স্টক', icon: Warehouse },
+    { key: 'allEntityStock' as ViewType, label: 'All Entity Stock', bnLabel: 'সব স্টক', icon: BarChart3 },
+    { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', bnLabel: 'আইটেম সমন্বয়', icon: Settings2 },
+    { key: 'transfer' as ViewType, label: 'Transfer', bnLabel: 'ট্রান্সফার', icon: ArrowRightLeft },
+    { key: 'receive' as ViewType, label: 'Receive', bnLabel: 'গ্রহণ', icon: ArrowDownToLine },
+    { key: 'purchase' as ViewType, label: 'Purchase', bnLabel: 'ক্রয়', icon: ShoppingCart, isParent: true, children: [
+      { key: 'purchase' as ViewType, label: 'Purchase List', bnLabel: 'ক্রয় তালিকা', icon: ClipboardList },
+      { key: 'purchaseApproval' as ViewType, label: 'Purchase Approval', bnLabel: 'ক্রয় অনুমোদন', icon: CheckCircle2 },
+      { key: 'supplierPayments' as ViewType, label: 'Supplier Payments', bnLabel: 'সাপ্লায়ার পেমেন্ট', icon: DollarSign },
     ]},
-    { key: 'sales' as ViewType, label: 'Sales', icon: ShoppingCart, isParent: true, children: [
-      { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
-      { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
-      { key: 'tailorPayment' as ViewType, label: 'Tailor Payment', icon: Scissors },
-      { key: 'dailySales' as ViewType, label: 'Daily Sales', icon: DollarSign },
-      { key: 'delivery' as ViewType, label: 'Delivery', icon: Truck },
+    { key: 'sales' as ViewType, label: 'Sales', bnLabel: 'বিক্রয়', icon: ShoppingCart, isParent: true, children: [
+      { key: 'salesOrder' as ViewType, label: 'Sales Order', bnLabel: 'সেলস অর্ডার', icon: ClipboardList },
+      { key: 'salesReturn' as ViewType, label: 'Sales Return', bnLabel: 'বিক্রয় ফেরত', icon: RotateCcw },
+      { key: 'tailorPayment' as ViewType, label: 'Tailor Payment', bnLabel: 'টেইলার পেমেন্ট', icon: Scissors },
+      { key: 'dailySales' as ViewType, label: 'Daily Sales', bnLabel: 'দৈনিক বিক্রয়', icon: DollarSign },
+      { key: 'delivery' as ViewType, label: 'Delivery', bnLabel: 'ডেলিভারি', icon: Truck },
     ]},
-    { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
-    { key: 'damage' as ViewType, label: 'Damage/Wastage', icon: AlertTriangle },
-    { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
-    { key: 'newsTicker' as ViewType, label: 'News Ticker', icon: FileText },
-    { key: 'accounts' as ViewType, label: 'Income/Expense', icon: DollarSign },
-    { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
+    { key: 'booking' as ViewType, label: 'Booking', bnLabel: 'বুকিং', icon: Receipt },
+    { key: 'damage' as ViewType, label: 'Damage/Wastage', bnLabel: 'ক্ষতি/অপচয়', icon: AlertTriangle },
+    { key: 'incentive' as ViewType, label: 'Incentive', bnLabel: 'ইনসেনটিভ', icon: DollarSign },
+    { key: 'newsTicker' as ViewType, label: 'News Ticker', bnLabel: 'নিউজ টিকার', icon: FileText },
+    { key: 'accounts' as ViewType, label: 'Income/Expense', bnLabel: 'আয়/ব্যয়', icon: DollarSign },
+    { key: 'reports' as ViewType, label: 'Reports', bnLabel: 'রিপোর্ট', icon: FileText },
   ].filter(item => {
     // Filter top-level items: show if item itself is visible OR any child is visible
     if (item.isParent && item.children) {
@@ -3032,20 +3104,20 @@ export default function Home() {
   }
 
   const masterDataItems = [
-    { key: 'items' as ViewType, label: 'Item Information', icon: LayoutDashboard, perm: hasMasterDataAccess('items') },
-    { key: 'newItem' as ViewType, label: 'New Item', icon: Plus, perm: hasMasterDataAccess('newItem') && hasPermission('master', 'newItem', 'create') },
-    { key: 'upload' as ViewType, label: 'Upload CSV', icon: Upload, perm: hasMasterDataAccess('upload') && hasPermission('master', 'upload', 'upload') },
-    { key: 'entities' as ViewType, label: 'Entity', icon: Building2, perm: isAdmin && hasMasterDataAccess('entities') },
-    { key: 'users' as ViewType, label: 'Users', icon: Users, perm: isAdmin && hasMasterDataAccess('users') },
-    { key: 'groups' as ViewType, label: 'Groups', icon: Database, perm: hasMasterDataAccess('groups') },
-    { key: 'subGroups' as ViewType, label: 'Sub Groups', icon: Database, perm: hasMasterDataAccess('subGroups') },
-    { key: 'tailors' as ViewType, label: 'Tailors', icon: Scissors, perm: hasMasterDataAccess('tailors') },
-    { key: 'makingInfo' as ViewType, label: 'Making Information', icon: Ruler, perm: hasMasterDataAccess('makingInfo') },
-    { key: 'uom' as ViewType, label: 'UoM', icon: Package, perm: hasMasterDataAccess('uom') },
-    { key: 'suppliers' as ViewType, label: 'Suppliers', icon: Truck, perm: hasMasterDataAccess('suppliers') },
-    { key: 'customers' as ViewType, label: 'Customer Database', icon: UserCircle, perm: hasMasterDataAccess('customers') },
-    { key: 'employees' as ViewType, label: 'Employees', icon: Users, perm: hasMasterDataAccess('employees') },
-    { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', icon: FileText, perm: hasMasterDataAccess('bookingReasons') },
+    { key: 'items' as ViewType, label: 'Item Information', bnLabel: 'আইটেম তথ্য', icon: LayoutDashboard, perm: hasMasterDataAccess('items') },
+    { key: 'newItem' as ViewType, label: 'New Item', bnLabel: 'নতুন আইটেম', icon: Plus, perm: hasMasterDataAccess('newItem') && hasPermission('master', 'newItem', 'create') },
+    { key: 'upload' as ViewType, label: 'Upload CSV', bnLabel: 'CSV আপলোড', icon: Upload, perm: hasMasterDataAccess('upload') && hasPermission('master', 'upload', 'upload') },
+    { key: 'entities' as ViewType, label: 'Entity', bnLabel: 'এনটিটি', icon: Building2, perm: isAdmin && hasMasterDataAccess('entities') },
+    { key: 'users' as ViewType, label: 'Users', bnLabel: 'ইউজার', icon: Users, perm: isAdmin && hasMasterDataAccess('users') },
+    { key: 'groups' as ViewType, label: 'Groups', bnLabel: 'গ্রুপ', icon: Database, perm: hasMasterDataAccess('groups') },
+    { key: 'subGroups' as ViewType, label: 'Sub Groups', bnLabel: 'সাব গ্রুপ', icon: Database, perm: hasMasterDataAccess('subGroups') },
+    { key: 'tailors' as ViewType, label: 'Tailors', bnLabel: 'টেইলার', icon: Scissors, perm: hasMasterDataAccess('tailors') },
+    { key: 'makingInfo' as ViewType, label: 'Making Information', bnLabel: 'মেকিং তথ্য', icon: Ruler, perm: hasMasterDataAccess('makingInfo') },
+    { key: 'uom' as ViewType, label: 'UoM', bnLabel: 'পরিমাপ একক', icon: Package, perm: hasMasterDataAccess('uom') },
+    { key: 'suppliers' as ViewType, label: 'Suppliers', bnLabel: 'সাপ্লায়ার', icon: Truck, perm: hasMasterDataAccess('suppliers') },
+    { key: 'customers' as ViewType, label: 'Customer Database', bnLabel: 'কাস্টমার ডাটাবেস', icon: UserCircle, perm: hasMasterDataAccess('customers') },
+    { key: 'employees' as ViewType, label: 'Employees', bnLabel: 'কর্মচারী', icon: Users, perm: hasMasterDataAccess('employees') },
+    { key: 'bookingReasons' as ViewType, label: 'Booking Reasons', bnLabel: 'বুকিং কারণ', icon: FileText, perm: hasMasterDataAccess('bookingReasons') },
   ]
 
   const visibleMasterDataItems = masterDataItems.filter(item => item.perm === undefined || item.perm)
@@ -3059,7 +3131,7 @@ export default function Home() {
   const renderMasterDataSection = (onNavigate?: () => void) => (
     <>
       <button onClick={() => setMasterDataOpen(!masterDataOpen)} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-semibold transition-colors ${isMasterDataActive ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
-        <Database className="w-4 h-4 shrink-0" /><span className="flex-1 text-left">Master Data</span><ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${masterDataOpen ? 'rotate-180' : ''}`} />
+        <Database className="w-4 h-4 shrink-0" /><span className="flex-1 text-left">{t('Master Data', 'মাস্টার ডাটা')}</span><ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${masterDataOpen ? 'rotate-180' : ''}`} />
       </button>
       {masterDataOpen && (
         <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
@@ -3069,7 +3141,7 @@ export default function Home() {
               onContextMenu={(e) => handleContextMenu(e, item.key)}
               onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
               className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-              <item.icon className="w-3.5 h-3.5 shrink-0" />{item.label}
+              <item.icon className="w-3.5 h-3.5 shrink-0" />{t(item.label, item.bnLabel || item.label)}
             </button>
           ))}
         </div>
@@ -3101,7 +3173,7 @@ export default function Home() {
           return (
             <div key={item.key}>
               <button onClick={toggleOpen} className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${isActive ? 'bg-primary/10 text-primary' : 'text-foreground hover:bg-muted'}`}>
-                <item.icon className="w-4 h-4 shrink-0" /><span className="flex-1 text-left">{item.label}</span><ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
+                <item.icon className="w-4 h-4 shrink-0" /><span className="flex-1 text-left">{t(item.label, item.bnLabel || item.label)}</span><ChevronDown className={`w-4 h-4 shrink-0 transition-transform duration-200 ${isOpen ? 'rotate-180' : ''}`} />
               </button>
               {isOpen && (
                 <div className="ml-3 pl-3 border-l-2 border-muted space-y-0.5">
@@ -3111,7 +3183,7 @@ export default function Home() {
                       onContextMenu={(e) => handleContextMenu(e, child.key)}
                       onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(child.key) } }}
                       className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-md text-[13px] font-medium transition-colors ${currentView === child.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-                      <child.icon className="w-3.5 h-3.5 shrink-0" />{child.label}
+                      <child.icon className="w-3.5 h-3.5 shrink-0" />{t(child.label, child.bnLabel || child.label)}
                     </button>
                   ))}
                 </div>
@@ -3125,7 +3197,7 @@ export default function Home() {
             onContextMenu={(e) => handleContextMenu(e, item.key)}
             onMouseDown={(e) => { if (e.button === 1) { e.preventDefault(); openInNewTab(item.key) } }}
             className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${currentView === item.key ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-muted hover:text-foreground'}`}>
-            <item.icon className="w-4 h-4 shrink-0" />{item.label}
+            <item.icon className="w-4 h-4 shrink-0" />{t(item.label, item.bnLabel || item.label)}
           </button>
         )
       })}
@@ -10199,6 +10271,24 @@ Wool Pant,Head Office,75,PCS`}</pre>
       <button onClick={() => setSidebarOpen(!sidebarOpen)} className="absolute top-3 z-50 bg-card border rounded-full w-7 h-7 flex items-center justify-center shadow-sm hover:bg-muted transition-colors" style={{ left: sidebarOpen ? '240px' : '48px' }}>
         {sidebarOpen ? <ChevronLeft className="w-4 h-4" /> : <ChevronRight className="w-4 h-4" />}
       </button>
+
+      {/* ★ Language + Bangla input toggle — floating top-right, always visible after login */}
+      <div className="fixed top-2 right-2 z-50 flex gap-1.5 print:hidden">
+        <button
+          onClick={toggleLanguage}
+          className="px-2.5 py-1 text-xs font-semibold rounded-md border border-slate-200 bg-card hover:bg-muted text-foreground shadow-sm transition-colors"
+          title={lang === 'bn' ? 'Switch to English' : 'বাংলায় চলুন'}
+        >
+          {lang === 'bn' ? 'EN' : 'বাং'}
+        </button>
+        <button
+          onClick={toggleBanglaInput}
+          className={`px-2.5 py-1 text-xs font-semibold rounded-md border shadow-sm transition-colors ${banglaInput ? 'bg-indigo-600 text-white border-indigo-600 hover:bg-indigo-700' : 'bg-card text-foreground border-slate-200 hover:bg-muted'}`}
+          title={banglaInput ? 'Bangla typing on — click to turn off' : 'Turn on Bangla phonetic typing'}
+        >
+          {banglaInput ? 'বাং ✅' : 'বাং'}
+        </button>
+      </div>
 
       {/* Main Content */}
       <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden">
