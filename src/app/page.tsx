@@ -3515,7 +3515,7 @@ export default function Home() {
     return (
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-2 justify-between">
-          <Input placeholder="Search by item name, barcode, item code..." value={stkSearch} onChange={e => setStkSearch(e.target.value)} className="w-72" />
+          <Input placeholder="Search by item name, barcode..." value={stkSearch} onChange={e => setStkSearch(e.target.value)} className="w-72" />
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={downloadFormat} title="Download CSV format for stock upload"><Download className="w-4 h-4 mr-1.5" />Format</Button>
             {(user.role === 'admin' || user.role === 'manager') && (
@@ -3528,7 +3528,6 @@ export default function Home() {
             <TableHeader><TableRow className="bg-muted/50">
               <TableHead className="font-semibold">Item Name</TableHead>
               <TableHead className="font-semibold">Barcode</TableHead>
-              <TableHead className="font-semibold">Item Code</TableHead>
               <TableHead className="font-semibold">Group</TableHead>
               <TableHead className="font-semibold">Sub Group</TableHead>
               {!entityId && <TableHead className="font-semibold">Entity</TableHead>}
@@ -3538,15 +3537,14 @@ export default function Home() {
               <TableHead className="font-semibold text-right">Available</TableHead>
             </TableRow></TableHeader>
             <TableBody>
-              {stkLoading ? <TableRow><TableCell colSpan={entityId ? 9 : 10} className="text-center py-8">Loading...</TableCell></TableRow>
-              : filtered.length === 0 ? <TableRow><TableCell colSpan={entityId ? 9 : 10} className="text-center py-8 text-muted-foreground">No stock data</TableCell></TableRow>
+              {stkLoading ? <TableRow><TableCell colSpan={entityId ? 8 : 9} className="text-center py-8">Loading...</TableCell></TableRow>
+              : filtered.length === 0 ? <TableRow><TableCell colSpan={entityId ? 8 : 9} className="text-center py-8 text-muted-foreground">No stock data</TableCell></TableRow>
               : filtered.map((s, i) => {
                 const available = s.quantity - s.bookedQty
                 return (
                 <TableRow key={i} className={`hover:bg-muted/30 ${s.bookedQty > 0 ? 'bg-amber-50/40' : ''}`}>
                   <TableCell className="font-medium">{s.itemName}</TableCell>
                   <TableCell className="text-xs font-mono text-muted-foreground">{s.barcode || '—'}</TableCell>
-                  <TableCell className="text-xs font-mono text-muted-foreground">{s.itemCode || '—'}</TableCell>
                   <TableCell>{s.group}</TableCell>
                   <TableCell>{s.subGroup}</TableCell>
                   {!entityId && <TableCell>{s.entityName}</TableCell>}
