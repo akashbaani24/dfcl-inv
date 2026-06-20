@@ -29,7 +29,7 @@ export async function GET(request: NextRequest) {
           },
         },
         menuAccess: {
-          select: { menuKey: true, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true },
+          select: { menuKey: true, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true, canApprove: true },
         },
         masterDataAccess: {
           select: { masterDataKey: true, visible: true, canCreate: true, canEdit: true, canDelete: true, canUpload: true, canExport: true },
