@@ -1633,7 +1633,7 @@ export default function Home() {
           <div class="logo">${initials}</div>
           <div class="biz-info">
             <h1>${entityName}</h1>
-            <div class="subtitle">Inventory & Sales</div>
+            <div class="subtitle">Digital System</div>
             <div class="addr">${entityDesc || '&nbsp;'}</div>
           </div>
         </div>
@@ -2712,12 +2712,11 @@ export default function Home() {
                 <Package className="w-6 h-6 text-white" />
               </div>
               <div>
-                <p className="text-[10px] uppercase tracking-widest text-blue-200">Inventory &amp; Sales</p>
+                <p className="text-[10px] uppercase tracking-widest text-blue-200">Digital System</p>
                 <p className="text-base font-semibold">DFCL</p>
               </div>
             </div>
-            <h1 className="text-2xl font-bold leading-tight mb-2">Akash Inventory System</h1>
-            <p className="text-sm text-blue-100/90 leading-snug">Multi-entity inventory, sales, purchase, and incentive management.</p>
+            <h1 className="text-2xl font-bold leading-tight mb-2">Akash Digital System</h1>
             <div className="flex flex-wrap gap-1.5 mt-3">
               {['Multi-Entity', 'Sales & POS', 'Purchase', 'Incentive', 'Delivery'].map(feature => (
                 <span key={feature} className="text-[10px] font-medium px-2.5 py-1 rounded-full bg-white/10 border border-white/15 backdrop-blur-sm">{feature}</span>
@@ -2852,7 +2851,7 @@ export default function Home() {
                 <Package className="w-7 h-7 text-white" />
               </div>
               <div>
-                <p className="text-xs uppercase tracking-widest text-blue-200">Inventory &amp; Sales</p>
+                <p className="text-xs uppercase tracking-widest text-blue-200">Digital System</p>
                 <p className="text-lg font-semibold">DFCL</p>
               </div>
             </div>
@@ -2860,11 +2859,8 @@ export default function Home() {
             {/* Middle: hero text */}
             <div className="max-w-xl">
               <h1 className="text-4xl xl:text-5xl font-bold leading-tight mb-4">
-                Akash Inventory System
+                Akash Digital System
               </h1>
-              <p className="text-base xl:text-lg text-blue-100/90 leading-relaxed">
-                Multi-entity inventory, sales, purchase, and incentive management — built for speed, accuracy, and scale.
-              </p>
 
               {/* Feature pills */}
               <div className="flex flex-wrap gap-2 mt-6">
@@ -4385,7 +4381,7 @@ export default function Home() {
                   <div className="w-14 h-14 bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold tracking-wide shrink-0" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>{initials}</div>
                   <div>
                     <h1 className="text-lg font-bold text-primary leading-tight">{eName}</h1>
-                    <div className="text-[10px] uppercase tracking-[2px] text-muted-foreground mb-1">Inventory &amp; Sales</div>
+                    <div className="text-[10px] uppercase tracking-[2px] text-muted-foreground mb-1">Digital System</div>
                     <div className="text-xs text-muted-foreground">{eDesc || ''}</div>
                   </div>
                 </div>
@@ -4599,7 +4595,7 @@ export default function Home() {
             <div className="w-14 h-14 bg-primary text-primary-foreground flex items-center justify-center text-lg font-bold tracking-wide shrink-0" style={{ clipPath: 'polygon(25% 0, 75% 0, 100% 50%, 75% 100%, 25% 100%, 0 50%)' }}>{initials}</div>
             <div>
               <h1 className="text-lg font-bold text-primary leading-tight">{entityName}</h1>
-              <div className="text-[10px] uppercase tracking-[2px] text-muted-foreground mb-1">Inventory &amp; Sales</div>
+              <div className="text-[10px] uppercase tracking-[2px] text-muted-foreground mb-1">Digital System</div>
               <div className="text-xs text-muted-foreground">{workingEntity?.description || ''}</div>
             </div>
           </div>
@@ -8243,7 +8239,7 @@ export default function Home() {
             <div className="flex items-center gap-4 mb-4">
               <div className="w-14 h-14 bg-primary rounded-2xl flex items-center justify-center shrink-0"><Package className="w-7 h-7 text-primary-foreground" /></div>
               <div className="flex-1">
-                <h1 className="text-2xl md:text-3xl font-bold">Akash Inventory System</h1>
+                <h1 className="text-2xl md:text-3xl font-bold">Akash Digital System</h1>
                 <p className="text-muted-foreground">Choose the entity you want to work with</p>
               </div>
             </div>

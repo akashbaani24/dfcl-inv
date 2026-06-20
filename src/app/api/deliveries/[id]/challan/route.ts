@@ -110,7 +110,7 @@ export async function GET(
     <div class="brand">
       <div class="brand-logo">A</div>
       <div>
-        <div class="brand-name">Akash Inventory System</div>
+        <div class="brand-name">Akash Digital System</div>
         <div class="brand-subtitle">Delivery Challan</div>
       </div>
     </div>
@@ -156,7 +156,7 @@ export async function GET(
     <div class="signature-block"><div class="signature-line"></div><div class="signature-label">Authorized By</div></div>
     <div class="signature-block"><div class="signature-line"></div><div class="signature-label">Received By</div></div>
   </div>
-  <div class="footer">Generated on ${bdNow()} • Akash Inventory System • Developed by Abdur Rahman Akash</div>
+  <div class="footer">Generated on ${bdNow()} • Akash Digital System • Developed by Abdur Rahman Akash</div>
 </body>
 </html>`;
 

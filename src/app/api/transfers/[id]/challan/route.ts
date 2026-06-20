@@ -262,7 +262,7 @@ export async function GET(
     <div class="brand">
       <div class="brand-logo">A</div>
       <div>
-        <div class="brand-name">Akash Inventory System</div>
+        <div class="brand-name">Akash Digital System</div>
         <div class="brand-subtitle">Stock Transfer Challan</div>
       </div>
     </div>
@@ -335,7 +335,7 @@ export async function GET(
   </div>
 
   <div class="footer">
-    Generated on ${bdNow()} • Akash Inventory System • Developed by Abdur Rahman Akash
+    Generated on ${bdNow()} • Akash Digital System • Developed by Abdur Rahman Akash
   </div>
 </body>
 </html>`;

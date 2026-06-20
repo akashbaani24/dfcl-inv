@@ -14,8 +14,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Akash Inventory System",
-  description: "Akash Inventory System — comprehensive inventory, sales, purchase, and incentive management with multi-entity support.",
+  title: "Akash Digital System",
+  description: "Akash Digital System",
 };
 
 export const viewport = {
