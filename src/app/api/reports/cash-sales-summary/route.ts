@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 import { bdDate } from '@/lib/bd-time';
 
 // GET /api/reports/cash-sales-summary?from=2026-06-01&to=2026-06-30&entityId=xxx

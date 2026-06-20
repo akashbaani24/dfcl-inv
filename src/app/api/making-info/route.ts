@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 
 // GET all making info (admin/manager only)
 export async function GET(request: NextRequest) {

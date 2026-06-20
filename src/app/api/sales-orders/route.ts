@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 import { getStock } from '@/lib/stock-guard';
 
 export async function GET(request: NextRequest) {
@@ -22,6 +22,7 @@ export async function GET(request: NextRequest) {
     const salesOrders = await db.salesOrder.findMany({
       where,
       orderBy: { createdAt: 'desc' },
+      take: 200, // ★ Limit to 200 most recent orders for performance
       include: {
         entity: { select: { name: true } },
         customer: { select: { name: true, phone: true } },
@@ -33,20 +34,11 @@ export async function GET(request: NextRequest) {
             quantity: true,
             unitPrice: true,
             item: { select: { itemName: true } },
-            // ★ Include making entries so tailor payment page can compute payable
             makingEntries: { select: { id: true, name: true, unitPrice: true, quantity: true } },
           },
         },
         payments: { select: { id: true, amount: true, paymentType: true, paymentMode: true, receiptNo: true, paymentDate: true, chequeNo: true, bankName: true } },
-        // ★ Include tailor payments so the list page can show "fully paid" badges
-        tailorPayments: { select: { id: true, amount: true, tailorId: true, paymentDate: true } },
-        // ★ Include deliveries + delivery items so the UI can compute delivered vs ordered per item
-        deliveries: {
-          orderBy: { deliveryDate: 'desc' },
-          include: {
-            items: { select: { id: true, salesOrderItemId: true, itemId: true, quantity: true, uom: true } },
-          },
-        },
+        // ★ Skip tailorPayments + deliveries in list view — load them only when viewing detail
       },
     });
 

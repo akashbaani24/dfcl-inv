@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, canMasterData } from '@/lib/auth';
+import { getCurrentUserBasic, canMasterData } from '@/lib/auth';
 
 // PUT update item
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

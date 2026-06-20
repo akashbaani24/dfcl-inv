@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, hashPassword, ITEM_COLUMNS, MENU_ITEMS, MASTER_DATA_ITEMS } from '@/lib/auth';
+import { getCurrentUserBasic as getCurrentUser, hashPassword, ITEM_COLUMNS, MENU_ITEMS, MASTER_DATA_ITEMS } from '@/lib/auth';
 
 // GET all users (admin only)
 export async function GET(request: NextRequest) {

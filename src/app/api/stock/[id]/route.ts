@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, canMenu } from '@/lib/auth';
+import { getCurrentUserBasic, canMenu } from '@/lib/auth';
 
 // GET stock detail for a specific item across entities
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, canMenu } from '@/lib/auth';
+import { getCurrentUserBasic, canMenu } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
 // GET stock data - returns items with stock quantities for selected entity

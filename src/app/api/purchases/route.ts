@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, canMenu } from '@/lib/auth';
+import { getCurrentUserBasic, canMenu } from '@/lib/auth';
 
 // GET /api/purchases?entityId=xxx&status=pending
 // Returns list of purchases for the user's accessible entities

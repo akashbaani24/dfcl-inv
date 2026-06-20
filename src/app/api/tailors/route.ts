@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 
 // GET all tailors
 // Optional query: ?entityId=xxx → returns tailors assigned to that entity (or with empty entityIds = available to all)

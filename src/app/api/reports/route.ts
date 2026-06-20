@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser } from '@/lib/auth';
+import { getCurrentUserBasic } from '@/lib/auth';
 
 // GET aggregated report data.
 // Query params:
@@ -61,7 +61,7 @@ export async function GET(request: NextRequest) {
 
       const stocks = await db.stock.findMany({
         where: stockWhere,
-        include: { item: true, entity: true },
+        include: { item: { select: { itemName: true, uom: true, price: true } }, entity: { select: { name: true } } },
       });
 
       const totalQty = stocks.reduce((s, x) => s + x.quantity, 0);
@@ -114,7 +114,7 @@ export async function GET(request: NextRequest) {
         }),
         db.salesReturn.findMany({
           where,
-          include: { item: true, entity: true, customer: true },
+          include: { item: { select: { itemName: true, uom: true } }, entity: { select: { name: true } }, customer: { select: { name: true } } },
         }),
       ]);
 
@@ -194,7 +194,7 @@ export async function GET(request: NextRequest) {
           : userEntityIds
             ? { OR: [{ fromEntityId: { in: userEntityIds } }, { toEntityId: { in: userEntityIds } }], createdAt: { gte: from, lte: to } }
             : { createdAt: { gte: from, lte: to } },
-        include: { item: true, fromEntity: true, toEntity: true },
+        include: { item: { select: { itemName: true } }, fromEntity: { select: { name: true } }, toEntity: { select: { name: true } } },
       });
 
       const totalQty = transfers.reduce((s, t) => s + t.quantity, 0);
@@ -232,7 +232,7 @@ export async function GET(request: NextRequest) {
       const where = { ...entityFilter('entityId'), ...dateFilter('createdAt') };
       const adjustments = await db.itemAdjustment.findMany({
         where,
-        include: { item: true, entity: true },
+        include: { item: { select: { itemName: true, uom: true, price: true } }, entity: { select: { name: true } } },
       });
 
       const totalIncrease = adjustments.filter((a) => a.adjustmentType === 'increase').reduce((s, a) => s + a.quantity, 0);
@@ -267,7 +267,7 @@ export async function GET(request: NextRequest) {
       const where = { ...entityFilter('entityId'), ...dateFilter('createdAt') };
       const incentives = await db.incentive.findMany({
         where,
-        include: { item: true, entity: true, tailor: true },
+        include: { item: { select: { itemName: true } }, entity: { select: { name: true } }, tailor: { select: { name: true } } },
       });
 
       const totalAmount = incentives.reduce((s, i) => s + i.amount, 0);
