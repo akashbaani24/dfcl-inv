@@ -105,7 +105,12 @@ export async function GET(request: NextRequest) {
       const [orders, returns] = await Promise.all([
         db.salesOrder.findMany({
           where,
-          include: { item: true, entity: true, customer: true },
+          include: {
+            entity: true,
+            customer: true,
+            items: { include: { item: true, makingEntries: true } },
+            payments: { select: { amount: true } },
+          },
         }),
         db.salesReturn.findMany({
           where,
@@ -113,30 +118,46 @@ export async function GET(request: NextRequest) {
         }),
       ]);
 
-      const grossRevenue = orders.reduce((s, o) => s + o.quantity * o.price + o.makingCharge, 0);
+      // ★ v60: Compute revenue from SalesOrderItem[] (multi-item orders)
+      const computeOrderTotal = (o: any) => {
+        const subTotal = (o.items || []).reduce((s: number, si: any) => s + (si.quantity || 0) * (si.unitPrice || 0), 0);
+        const makingTotal = (o.items || []).reduce((s: number, si: any) =>
+          s + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0), 0);
+        return subTotal + makingTotal - (o.discount || 0);
+      };
+      const computeOrderUnits = (o: any) => (o.items || []).reduce((s: number, si: any) => s + (si.quantity || 0), 0);
+
+      const grossRevenue = orders.reduce((s, o) => s + computeOrderTotal(o), 0);
       const returnsValue = returns.reduce((s, r) => s + r.quantity * r.price, 0);
       const netRevenue = grossRevenue - returnsValue;
-      const totalUnitsSold = orders.reduce((s, o) => s + o.quantity, 0);
+      const totalUnitsSold = orders.reduce((s, o) => s + computeOrderUnits(o), 0);
       const totalUnitsReturned = returns.reduce((s, r) => s + r.quantity, 0);
 
       // Group by day for trend chart
-      const trend = aggregateByDay(orders, (o) => o.createdAt, (o) => o.quantity * o.price + o.makingCharge);
+      const trend = aggregateByDay(orders, (o: any) => o.createdAt, (o: any) => computeOrderTotal(o));
       const returnsTrend = aggregateByDay(returns, (r) => r.createdAt, (r) => r.quantity * r.price);
 
       // By status
-      const byStatus = countBy(orders, (o) => o.status);
+      const byStatus = countBy(orders, (o: any) => o.status);
 
       // By customer
       const byCustomer = topN(
-        groupSum(orders, (o) => o.customerId, (o) => ({ name: o.customer?.name || '-', value: o.quantity * o.price + o.makingCharge })),
+        groupSum(orders, (o: any) => o.customerId, (o: any) => ({ name: o.customer?.name || '-', value: computeOrderTotal(o) })),
         10
       );
 
-      // By item
-      const byItem = topN(
-        groupSum(orders, (o) => o.itemId, (o) => ({ name: o.item?.itemName || '-', value: o.quantity * o.price + o.makingCharge, qty: o.quantity })),
-        10
-      );
+      // By item — flatten all SalesOrderItems across orders
+      const itemMap = new Map<string, { name: string; value: number; qty: number }>();
+      for (const o of orders) {
+        for (const si of (o.items || [])) {
+          const key = si.itemId;
+          const cur = itemMap.get(key) || { name: si.item?.itemName || '-', value: 0, qty: 0 };
+          cur.value += (si.quantity || 0) * (si.unitPrice || 0);
+          cur.qty += si.quantity || 0;
+          itemMap.set(key, cur);
+        }
+      }
+      const byItem = topN(Array.from(itemMap.values()).map((v, i) => ({ key: String(i), ...v })), 10);
 
       result.sales = {
         orderCount: orders.length,
@@ -150,15 +171,16 @@ export async function GET(request: NextRequest) {
         byStatus,
         byCustomer,
         byItem,
-        recentOrders: orders.slice(0, 20).map((o) => ({
+        recentOrders: orders.slice(0, 20).map((o: any) => ({
           id: o.id,
-          itemName: o.item?.itemName || '-',
+          salesNo: o.salesNo || '-',
+          itemName: (o.items || []).map((si: any) => si.item?.itemName || '-').join(', ') || '-',
           entityName: o.entity?.name || '-',
           customerName: o.customer?.name || '-',
-          quantity: o.quantity,
-          price: o.price,
-          makingCharge: o.makingCharge,
-          total: o.quantity * o.price + o.makingCharge,
+          quantity: computeOrderUnits(o),
+          price: 0,
+          makingCharge: 0,
+          total: computeOrderTotal(o),
           status: o.status,
           createdAt: o.createdAt,
         })),
