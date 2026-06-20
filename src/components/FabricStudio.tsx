@@ -61,41 +61,65 @@ interface FabricDef {
 }
 
 // ────────────────────────────────────────────────────────────────────────
-// Chair SVG illustrations
+// 3D Chair SVG illustrations
 // ────────────────────────────────────────────────────────────────────────
-// Style notes:
-//   - All chairs face the same direction (front view, slightly 3/4).
-//   - The "fabric-area" elements are the seat + backrest (and arms where
-//     applicable).
-//   - The base/legs/frame are drawn in a neutral dark gray so the fabric
-//     pops out visually.
-//   - Each SVG uses viewBox so it scales nicely in the gallery AND the
-//     preview area.
+// Style: each chair uses gradients + drop-shadow filters for a 3D look.
+//   - fabric-area surfaces: filled with neutral base color (overridden
+//     to url(#fabric-pattern) when a fabric is selected).
+//   - frame/legs/base: linear gradients for metallic or wooden look.
+//   - drop-shadow filter is applied at the outer <svg> level via CSS.
+//
+// SVG <defs> with gradients are injected by the parent <svg> wrapper
+// (see ProductPreview component). Each chair's render() must NOT declare
+// its own <defs> for gradients — they must reference the shared gradient IDs:
+//   - grad-metal      (chrome / steel)
+//   - grad-wood-dark  (dark walnut)
+//   - grad-wood-light (light oak)
+//   - grad-fabric-shadow (subtle dark gradient overlaid on fabric surfaces
+//                         to give a 3D "puffed cushion" effect)
+//
+// The fabric-shadow overlay is a semi-transparent black gradient drawn
+// ON TOP of each fabric-area element. It does NOT have the .fabric-area
+// class, so it stays dark even when fabric pattern is applied.
 
 const OfficeChair = () => (
   <>
-    {/* 5-star base */}
-    <g fill="#2c3e50">
+    {/* Ground shadow */}
+    <ellipse cx="100" cy="244" rx="62" ry="6" fill="rgba(0,0,0,0.25)" />
+    {/* 5-star base (chrome) */}
+    <g fill="url(#grad-metal)">
       <ellipse cx="100" cy="232" rx="58" ry="7" />
       <polygon points="100,210 50,228 70,232 100,222 130,232 150,228" />
       <rect x="97" y="170" width="6" height="42" />
+      {/* Caster wheels */}
+      <circle cx="50" cy="228" r="4" />
+      <circle cx="70" cy="232" r="4" />
+      <circle cx="100" cy="222" r="4" />
+      <circle cx="130" cy="232" r="4" />
+      <circle cx="150" cy="228" r="4" />
     </g>
-    {/* Seat cushion (fabric) */}
+    {/* Seat cushion (fabric) — slight 3D puff on top edge */}
     <rect x="55" y="140" width="90" height="38" rx="8" className="fabric-area" fill="#bdc3c7" stroke="#2c3e50" strokeWidth="1.5" />
-    {/* Backrest (fabric) */}
+    <rect x="55" y="140" width="90" height="14" rx="6" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* Backrest (fabric) — vertical gradient overlay for 3D shape */}
     <rect x="55" y="25" width="90" height="115" rx="14" className="fabric-area" fill="#bdc3c7" stroke="#2c3e50" strokeWidth="1.5" />
+    <rect x="55" y="25" width="90" height="40" rx="14" fill="url(#grad-fabric-shadow)" opacity="0.25" />
     {/* Headrest accent (also fabric) */}
     <ellipse cx="100" cy="48" rx="38" ry="14" className="fabric-area" fill="#95a5a6" stroke="#2c3e50" strokeWidth="1" />
-    {/* Armrests */}
-    <rect x="40" y="120" width="14" height="22" rx="4" fill="#2c3e50" />
-    <rect x="146" y="120" width="14" height="22" rx="4" fill="#2c3e50" />
+    {/* Armrests (chrome) */}
+    <rect x="40" y="120" width="14" height="22" rx="4" fill="url(#grad-metal)" />
+    <rect x="146" y="120" width="14" height="22" rx="4" fill="url(#grad-metal)" />
+    {/* Highlight stripe on backrest edge for 3D depth */}
+    <rect x="57" y="27" width="4" height="111" rx="2" fill="rgba(255,255,255,0.4)" />
   </>
 )
 
 const DiningChair = () => (
   <>
-    {/* 4 legs */}
-    <g fill="#5d4037">
+    {/* Ground shadow */}
+    <ellipse cx="100" cy="244" rx="62" ry="6" fill="rgba(0,0,0,0.25)" />
+    {/* 4 legs (dark walnut wood) */}
+    <g fill="url(#grad-wood-dark)">
       <rect x="50" y="170" width="8" height="65" rx="2" />
       <rect x="142" y="170" width="8" height="65" rx="2" />
       <rect x="55" y="170" width="6" height="65" rx="2" opacity="0.7" />
@@ -105,151 +129,270 @@ const DiningChair = () => (
     </g>
     {/* Seat (fabric) */}
     <rect x="42" y="140" width="116" height="36" rx="6" className="fabric-area" fill="#bdc3c7" stroke="#5d4037" strokeWidth="1.5" />
+    <rect x="42" y="140" width="116" height="12" rx="4" fill="url(#grad-fabric-shadow)" opacity="0.35" />
     {/* Backrest frame */}
-    <rect x="42" y="20" width="6" height="125" fill="#5d4037" />
-    <rect x="152" y="20" width="6" height="125" fill="#5d4037" />
-    <rect x="42" y="20" width="116" height="6" fill="#5d4037" />
+    <rect x="42" y="20" width="6" height="125" fill="url(#grad-wood-dark)" />
+    <rect x="152" y="20" width="6" height="125" fill="url(#grad-wood-dark)" />
+    <rect x="42" y="20" width="116" height="6" fill="url(#grad-wood-dark)" />
     {/* Backrest panel (fabric) */}
     <rect x="52" y="32" width="96" height="105" rx="4" className="fabric-area" fill="#bdc3c7" stroke="#5d4037" strokeWidth="1" />
+    <rect x="52" y="32" width="96" height="30" rx="4" fill="url(#grad-fabric-shadow)" opacity="0.25" />
+    {/* Highlight stripe */}
+    <rect x="54" y="34" width="3" height="101" rx="1.5" fill="rgba(255,255,255,0.35)" />
   </>
 )
 
 const SofaChair = () => (
   <>
-    {/* Base/legs */}
-    <g fill="#3e2723">
+    {/* Ground shadow */}
+    <ellipse cx="130" cy="246" rx="130" ry="6" fill="rgba(0,0,0,0.25)" />
+    {/* Base/legs (dark wood) */}
+    <g fill="url(#grad-wood-dark)">
       <rect x="20" y="220" width="8" height="22" />
       <rect x="232" y="220" width="8" height="22" />
       <rect x="20" y="218" width="220" height="10" rx="2" />
     </g>
     {/* Backrest frame */}
-    <rect x="20" y="40" width="220" height="90" rx="10" fill="#5d4037" />
+    <rect x="20" y="40" width="220" height="90" rx="10" fill="url(#grad-wood-dark)" />
     {/* Backrest cushions (3 — fabric) */}
     <rect x="30" y="50" width="65" height="75" rx="8" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    <rect x="30" y="50" width="65" height="20" rx="8" fill="url(#grad-fabric-shadow)" opacity="0.25" />
     <rect x="100" y="50" width="65" height="75" rx="8" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    <rect x="100" y="50" width="65" height="20" rx="8" fill="url(#grad-fabric-shadow)" opacity="0.25" />
     <rect x="170" y="50" width="65" height="75" rx="8" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    <rect x="170" y="50" width="65" height="20" rx="8" fill="url(#grad-fabric-shadow)" opacity="0.25" />
     {/* Armrests (fabric-wrapped) */}
     <rect x="14" y="50" width="22" height="160" rx="10" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
     <rect x="224" y="50" width="22" height="160" rx="10" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    {/* Seat cushions (3 — fabric) */}
+    {/* Seat cushions (3 — fabric, slightly lighter to suggest depth) */}
     <rect x="36" y="130" width="62" height="55" rx="8" className="fabric-area" fill="#d7dbdd" stroke="#3e2723" strokeWidth="1" />
+    <rect x="36" y="130" width="62" height="18" rx="6" fill="url(#grad-fabric-shadow)" opacity="0.35" />
     <rect x="102" y="130" width="62" height="55" rx="8" className="fabric-area" fill="#d7dbdd" stroke="#3e2723" strokeWidth="1" />
+    <rect x="102" y="130" width="62" height="18" rx="6" fill="url(#grad-fabric-shadow)" opacity="0.35" />
     <rect x="168" y="130" width="62" height="55" rx="8" className="fabric-area" fill="#d7dbdd" stroke="#3e2723" strokeWidth="1" />
+    <rect x="168" y="130" width="62" height="18" rx="6" fill="url(#grad-fabric-shadow)" opacity="0.35" />
     {/* Base front */}
     <rect x="36" y="185" width="194" height="35" rx="6" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    {/* Seam lines between cushions for definition */}
+    <line x1="100" y1="50" x2="100" y2="205" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
+    <line x1="168" y1="50" x2="168" y2="205" stroke="rgba(0,0,0,0.2)" strokeWidth="1" />
   </>
 )
 
 const ArmchairShape = () => (
   <>
+    {/* Ground shadow */}
+    <ellipse cx="130" cy="246" rx="100" ry="6" fill="rgba(0,0,0,0.25)" />
     {/* Legs */}
-    <g fill="#3e2723">
+    <g fill="url(#grad-wood-dark)">
       <rect x="40" y="220" width="10" height="22" />
       <rect x="190" y="220" width="10" height="22" />
     </g>
     {/* Backrest (fabric) */}
     <rect x="38" y="30" width="164" height="105" rx="14" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1.5" />
+    <rect x="38" y="30" width="164" height="35" rx="14" fill="url(#grad-fabric-shadow)" opacity="0.25" />
     {/* Arms (fabric) */}
     <rect x="20" y="60" width="28" height="155" rx="12" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1.5" />
     <rect x="192" y="60" width="28" height="155" rx="12" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1.5" />
     {/* Seat cushion (fabric) */}
     <rect x="48" y="135" width="144" height="55" rx="10" className="fabric-area" fill="#d7dbdd" stroke="#3e2723" strokeWidth="1.5" />
+    <rect x="48" y="135" width="144" height="18" rx="8" fill="url(#grad-fabric-shadow)" opacity="0.35" />
     {/* Front base */}
     <rect x="48" y="190" width="144" height="30" rx="6" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    {/* Highlight stripe on backrest edge for 3D depth */}
+    <rect x="40" y="32" width="4" height="101" rx="2" fill="rgba(255,255,255,0.4)" />
   </>
 )
 
 const BarStool = () => (
   <>
-    {/* Footrest ring + center pole */}
-    <g fill="#37474f">
+    {/* Ground shadow */}
+    <ellipse cx="100" cy="240" rx="55" ry="5" fill="rgba(0,0,0,0.25)" />
+    {/* Footrest ring + center pole (chrome) */}
+    <g fill="url(#grad-metal)">
       <ellipse cx="100" cy="220" rx="50" ry="6" />
       <rect x="97" y="100" width="6" height="125" />
     </g>
-    {/* Round seat (fabric) */}
+    {/* Round seat (fabric) — top + side for 3D thickness */}
     <ellipse cx="100" cy="100" rx="60" ry="14" className="fabric-area" fill="#bdc3c7" stroke="#37474f" strokeWidth="1.5" />
     <rect x="40" y="92" width="120" height="14" className="fabric-area" fill="#bdc3c7" stroke="#37474f" strokeWidth="1" />
+    {/* Top highlight for 3D dome effect */}
+    <ellipse cx="100" cy="95" rx="55" ry="10" fill="url(#grad-fabric-shadow)" opacity="0.3" />
     {/* Small backrest (fabric) */}
     <path d="M 50 92 Q 50 50 100 50 Q 150 50 150 92 Z" className="fabric-area" fill="#bdc3c7" stroke="#37474f" strokeWidth="1.5" />
+    <path d="M 55 90 Q 55 55 100 55 Q 145 55 145 90 Z" fill="url(#grad-fabric-shadow)" opacity="0.25" />
   </>
 )
 
 // ────────────────────────────────────────────────────────────────────────
-// Room SVG illustrations (with curtains)
+// 3D Room SVG illustrations (with FULL SCENE + PROMINENT curtains)
 // ────────────────────────────────────────────────────────────────────────
-// Each room has a window. The curtains (left + right panels) are the
-// "fabric-area" elements. The window frame, walls, floor are static.
+// Each room shows the ENTIRE room — wall, floor, furniture, AND the
+// curtains are large and centered so the customer can clearly see how
+// their fabric looks in context.
+//
+// Curtain panels use vertical wave paths to simulate fabric folds.
+// The fold shadows use the grad-fabric-shadow gradient for 3D depth.
 
 const LivingRoom = () => (
   <>
-    {/* Wall */}
-    <rect x="0" y="0" width="260" height="240" fill="#f5f5dc" />
-    {/* Floor */}
-    <rect x="0" y="200" width="260" height="40" fill="#8d6e63" />
-    {/* Window */}
-    <rect x="55" y="50" width="150" height="130" fill="#81d4fa" stroke="#5d4037" strokeWidth="4" />
-    {/* Window cross */}
-    <line x1="130" y1="50" x2="130" y2="180" stroke="#5d4037" strokeWidth="3" />
-    <line x1="55" y1="115" x2="205" y2="115" stroke="#5d4037" strokeWidth="3" />
-    {/* Curtain rod */}
-    <rect x="35" y="42" width="190" height="5" fill="#5d4037" />
-    {/* Left curtain panel (fabric) */}
-    <path d="M 35 47 L 35 195 Q 38 200 45 198 Q 50 196 55 200 L 55 47 Z" className="fabric-area" fill="#bdc3c7" stroke="#5d4037" strokeWidth="1" />
-    {/* Right curtain panel (fabric) */}
-    <path d="M 205 47 L 205 195 Q 210 200 215 198 Q 220 196 225 200 L 225 47 Z" className="fabric-area" fill="#bdc3c7" stroke="#5d4037" strokeWidth="1" />
-    {/* Pelmet (top valance) — fabric */}
-    <path d="M 35 47 Q 130 70 225 47 L 225 30 L 35 30 Z" className="fabric-area" fill="#bdc3c7" stroke="#5d4037" strokeWidth="1" />
-    {/* Plant on floor */}
-    <rect x="20" y="180" width="14" height="14" fill="#5d4037" />
-    <ellipse cx="27" cy="170" rx="10" ry="12" fill="#2e7d32" />
+    {/* Wall (warm beige with subtle vertical gradient for depth) */}
+    <defs>
+      <linearGradient id="grad-wall-living" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f5ebd6" />
+        <stop offset="100%" stopColor="#e8dcc0" />
+      </linearGradient>
+      <linearGradient id="grad-floor-living" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#a1775a" />
+        <stop offset="100%" stopColor="#6d4c41" />
+      </linearGradient>
+      <linearGradient id="grad-outdoor" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#7ec8e3" />
+        <stop offset="60%" stopColor="#aee3f5" />
+        <stop offset="100%" stopColor="#cdeef9" />
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="260" height="180" fill="url(#grad-wall-living)" />
+    <rect x="0" y="180" width="260" height="60" fill="url(#grad-floor-living)" />
+    {/* Floor perspective line */}
+    <line x1="0" y1="180" x2="260" y2="180" stroke="#3e2723" strokeWidth="1" opacity="0.3" />
+    {/* Window — centered, large, with sky view */}
+    <rect x="70" y="40" width="120" height="100" fill="url(#grad-outdoor)" stroke="#3e2723" strokeWidth="4" />
+    <line x1="130" y1="40" x2="130" y2="140" stroke="#3e2723" strokeWidth="3" />
+    <line x1="70" y1="90" x2="190" y2="90" stroke="#3e2723" strokeWidth="3" />
+    {/* Distant landscape hint */}
+    <ellipse cx="100" cy="130" rx="20" ry="6" fill="#7cb342" opacity="0.5" />
+    <ellipse cx="160" cy="130" rx="18" ry="5" fill="#7cb342" opacity="0.5" />
+    {/* Curtain rod (wooden) */}
+    <rect x="40" y="32" width="180" height="6" rx="2" fill="url(#grad-wood-dark)" />
+    <circle cx="40" cy="35" r="5" fill="url(#grad-wood-dark)" />
+    <circle cx="220" cy="35" r="5" fill="url(#grad-wood-dark)" />
+    {/* ★ LEFT CURTAIN PANEL (fabric) — wavy folds for 3D fabric look */}
+    <path d="M 40 38 Q 44 38 46 42 Q 48 50 44 60 Q 40 70 44 80 Q 48 90 44 100 Q 40 110 44 120 Q 48 130 44 140 Q 42 148 40 150 L 40 38 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    {/* Fold shadows on left panel */}
+    <path d="M 42 38 Q 43 50 42 80 Q 43 110 42 150 L 42 38 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* ★ RIGHT CURTAIN PANEL (fabric) */}
+    <path d="M 220 38 Q 216 38 214 42 Q 212 50 216 60 Q 220 70 216 80 Q 212 90 216 100 Q 220 110 216 120 Q 212 130 216 140 Q 218 148 220 150 L 220 38 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    <path d="M 218 38 Q 217 50 218 80 Q 217 110 218 150 L 218 38 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* ★ PELMET (top valance) — fabric, wavy bottom edge */}
+    <path d="M 40 38 Q 50 50 60 40 Q 70 50 80 40 Q 90 50 100 40 Q 110 50 120 40 Q 130 50 140 40 Q 150 50 160 40 Q 170 50 180 40 Q 190 50 200 40 Q 210 50 220 40 L 220 20 L 40 20 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    {/* Furniture — sofa on the floor (for context) */}
+    <rect x="40" y="190" width="180" height="40" rx="6" fill="#5d4037" />
+    <rect x="40" y="180" width="180" height="14" rx="4" fill="#795548" />
+    <rect x="35" y="190" width="10" height="40" rx="3" fill="#3e2723" />
+    <rect x="215" y="190" width="10" height="40" rx="3" fill="#3e2723" />
+    {/* Side table with plant */}
+    <rect x="10" y="200" width="22" height="30" fill="url(#grad-wood-dark)" />
+    <rect x="14" y="190" width="14" height="14" rx="2" fill="#5d4037" />
+    <ellipse cx="21" cy="180" rx="9" ry="11" fill="#2e7d32" />
+    <ellipse cx="21" cy="175" rx="6" ry="8" fill="#388e3c" />
   </>
 )
 
 const Bedroom = () => (
   <>
-    {/* Wall */}
-    <rect x="0" y="0" width="260" height="240" fill="#efebe9" />
-    {/* Floor */}
-    <rect x="0" y="200" width="260" height="40" fill="#a1887f" />
+    <defs>
+      <linearGradient id="grad-wall-bedroom" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#f0e6e0" />
+        <stop offset="100%" stopColor="#d7c4b8" />
+      </linearGradient>
+      <linearGradient id="grad-floor-bedroom" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#bcaaa4" />
+        <stop offset="100%" stopColor="#8d6e63" />
+      </linearGradient>
+      <linearGradient id="grad-outdoor-bd" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#90caf9" />
+        <stop offset="100%" stopColor="#e3f2fd" />
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="260" height="170" fill="url(#grad-wall-bedroom)" />
+    <rect x="0" y="170" width="260" height="70" fill="url(#grad-floor-bedroom)" />
     {/* Window */}
-    <rect x="50" y="40" width="160" height="120" fill="#bbdefb" stroke="#3e2723" strokeWidth="4" />
-    {/* Sheer curtain behind (semi-transparent — fabric) */}
-    <rect x="40" y="35" width="180" height="135" className="fabric-area" fill="#ffffff" opacity="0.7" stroke="#3e2723" strokeWidth="1" />
-    {/* Curtain rod */}
-    <rect x="30" y="32" width="200" height="5" fill="#3e2723" />
-    {/* Left drape panel (fabric) */}
-    <path d="M 30 37 L 30 195 Q 35 200 42 198 Q 48 196 55 200 L 55 37 Z" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    {/* Right drape panel (fabric) */}
-    <path d="M 205 37 L 205 195 Q 212 200 218 198 Q 225 196 230 200 L 230 37 Z" className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
-    {/* Tiebacks (decorative, non-fabric) */}
-    <circle cx="42" cy="120" r="3" fill="#d4af37" />
-    <circle cx="218" cy="120" r="3" fill="#d4af37" />
-    {/* Bed hint at bottom */}
-    <rect x="40" y="200" width="180" height="35" fill="#fff" stroke="#3e2723" strokeWidth="1" />
-    <rect x="40" y="190" width="60" height="20" rx="4" fill="#fff" stroke="#3e2723" strokeWidth="1" />
+    <rect x="70" y="30" width="120" height="100" fill="url(#grad-outdoor-bd)" stroke="#3e2723" strokeWidth="4" />
+    <line x1="130" y1="30" x2="130" y2="130" stroke="#3e2723" strokeWidth="3" />
+    {/* Curtain rod (metallic) */}
+    <rect x="40" y="22" width="180" height="5" rx="2" fill="url(#grad-metal)" />
+    <circle cx="40" cy="25" r="4" fill="url(#grad-metal)" />
+    <circle cx="220" cy="25" r="4" fill="url(#grad-metal)" />
+    {/* ★ SHEER CURTAIN (semi-transparent — fabric) covering full window */}
+    <rect x="40" y="27" width="180" height="115" className="fabric-area" fill="#ffffff" opacity="0.5" stroke="#3e2723" strokeWidth="0.5" />
+    {/* ★ LEFT DRAPE PANEL (fabric) — full fold waves */}
+    <path d="M 40 27 Q 44 35 42 50 Q 40 65 44 80 Q 48 95 44 110 Q 40 125 44 140 L 44 27 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    <path d="M 42 27 Q 43 50 42 90 Q 43 120 43 140 L 43 27 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* ★ RIGHT DRAPE PANEL (fabric) */}
+    <path d="M 220 27 Q 216 35 218 50 Q 220 65 216 80 Q 212 95 216 110 Q 220 125 216 140 L 216 27 Z"
+          className="fabric-area" fill="#bdc3c7" stroke="#3e2723" strokeWidth="1" />
+    <path d="M 218 27 Q 217 50 218 90 Q 217 120 217 140 L 217 27 Z" fill="url(#grad-fabric-shadow)" opacity="0.35" />
+    {/* ★ TIEBACKS (gold, decorative — non-fabric) holding the drapes back */}
+    <ellipse cx="44" cy="100" rx="5" ry="3" fill="#d4af37" stroke="#a67c00" strokeWidth="0.5" />
+    <ellipse cx="216" cy="100" rx="5" ry="3" fill="#d4af37" stroke="#a67c00" strokeWidth="0.5" />
+    {/* Bed — headboard + mattress + pillows at the bottom for context */}
+    <rect x="60" y="170" width="140" height="60" rx="4" fill="#efebe9" stroke="#3e2723" strokeWidth="1" />
+    <rect x="55" y="160" width="150" height="14" rx="6" fill="#795548" stroke="#3e2723" strokeWidth="1" />
+    {/* Pillows */}
+    <rect x="68" y="172" width="50" height="20" rx="6" fill="#fafafa" stroke="#bdbdbd" strokeWidth="0.5" />
+    <rect x="142" y="172" width="50" height="20" rx="6" fill="#fafafa" stroke="#bdbdbd" strokeWidth="0.5" />
+    {/* Blanket */}
+    <rect x="60" y="200" width="140" height="25" fill="#a1887f" stroke="#3e2723" strokeWidth="0.5" />
   </>
 )
 
 const OfficeRoom = () => (
   <>
-    {/* Wall */}
-    <rect x="0" y="0" width="260" height="240" fill="#eceff1" />
-    {/* Floor */}
-    <rect x="0" y="200" width="260" height="40" fill="#607d8b" />
-    {/* Large window (floor to almost ceiling) */}
-    <rect x="40" y="30" width="180" height="160" fill="#90caf9" stroke="#263238" strokeWidth="5" />
-    {/* Window divider (vertical) */}
-    <line x1="130" y1="30" x2="130" y2="190" stroke="#263238" strokeWidth="4" />
-    {/* Vertical blinds — multiple strips (all fabric) */}
-    {[42, 56, 70, 84, 98, 112, 134, 148, 162, 176, 190, 204].map((x, i) => (
-      <rect key={i} x={x} y={32} width="10" height="156" className="fabric-area" fill="#bdc3c7" stroke="#263238" strokeWidth="0.5" />
+    <defs>
+      <linearGradient id="grad-wall-office" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#eceff1" />
+        <stop offset="100%" stopColor="#cfd8dc" />
+      </linearGradient>
+      <linearGradient id="grad-floor-office" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#78909c" />
+        <stop offset="100%" stopColor="#455a64" />
+      </linearGradient>
+      <linearGradient id="grad-outdoor-office" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#64b5f6" />
+        <stop offset="100%" stopColor="#bbdefb" />
+      </linearGradient>
+    </defs>
+    <rect x="0" y="0" width="260" height="170" fill="url(#grad-wall-office)" />
+    <rect x="0" y="170" width="260" height="70" fill="url(#grad-floor-office)" />
+    {/* Floor reflection hint */}
+    <rect x="0" y="170" width="260" height="3" fill="rgba(255,255,255,0.3)" />
+    {/* LARGE FLOOR-TO-CEILING WINDOW */}
+    <rect x="50" y="25" width="160" height="150" fill="url(#grad-outdoor-office)" stroke="#263238" strokeWidth="5" />
+    {/* Window cross */}
+    <line x1="130" y1="25" x2="130" y2="175" stroke="#263238" strokeWidth="4" />
+    <line x1="50" y1="100" x2="210" y2="100" stroke="#263238" strokeWidth="3" />
+    {/* Distant buildings hint */}
+    <rect x="60" y="130" width="20" height="40" fill="#90a4ae" opacity="0.5" />
+    <rect x="85" y="110" width="15" height="60" fill="#90a4ae" opacity="0.5" />
+    <rect x="170" y="120" width="20" height="50" fill="#90a4ae" opacity="0.5" />
+    <rect x="195" y="135" width="12" height="35" fill="#90a4ae" opacity="0.5" />
+    {/* Top + bottom rails (track) */}
+    <rect x="46" y="22" width="168" height="7" fill="url(#grad-metal)" />
+    <rect x="46" y="173" width="168" height="7" fill="url(#grad-metal)" />
+    {/* ★ VERTICAL BLINDS — 12 strips (all fabric) covering the window */}
+    {[50, 64, 78, 92, 106, 138, 152, 166, 180, 194].map((x, i) => (
+      <g key={i}>
+        <rect x={x} y={29} width="11" height="143" className="fabric-area" fill="#bdc3c7" stroke="#37474f" strokeWidth="0.4" />
+        {/* Shadow strip on right edge of each blind for 3D */}
+        <rect x={x + 7} y={29} width="4" height="143" fill="url(#grad-fabric-shadow)" opacity="0.4" />
+      </g>
     ))}
-    {/* Top rail */}
-    <rect x="38" y="28" width="184" height="6" fill="#263238" />
-    {/* Bottom rail */}
-    <rect x="38" y="186" width="184" height="6" fill="#263238" />
-    {/* Office desk hint */}
-    <rect x="20" y="180" width="40" height="40" fill="#5d4037" />
+    {/* Office desk in foreground */}
+    <rect x="20" y="180" width="80" height="40" fill="url(#grad-wood-dark)" />
+    <rect x="20" y="180" width="80" height="6" fill="#3e2723" />
+    {/* Desk legs */}
+    <rect x="22" y="220" width="4" height="20" fill="#3e2723" />
+    <rect x="94" y="220" width="4" height="20" fill="#3e2723" />
+    {/* Computer monitor on desk */}
+    <rect x="40" y="160" width="40" height="28" rx="2" fill="#263238" />
+    <rect x="42" y="162" width="36" height="22" fill="#1565c0" />
+    <rect x="55" y="188" width="10" height="6" fill="#263238" />
+    <rect x="45" y="194" width="30" height="3" fill="#263238" />
   </>
 )
 
@@ -664,6 +807,7 @@ function ProductCard({
     >
       <div className="aspect-square bg-gradient-to-br from-slate-50 to-slate-100 p-2">
         <svg viewBox={product.viewBox} className="w-full h-full">
+          <SharedDefs />
           <ProductBody product={product} />
         </svg>
       </div>
@@ -671,6 +815,51 @@ function ProductCard({
         <p className="text-xs font-medium text-foreground truncate">{t(product.nameEn, product.nameBn)}</p>
       </div>
     </button>
+  )
+}
+
+// ────────────────────────────────────────────────────────────────────────
+// Shared SVG <defs> — gradients used by all chair/room illustrations.
+// MUST be the first child of any <svg> that renders a product, otherwise
+// the url(#grad-*) references won't resolve.
+// ────────────────────────────────────────────────────────────────────────
+
+function SharedDefs() {
+  return (
+    <defs>
+      {/* Chrome / steel — used for office-chair bases, rods, rails */}
+      <linearGradient id="grad-metal" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="#eceff1" />
+        <stop offset="40%" stopColor="#90a4ae" />
+        <stop offset="100%" stopColor="#37474f" />
+      </linearGradient>
+      {/* Dark walnut wood — chair legs, frames, curtain rods */}
+      <linearGradient id="grad-wood-dark" x1="0" y1="0" x2="1" y2="0">
+        <stop offset="0%" stopColor="#3e2723" />
+        <stop offset="50%" stopColor="#5d4037" />
+        <stop offset="100%" stopColor="#3e2723" />
+      </linearGradient>
+      {/* Fabric shadow overlay — used ON TOP of fabric-area elements to
+          give a 3D "puffed cushion" or "fold" effect. Top is darker,
+          fading to transparent at bottom. */}
+      <linearGradient id="grad-fabric-shadow" x1="0" y1="0" x2="0" y2="1">
+        <stop offset="0%" stopColor="rgba(0,0,0,0.55)" />
+        <stop offset="60%" stopColor="rgba(0,0,0,0.15)" />
+        <stop offset="100%" stopColor="rgba(0,0,0,0)" />
+      </linearGradient>
+      {/* Soft drop shadow filter for the whole product */}
+      <filter id="soft-shadow" x="-20%" y="-20%" width="140%" height="140%">
+        <feGaussianBlur in="SourceAlpha" stdDeviation="3" />
+        <feOffset dx="2" dy="4" result="offsetblur" />
+        <feComponentTransfer>
+          <feFuncA type="linear" slope="0.3" />
+        </feComponentTransfer>
+        <feMerge>
+          <feMergeNode />
+          <feMergeNode in="SourceGraphic" />
+        </feMerge>
+      </filter>
+    </defs>
   )
 }
 
@@ -695,7 +884,8 @@ function ProductPreview({
   // When no fabric is selected, render the SVG body as-is (default neutral fill).
   if (!fabric) {
     return (
-      <svg viewBox={product.viewBox} className="w-full max-w-md h-auto drop-shadow-xl">
+      <svg viewBox={product.viewBox} className="w-full max-w-md h-auto" style={{ filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.25))' }}>
+        <SharedDefs />
         <ProductBody product={product} />
       </svg>
     )
@@ -709,7 +899,8 @@ function ProductPreview({
   // pattern defs, then applying a CSS rule that overrides .fabric-area
   // fills via inline style.
   return (
-    <svg viewBox={product.viewBox} className="w-full max-w-md h-auto drop-shadow-xl">
+    <svg viewBox={product.viewBox} className="w-full max-w-md h-auto" style={{ filter: 'drop-shadow(0 8px 16px rgba(0,0,0,0.25))' }}>
+      <SharedDefs />
       <defs>
         <pattern
           id="fabric-pattern"
