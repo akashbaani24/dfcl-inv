@@ -196,6 +196,7 @@ export const MENU_ITEMS = [
   { key: 'accounts', label: 'Income/Expense', group: 'Function' },
   { key: 'reports', label: 'Reports (All)', group: 'Function' },
   { key: 'reports_overview', label: 'Report: Overview', group: 'Function' },
+  { key: 'reports_cashSales', label: 'Report: Daily Sales Records', group: 'Function' },
   { key: 'reports_accounts', label: 'Report: Income/Expense', group: 'Function' },
   { key: 'reports_stock', label: 'Report: Stock', group: 'Function' },
   { key: 'reports_sales', label: 'Report: Sales', group: 'Function' },

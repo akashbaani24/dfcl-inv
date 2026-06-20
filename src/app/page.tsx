@@ -220,6 +220,7 @@ const ALL_MENU_ITEMS = [
   { key: 'accounts', label: 'Income/Expense', group: 'Function' },
   { key: 'reports', label: 'Reports (All)', group: 'Function' },
   { key: 'reports_overview', label: 'Report: Overview', group: 'Function' },
+  { key: 'reports_cashSales', label: 'Report: Daily Sales Records', group: 'Function' },
   { key: 'reports_accounts', label: 'Report: Income/Expense', group: 'Function' },
   { key: 'reports_stock', label: 'Report: Stock', group: 'Function' },
   { key: 'reports_sales', label: 'Report: Sales', group: 'Function' },
@@ -7232,7 +7233,7 @@ export default function Home() {
   )
 
   // ---- Reports page helpers ----
-  const fmtMoney = (n: number) => new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD', maximumFractionDigits: 2 }).format(n || 0)
+  const fmtMoney = (n: number) => '৳ ' + new Intl.NumberFormat('en-IN', { maximumFractionDigits: 2, minimumFractionDigits: 2 }).format(n || 0)
   const fmtNum = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
   const fmtDate = (s: string) => { try { return new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) } catch { return s } }
   const fmtDay = (s: string) => { try { return new Date(s).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }) } catch { return s } }
