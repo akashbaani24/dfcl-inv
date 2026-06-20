@@ -187,11 +187,13 @@ export const MENU_ITEMS = [
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'tailorPayment', label: 'Tailor Payment', group: 'Sales' },
+  { key: 'dailySales', label: 'Daily Sales', group: 'Sales' },
   { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
+  { key: 'accounts', label: 'Income/Expense', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ] as const;
 

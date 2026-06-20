@@ -750,6 +750,44 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE "Purchase" ADD COLUMN "shippingTo" TEXT',
     description: 'Add shippingTo column to Purchase (both local and foreign)',
   },
+  // ★ v60: AccountsEntry table — manual income/expense + daily sales
+  {
+    id: '2026_06_20_accountsentry_table',
+    sql: `CREATE TABLE IF NOT EXISTS "AccountsEntry" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "entityId" TEXT NOT NULL,
+      "entryDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "entryType" TEXT NOT NULL,
+      "category" TEXT NOT NULL,
+      "cashAmount" REAL NOT NULL DEFAULT 0,
+      "cardAmount" REAL NOT NULL DEFAULT 0,
+      "chequeAmount" REAL NOT NULL DEFAULT 0,
+      "mobileAmount" REAL NOT NULL DEFAULT 0,
+      "amount" REAL NOT NULL DEFAULT 0,
+      "paymentType" TEXT,
+      "description" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      FOREIGN KEY ("entityId") REFERENCES "Entity"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create AccountsEntry table',
+  },
+  {
+    id: '2026_06_20_accountsentry_idx_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS `AccountsEntry_entityId_idx` ON `AccountsEntry`(`entityId`)',
+    description: 'Index on AccountsEntry.entityId',
+  },
+  {
+    id: '2026_06_20_accountsentry_idx_date',
+    sql: 'CREATE INDEX IF NOT EXISTS `AccountsEntry_entryDate_idx` ON `AccountsEntry`(`entryDate`)',
+    description: 'Index on AccountsEntry.entryDate',
+  },
+  {
+    id: '2026_06_20_accountsentry_idx_type',
+    sql: 'CREATE INDEX IF NOT EXISTS `AccountsEntry_entryType_idx` ON `AccountsEntry`(`entryType`)',
+    description: 'Index on AccountsEntry.entryType',
+  },
 ];
 
 export async function POST(request: NextRequest) {

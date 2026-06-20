@@ -136,6 +136,7 @@ model Entity {
   supplierPayments SupplierPayment[]
   tailorPayments   TailorPayment[]
   deliveries       Delivery[]
+  accountsEntries  AccountsEntry[]
   sentMessages     ChatMessage[]   @relation("ChatFromEntity")
   receivedMessages ChatMessage[]   @relation("ChatToEntity")
 }
@@ -168,6 +169,35 @@ model NewsTicker {
   updatedAt DateTime @updatedAt
 
   @@index([status])
+}
+
+// ★ v60: Manual accounts entries — income, expense, and daily sales summary
+// Each entity can record their own daily sales (by payment type) and other income/expenses.
+// Entity sees only their own entries. Head Office (admin/manager) sees all.
+model AccountsEntry {
+  id             String   @id @default(cuid())
+  entityId       String
+  entryDate      DateTime @default(now())
+  entryType      String   // "income", "expense", "sales"
+  category       String   // For income/expense: "rent", "salary", "utilities", "misc", etc. For sales: "daily_sales"
+  // ★ For sales entries: amount per payment type
+  cashAmount     Float    @default(0)
+  cardAmount     Float    @default(0)
+  chequeAmount   Float    @default(0)
+  mobileAmount   Float    @default(0)
+  // ★ For income/expense entries: single amount
+  amount         Float    @default(0)
+  paymentType    String?  // For income/expense: "cash", "card", "cheque", "mobile_banking", "bank"
+  description    String?
+  createdBy      String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@index([entityId])
+  @@index([entryDate])
+  @@index([entryType])
 }
 
 model Item {

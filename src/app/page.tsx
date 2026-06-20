@@ -171,7 +171,7 @@ type ViewType =
   | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive' | 'newReceive'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'newSalesReturn' | 'tailorPayment' | 'newTailorPayment'
-  | 'booking' | 'newBooking' | 'bookingDetail' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'reports'
+  | 'booking' | 'newBooking' | 'bookingDetail' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'accounts' | 'dailySales' | 'reports'
   | 'items' | 'newItem' | 'editItem' | 'upload'
   | 'users' | 'userForm' | 'entities'
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
@@ -211,11 +211,13 @@ const ALL_MENU_ITEMS = [
   { key: 'salesOrder', label: 'Sales Order', group: 'Sales' },
   { key: 'salesReturn', label: 'Sales Return', group: 'Sales' },
   { key: 'tailorPayment', label: 'Tailor Payment', group: 'Sales' },
+  { key: 'dailySales', label: 'Daily Sales', group: 'Sales' },
   { key: 'delivery', label: 'Delivery', group: 'Sales' },
   { key: 'booking', label: 'Booking', group: 'Function' },
   { key: 'damage', label: 'Damage/Wastage', group: 'Function' },
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
+  { key: 'accounts', label: 'Income/Expense', group: 'Function' },
   { key: 'reports', label: 'Reports', group: 'Function' },
 ]
 
@@ -583,7 +585,10 @@ export default function Home() {
   const [spLoading, setSpLoading] = useState(false)
   const [showSpDialog, setShowSpDialog] = useState(false)
 
-  // ★ Tailor Payments state
+  // ★ Daily Sales + Accounts entries state
+  const [accountsEntries, setAccountsEntries] = useState<any[]>([])
+  const [dailySalesForm, setDailySalesForm] = useState({ entryDate: new Date().toISOString().split('T')[0], cashAmount: '', cardAmount: '', chequeAmount: '', mobileAmount: '', description: '' })
+  const [accountsForm, setAccountsForm] = useState({ entryType: 'income', category: 'misc', amount: '', paymentType: 'cash', entryDate: new Date().toISOString().split('T')[0], description: '' })
   const [tailorPayments, setTailorPayments] = useState<any[]>([])
   const [tailorPaymentLoading, setTailorPaymentLoading] = useState(false)
   const [tailorPaymentForm, setTailorPaymentForm] = useState({
@@ -964,6 +969,41 @@ export default function Home() {
   const fetchSuppliers = async () => { try { const res = await authFetch('/api/suppliers'); if (res.ok) { const d = await res.json(); setSuppliers(d.suppliers) } } catch {} }
   const fetchEmployees = async () => { try { const res = await authFetch('/api/employees'); if (res.ok) { const d = await res.json(); setEmployees(d.employees) } } catch {} }
   const fetchSupplierPayments = async () => { if (!workingEntity) return; setSpLoading(true); try { const params = new URLSearchParams(); params.set('entityId', workingEntity.id); const res = await authFetch(`/api/supplier-payments?${params}`); if (res.ok) { const d = await res.json(); setSpPayments(d.payments || []) } } catch {} finally { setSpLoading(false) } }
+  // ★ Fetch accounts entries (daily sales + income/expense)
+  const fetchAccountsEntries = async (entryType?: string) => {
+    if (!workingEntity) return
+    try {
+      const params = new URLSearchParams()
+      params.set('entityId', workingEntity.id)
+      if (entryType) params.set('entryType', entryType)
+      const res = await authFetch(`/api/accounts-entries?${params}`)
+      if (res.ok) { const d = await res.json(); setAccountsEntries(d.entries || []) }
+    } catch {}
+  }
+  const handleSaveDailySales = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!workingEntity) return
+    const ok = await confirm({ title: 'Save Daily Sales?', message: `This will record daily sales for ${dailySalesForm.entryDate}. Total: ${(parseFloat(dailySalesForm.cashAmount||'0') + parseFloat(dailySalesForm.cardAmount||'0') + parseFloat(dailySalesForm.chequeAmount||'0') + parseFloat(dailySalesForm.mobileAmount||'0')).toFixed(2)}. Continue?`, confirmLabel: 'Save' })
+    if (!ok) return
+    try {
+      const res = await authFetch('/api/accounts-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityId: workingEntity.id, entryType: 'sales', entryDate: dailySalesForm.entryDate, cashAmount: dailySalesForm.cashAmount || 0, cardAmount: dailySalesForm.cardAmount || 0, chequeAmount: dailySalesForm.chequeAmount || 0, mobileAmount: dailySalesForm.mobileAmount || 0, description: dailySalesForm.description }) })
+      if (res.ok) { toast({ title: 'Success', description: 'Daily sales recorded' }); setDailySalesForm({ entryDate: new Date().toISOString().split('T')[0], cashAmount: '', cardAmount: '', chequeAmount: '', mobileAmount: '', description: '' }); fetchAccountsEntries('sales') }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleSaveAccountsEntry = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!workingEntity) return
+    try {
+      const res = await authFetch('/api/accounts-entries', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ entityId: workingEntity.id, entryType: accountsForm.entryType, category: accountsForm.category, amount: accountsForm.amount, paymentType: accountsForm.paymentType, entryDate: accountsForm.entryDate, description: accountsForm.description }) })
+      if (res.ok) { toast({ title: 'Success', description: `${accountsForm.entryType === 'income' ? 'Income' : 'Expense'} recorded` }); setAccountsForm({ entryType: accountsForm.entryType, category: 'misc', amount: '', paymentType: 'cash', entryDate: new Date().toISOString().split('T')[0], description: '' }); fetchAccountsEntries() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteAccountsEntry = async (id: string) => {
+    if (!confirm('Delete this entry?')) return
+    try { const res = await authFetch(`/api/accounts-entries/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchAccountsEntries() } } catch {}
+  }
   const fetchCustomers = async () => { try { const res = await authFetch('/api/customers'); if (res.ok) { const d = await res.json(); setCustomers(d.customers) } } catch {} }
 
   // Transaction fetch handlers
@@ -1703,6 +1743,8 @@ export default function Home() {
   useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
   useEffect(() => {
     if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() }
+    if (currentView === 'dailySales' && workingEntity) { fetchAccountsEntries('sales') }
+    if (currentView === 'accounts' && workingEntity) { fetchAccountsEntries() }
     if (currentView === 'stockUpload' && workingEntity && !stockUploadEntityId) {
       setStockUploadEntityId(workingEntity.id)
     }
@@ -2927,12 +2969,14 @@ export default function Home() {
       { key: 'salesOrder' as ViewType, label: 'Sales Order', icon: ClipboardList },
       { key: 'salesReturn' as ViewType, label: 'Sales Return', icon: RotateCcw },
       { key: 'tailorPayment' as ViewType, label: 'Tailor Payment', icon: Scissors },
+      { key: 'dailySales' as ViewType, label: 'Daily Sales', icon: DollarSign },
       { key: 'delivery' as ViewType, label: 'Delivery', icon: Truck },
     ]},
     { key: 'booking' as ViewType, label: 'Booking', icon: Receipt },
     { key: 'damage' as ViewType, label: 'Damage/Wastage', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', icon: DollarSign },
     { key: 'newsTicker' as ViewType, label: 'News Ticker', icon: FileText },
+    { key: 'accounts' as ViewType, label: 'Income/Expense', icon: DollarSign },
     { key: 'reports' as ViewType, label: 'Reports', icon: FileText },
   ].filter(item => {
     // Filter top-level items: show if item itself is visible OR any child is visible
@@ -7199,6 +7243,167 @@ export default function Home() {
     </Card>
   )
 
+  // ★ Daily Sales entry page
+  const renderDailySalesPage = () => {
+    const salesEntries = accountsEntries.filter((e: any) => e.entryType === 'sales')
+    const totalCash = salesEntries.reduce((s: number, e: any) => s + e.cashAmount, 0)
+    const totalCard = salesEntries.reduce((s: number, e: any) => s + e.cardAmount, 0)
+    const totalCheque = salesEntries.reduce((s: number, e: any) => s + e.chequeAmount, 0)
+    const totalMobile = salesEntries.reduce((s: number, e: any) => s + e.mobileAmount, 0)
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Daily Sales Entry — {workingEntity?.name}</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Entry form */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Record Daily Sales</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveDailySales} className="space-y-3">
+                <div className="space-y-1"><Label className="text-xs">Date *</Label><Input type="date" value={dailySalesForm.entryDate} onChange={e => setDailySalesForm({ ...dailySalesForm, entryDate: e.target.value })} required /></div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1"><Label className="text-xs">Cash Amount</Label><Input type="number" step="0.01" placeholder="0.00" value={dailySalesForm.cashAmount} onChange={e => setDailySalesForm({ ...dailySalesForm, cashAmount: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Card Amount</Label><Input type="number" step="0.01" placeholder="0.00" value={dailySalesForm.cardAmount} onChange={e => setDailySalesForm({ ...dailySalesForm, cardAmount: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Cheque Amount</Label><Input type="number" step="0.01" placeholder="0.00" value={dailySalesForm.chequeAmount} onChange={e => setDailySalesForm({ ...dailySalesForm, chequeAmount: e.target.value })} /></div>
+                  <div className="space-y-1"><Label className="text-xs">Mobile Banking</Label><Input type="number" step="0.01" placeholder="0.00" value={dailySalesForm.mobileAmount} onChange={e => setDailySalesForm({ ...dailySalesForm, mobileAmount: e.target.value })} /></div>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">Description</Label><Input value={dailySalesForm.description} onChange={e => setDailySalesForm({ ...dailySalesForm, description: e.target.value })} placeholder="Optional notes" /></div>
+                <div className="text-sm font-semibold text-right">Total: {(parseFloat(dailySalesForm.cashAmount||'0') + parseFloat(dailySalesForm.cardAmount||'0') + parseFloat(dailySalesForm.chequeAmount||'0') + parseFloat(dailySalesForm.mobileAmount||'0')).toFixed(2)}</div>
+                <Button type="submit" className="w-full"><Save className="w-4 h-4 mr-2" />Save Daily Sales</Button>
+              </form>
+            </CardContent>
+          </Card>
+          {/* Summary */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Summary</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Cash</p><p className="text-lg font-bold text-green-600">{totalCash.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Card</p><p className="text-lg font-bold text-blue-600">{totalCard.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Cheque</p><p className="text-lg font-bold text-purple-600">{totalCheque.toFixed(2)}</p></div>
+                <div className="rounded-lg border p-3"><p className="text-xs text-muted-foreground">Mobile</p><p className="text-lg font-bold text-orange-600">{totalMobile.toFixed(2)}</p></div>
+              </div>
+              <div className="rounded-lg border p-3 bg-muted/30"><p className="text-xs text-muted-foreground">Grand Total</p><p className="text-xl font-bold text-primary">{(totalCash + totalCard + totalCheque + totalMobile).toFixed(2)}</p></div>
+            </CardContent>
+          </Card>
+        </div>
+        {/* History table */}
+        <div className="border rounded-lg overflow-x-auto">
+          <Table><TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold text-right">Cash</TableHead>
+            <TableHead className="font-semibold text-right">Card</TableHead>
+            <TableHead className="font-semibold text-right">Cheque</TableHead>
+            <TableHead className="font-semibold text-right">Mobile</TableHead>
+            <TableHead className="font-semibold text-right">Total</TableHead>
+            <TableHead className="font-semibold">Description</TableHead>
+            <TableHead className="font-semibold text-center">Action</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {salesEntries.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No daily sales recorded yet</TableCell></TableRow>
+            : salesEntries.map((e: any) => (
+              <TableRow key={e.id} className="hover:bg-muted/30">
+                <TableCell className="text-xs">{bdDate(new Date(e.entryDate))}</TableCell>
+                <TableCell className="text-right">{e.cashAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{e.cardAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{e.chequeAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right">{e.mobileAmount.toFixed(2)}</TableCell>
+                <TableCell className="text-right font-bold">{(e.cashAmount + e.cardAmount + e.chequeAmount + e.mobileAmount).toFixed(2)}</TableCell>
+                <TableCell className="text-xs">{e.description || '—'}</TableCell>
+                <TableCell className="text-center"><Button variant="ghost" size="sm" onClick={() => handleDeleteAccountsEntry(e.id)} className="text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody></Table>
+        </div>
+      </div>
+    )
+  }
+
+  // ★ Income/Expense entry page
+  const renderAccountsPage = () => {
+    const incomeEntries = accountsEntries.filter((e: any) => e.entryType === 'income')
+    const expenseEntries = accountsEntries.filter((e: any) => e.entryType === 'expense')
+    const totalIncome = incomeEntries.reduce((s: number, e: any) => s + e.amount, 0)
+    const totalExpense = expenseEntries.reduce((s: number, e: any) => s + e.amount, 0)
+    return (
+      <div className="space-y-4">
+        <h2 className="text-xl font-semibold">Income & Expense — {workingEntity?.name}</h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          {/* Entry form */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">New Entry</CardTitle></CardHeader>
+            <CardContent>
+              <form onSubmit={handleSaveAccountsEntry} className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Type *</Label>
+                    <Select value={accountsForm.entryType} onValueChange={v => setAccountsForm({ ...accountsForm, entryType: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent>
+                    </Select>
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-xs">Category *</Label>
+                    <Select value={accountsForm.category} onValueChange={v => setAccountsForm({ ...accountsForm, category: v })}>
+                      <SelectTrigger><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        {accountsForm.entryType === 'income'
+                          ? ['Sales', 'Service', 'Rent Income', 'Interest', 'Other Income'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)
+                          : ['Rent', 'Salary', 'Utilities', 'Transport', 'Maintenance', 'Office Supplies', 'Misc Expense'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)
+                        }
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div className="space-y-1"><Label className="text-xs">Amount *</Label><Input type="number" step="0.01" placeholder="0.00" value={accountsForm.amount} onChange={e => setAccountsForm({ ...accountsForm, amount: e.target.value })} required /></div>
+                  <div className="space-y-1"><Label className="text-xs">Payment Type</Label><Select value={accountsForm.paymentType} onValueChange={v => setAccountsForm({ ...accountsForm, paymentType: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="cheque">Cheque</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="bank">Bank Transfer</SelectItem></SelectContent></Select></div>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">Date *</Label><Input type="date" value={accountsForm.entryDate} onChange={e => setAccountsForm({ ...accountsForm, entryDate: e.target.value })} required /></div>
+                <div className="space-y-1"><Label className="text-xs">Description</Label><Input value={accountsForm.description} onChange={e => setAccountsForm({ ...accountsForm, description: e.target.value })} placeholder="Optional notes" /></div>
+                <Button type="submit" className="w-full"><Save className="w-4 h-4 mr-2" />Save Entry</Button>
+              </form>
+            </CardContent>
+          </Card>
+          {/* Summary */}
+          <Card>
+            <CardHeader><CardTitle className="text-base">Summary</CardTitle></CardHeader>
+            <CardContent className="space-y-2">
+              <div className="rounded-lg border p-3 bg-green-50/50"><p className="text-xs text-muted-foreground">Total Income</p><p className="text-xl font-bold text-green-600">{totalIncome.toFixed(2)}</p></div>
+              <div className="rounded-lg border p-3 bg-red-50/50"><p className="text-xs text-muted-foreground">Total Expense</p><p className="text-xl font-bold text-red-600">{totalExpense.toFixed(2)}</p></div>
+              <div className="rounded-lg border p-3 bg-blue-50/50"><p className="text-xs text-muted-foreground">Net (Income − Expense)</p><p className={`text-xl font-bold ${totalIncome - totalExpense >= 0 ? 'text-green-600' : 'text-red-600'}`}>{(totalIncome - totalExpense).toFixed(2)}</p></div>
+            </CardContent>
+          </Card>
+        </div>
+        {/* History table */}
+        <div className="border rounded-lg overflow-x-auto">
+          <Table><TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Date</TableHead>
+            <TableHead className="font-semibold">Type</TableHead>
+            <TableHead className="font-semibold">Category</TableHead>
+            <TableHead className="font-semibold text-right">Amount</TableHead>
+            <TableHead className="font-semibold">Payment</TableHead>
+            <TableHead className="font-semibold">Description</TableHead>
+            <TableHead className="font-semibold text-center">Action</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {accountsEntries.filter((e: any) => e.entryType !== 'sales').length === 0 ? <TableRow><TableCell colSpan={7} className="text-center py-8 text-muted-foreground">No entries yet</TableCell></TableRow>
+            : accountsEntries.filter((e: any) => e.entryType !== 'sales').map((e: any) => (
+              <TableRow key={e.id} className={`hover:bg-muted/30 ${e.entryType === 'income' ? 'bg-green-50/20' : 'bg-red-50/20'}`}>
+                <TableCell className="text-xs">{bdDate(new Date(e.entryDate))}</TableCell>
+                <TableCell><Badge variant="outline" className={e.entryType === 'income' ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}>{e.entryType}</Badge></TableCell>
+                <TableCell>{e.category}</TableCell>
+                <TableCell className={`text-right font-bold ${e.entryType === 'income' ? 'text-green-600' : 'text-red-600'}`}>{e.amount.toFixed(2)}</TableCell>
+                <TableCell className="text-xs capitalize">{e.paymentType || '—'}</TableCell>
+                <TableCell className="text-xs">{e.description || '—'}</TableCell>
+                <TableCell className="text-center"><Button variant="ghost" size="sm" onClick={() => handleDeleteAccountsEntry(e.id)} className="text-destructive"><Trash2 className="w-3.5 h-3.5" /></Button></TableCell>
+              </TableRow>
+            ))}
+          </TableBody></Table>
+        </div>
+      </div>
+    )
+  }
+
   // ★ AccountsChart component — daily income vs expense chart
   const AccountsChart = ({ entityId }: { entityId: string }) => {
     const [data, setData] = useState<{ dailyData: any[]; summary: any } | null>(null)
@@ -8413,6 +8618,8 @@ export default function Home() {
       case 'delivery': return renderDeliveryPage()
       case 'damage': return renderDamagePage()
       case 'newsTicker': return renderNewsTickerPage()
+      case 'accounts': return renderAccountsPage()
+      case 'dailySales': return renderDailySalesPage()
       case 'reports': return renderReportsPage()
       case 'tailors': return renderTailorsPage()
       case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
