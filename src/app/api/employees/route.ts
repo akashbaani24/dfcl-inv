@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/employees?role=sales&status=active
 // Returns list of employees, optionally filtered by role and status.

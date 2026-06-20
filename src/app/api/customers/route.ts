@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
 
 // GET all customers — GLOBAL (no entity scoping).
 // Any authenticated user can see all customers.

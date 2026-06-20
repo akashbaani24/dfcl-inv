@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
 
 // Auto-cancel expired bookings (called when user opens Booking page)
 async function autoCancelExpired() {

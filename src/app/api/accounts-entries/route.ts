@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
 
 // GET /api/accounts-entries?entityId=xxx&entryType=sales&from=2026-01-01&to=2026-12-31
 // Entity sees only their own entries. Admin/manager sees all (or filtered by entityId).

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic, canMenu } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // GET all incentives
 export async function GET(request: NextRequest) {

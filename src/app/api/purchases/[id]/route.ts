@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic, canMenu } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // GET /api/purchases/[id] — purchase detail
 export async function GET(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {

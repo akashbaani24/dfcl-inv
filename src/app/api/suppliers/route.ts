@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic } from '@/lib/auth';
+import { getCurrentUser } from '@/lib/auth';
 
 // GET all suppliers (admin/manager only)
 export async function GET(request: NextRequest) {

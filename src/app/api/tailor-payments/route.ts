@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic, canMenu } from '@/lib/auth';
+import { getCurrentUser, canMenu } from '@/lib/auth';
 
 // GET /api/tailor-payments?entityId=xxx&salesOrderId=xxx&tailorId=xxx
 export async function GET(request: NextRequest) {

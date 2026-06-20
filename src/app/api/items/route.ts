@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUserBasic, canMasterData } from '@/lib/auth';
+import { getCurrentUser, canMasterData } from '@/lib/auth';
 import { Prisma } from '@prisma/client';
 
 // GET items with search, server-side pagination, and stock data
