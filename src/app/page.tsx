@@ -218,7 +218,14 @@ const ALL_MENU_ITEMS = [
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
   { key: 'accounts', label: 'Income/Expense', group: 'Function' },
-  { key: 'reports', label: 'Reports', group: 'Function' },
+  { key: 'reports', label: 'Reports (All)', group: 'Function' },
+  { key: 'reports_overview', label: 'Report: Overview', group: 'Function' },
+  { key: 'reports_accounts', label: 'Report: Income/Expense', group: 'Function' },
+  { key: 'reports_stock', label: 'Report: Stock', group: 'Function' },
+  { key: 'reports_sales', label: 'Report: Sales', group: 'Function' },
+  { key: 'reports_transfer', label: 'Report: Transfer', group: 'Function' },
+  { key: 'reports_adjustment', label: 'Report: Adjustment', group: 'Function' },
+  { key: 'reports_incentive', label: 'Report: Incentive', group: 'Function' },
 ]
 
 // ⚠️ IMPORTANT: Every master data item must also be in MASTER_DATA_ITEMS in src/lib/auth.ts
@@ -7602,15 +7609,15 @@ export default function Home() {
     const isManagerOrAdmin = user?.role === 'admin' || user?.role === 'manager'
     const entityOptions = isManagerOrAdmin ? entities : entities.filter(e => user?.entityAccess.some(ea => ea.entityId === e.id))
 
-    const tabs: { key: typeof reportTab; label: string; icon: React.ReactNode }[] = [
-      { key: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" /> },
-      { key: 'accounts', label: 'Income & Expense', icon: <DollarSign className="w-4 h-4" /> },
-      { key: 'stock', label: 'Stock', icon: <BarChart3 className="w-4 h-4" /> },
-      { key: 'sales', label: 'Sales', icon: <ShoppingCart className="w-4 h-4" /> },
-      { key: 'transfer', label: 'Transfer', icon: <ArrowRightLeft className="w-4 h-4" /> },
-      { key: 'adjustment', label: 'Adjustment', icon: <Settings2 className="w-4 h-4" /> },
-      { key: 'incentive', label: 'Incentive', icon: <DollarSign className="w-4 h-4" /> },
-    ]
+    const tabs: { key: typeof reportTab; label: string; icon: React.ReactNode; permKey: string }[] = [
+      { key: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" />, permKey: 'overview' },
+      { key: 'accounts', label: 'Income & Expense', icon: <DollarSign className="w-4 h-4" />, permKey: 'accounts' },
+      { key: 'stock', label: 'Stock', icon: <BarChart3 className="w-4 h-4" />, permKey: 'stock' },
+      { key: 'sales', label: 'Sales', icon: <ShoppingCart className="w-4 h-4" />, permKey: 'sales' },
+      { key: 'transfer', label: 'Transfer', icon: <ArrowRightLeft className="w-4 h-4" />, permKey: 'transfer' },
+      { key: 'adjustment', label: 'Adjustment', icon: <Settings2 className="w-4 h-4" />, permKey: 'adjustment' },
+      { key: 'incentive', label: 'Incentive', icon: <DollarSign className="w-4 h-4" />, permKey: 'incentive' },
+    ].filter(t => isManagerOrAdmin || hasPermission('menu', 'reports_' + t.permKey, 'export') || hasPermission('menu', 'reports', 'export'))
 
     return (
       <div className="space-y-6">
@@ -7682,7 +7689,7 @@ export default function Home() {
         ) : (
           <>
             {/* OVERVIEW */}
-            {reportTab === 'overview' && (
+            {reportTab === 'overview' && (isManagerOrAdmin || hasPermission('menu', 'reports_overview', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {renderKPI('Total Stock Value', fmtMoney(reportData.stock?.totalValue || 0), `${fmtNum(reportData.stock?.totalQty || 0)} units`, <Package className="w-5 h-5" />, 'cyan')}
@@ -7776,12 +7783,12 @@ export default function Home() {
             )}
 
             {/* ACCOUNTS — Income & Expense daily chart */}
-            {reportTab === 'accounts' && (
+            {reportTab === 'accounts' && (isManagerOrAdmin || hasPermission('menu', 'reports_accounts', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <AccountsChart entityId={reportEntity === '__all__' ? '' : reportEntity} />
             )}
 
             {/* STOCK */}
-            {reportTab === 'stock' && reportData.stock && (
+            {reportTab === 'stock' && reportData.stock && (isManagerOrAdmin || hasPermission('menu', 'reports_stock', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {renderKPI('Distinct Items', fmtNum(reportData.stock.totalItems), '', <Package className="w-5 h-5" />, 'cyan')}
@@ -7829,7 +7836,7 @@ export default function Home() {
             )}
 
             {/* SALES */}
-            {reportTab === 'sales' && reportData.sales && (
+            {reportTab === 'sales' && reportData.sales && (isManagerOrAdmin || hasPermission('menu', 'reports_sales', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
                   {renderKPI('Gross Revenue', fmtMoney(reportData.sales.grossRevenue), `${reportData.sales.orderCount} orders`, <ShoppingCart className="w-5 h-5" />, 'green')}
@@ -7911,7 +7918,7 @@ export default function Home() {
             )}
 
             {/* TRANSFER */}
-            {reportTab === 'transfer' && reportData.transfer && (
+            {reportTab === 'transfer' && reportData.transfer && (isManagerOrAdmin || hasPermission('menu', 'reports_transfer', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {renderKPI('Total Transfers', fmtNum(reportData.transfer.totalCount), '', <ArrowRightLeft className="w-5 h-5" />, 'violet')}
@@ -7990,7 +7997,7 @@ export default function Home() {
             )}
 
             {/* ADJUSTMENT */}
-            {reportTab === 'adjustment' && reportData.adjustment && (
+            {reportTab === 'adjustment' && reportData.adjustment && (isManagerOrAdmin || hasPermission('menu', 'reports_adjustment', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
                   {renderKPI('Total Adjustments', fmtNum(reportData.adjustment.totalCount), '', <Settings2 className="w-5 h-5" />, 'violet')}
@@ -8056,7 +8063,7 @@ export default function Home() {
             )}
 
             {/* INCENTIVE */}
-            {reportTab === 'incentive' && reportData.incentive && (
+            {reportTab === 'incentive' && reportData.incentive && (isManagerOrAdmin || hasPermission('menu', 'reports_incentive', 'export') || hasPermission('menu', 'reports', 'export')) && (
               <div className="space-y-6">
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
                   {renderKPI('Total Amount', fmtMoney(reportData.incentive.totalAmount), `${reportData.incentive.totalCount} entries`, <DollarSign className="w-5 h-5" />, 'green')}

@@ -194,7 +194,14 @@ export const MENU_ITEMS = [
   { key: 'incentive', label: 'Incentive', group: 'Function' },
   { key: 'newsTicker', label: 'News Ticker', group: 'Function' },
   { key: 'accounts', label: 'Income/Expense', group: 'Function' },
-  { key: 'reports', label: 'Reports', group: 'Function' },
+  { key: 'reports', label: 'Reports (All)', group: 'Function' },
+  { key: 'reports_overview', label: 'Report: Overview', group: 'Function' },
+  { key: 'reports_accounts', label: 'Report: Income/Expense', group: 'Function' },
+  { key: 'reports_stock', label: 'Report: Stock', group: 'Function' },
+  { key: 'reports_sales', label: 'Report: Sales', group: 'Function' },
+  { key: 'reports_transfer', label: 'Report: Transfer', group: 'Function' },
+  { key: 'reports_adjustment', label: 'Report: Adjustment', group: 'Function' },
+  { key: 'reports_incentive', label: 'Report: Incentive', group: 'Function' },
 ] as const;
 
 export type MenuItemKey = typeof MENU_ITEMS[number]['key'];
