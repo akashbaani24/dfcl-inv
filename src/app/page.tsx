@@ -7562,7 +7562,7 @@ export default function Home() {
             </tfoot>
           </table>
         </div>
-        <p className="text-[11px] text-muted-foreground">This report combines manual daily sales entries (Daily Sales page) and sales order payments (Sales Order page), broken down by payment type.</p>
+        <p className="text-[11px] text-muted-foreground">This report combines manual daily sales entries, income/expense entries, and sales order payments — all broken down by payment type.</p>
       </div>
     )
   }
@@ -7694,7 +7694,7 @@ export default function Home() {
 
     const tabs: { key: typeof reportTab; label: string; icon: React.ReactNode; permKey: string }[] = [
       { key: 'overview', label: 'Overview', icon: <LayoutDashboard className="w-4 h-4" />, permKey: 'overview' },
-      { key: 'cashSales', label: 'Cash Sales', icon: <DollarSign className="w-4 h-4" />, permKey: 'cashSales' },
+      { key: 'cashSales', label: 'Daily Sales Records', icon: <DollarSign className="w-4 h-4" />, permKey: 'cashSales' },
       { key: 'accounts', label: 'Income & Expense', icon: <DollarSign className="w-4 h-4" />, permKey: 'accounts' },
       { key: 'stock', label: 'Stock', icon: <BarChart3 className="w-4 h-4" />, permKey: 'stock' },
       { key: 'sales', label: 'Sales', icon: <ShoppingCart className="w-4 h-4" />, permKey: 'sales' },

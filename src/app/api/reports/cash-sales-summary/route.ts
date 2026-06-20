@@ -36,10 +36,9 @@ export async function GET(request: NextRequest) {
 
     const entityWhere = entityId ? { entityId } : (userEntityIds ? { entityId: { in: userEntityIds } } : {});
 
-    // 1. Fetch manual daily sales entries
+    // 1. Fetch ALL manual entries (sales + income + expense)
     const manualEntries = await db.accountsEntry.findMany({
       where: {
-        entryType: 'sales',
         entryDate: { gte: startDate, lte: endDate },
         ...entityWhere,
       },
@@ -78,16 +77,35 @@ export async function GET(request: NextRequest) {
       row.mobile += mobile;
     };
 
-    // Process manual entries
+    // Process manual entries — all types (sales, income, expense)
     for (const e of manualEntries) {
-      addToRow(
-        e.entity?.name || '—',
-        new Date(e.entryDate),
-        e.cashAmount,
-        e.cardAmount,
-        e.chequeAmount,
-        e.mobileAmount
-      );
+      if (e.entryType === 'sales') {
+        // Daily sales: amounts per payment type column
+        addToRow(
+          e.entity?.name || '—',
+          new Date(e.entryDate),
+          e.cashAmount,
+          e.cardAmount,
+          e.chequeAmount,
+          e.mobileAmount
+        );
+      } else {
+        // Income or expense: single amount, routed to the correct column by paymentType
+        const cash = e.paymentType === 'cash' ? e.amount : 0;
+        const card = e.paymentType === 'card' ? e.amount : 0;
+        const cheque = e.paymentType === 'cheque' ? e.amount : 0;
+        const mobile = e.paymentType === 'mobile_banking' ? e.amount : 0;
+        // Bank transfers go to 'card' column (closest match)
+        const bank = e.paymentType === 'bank' ? e.amount : 0;
+        addToRow(
+          e.entity?.name || '—',
+          new Date(e.entryDate),
+          cash,
+          card + bank,
+          cheque,
+          mobile
+        );
+      }
     }
 
     // Process sales order payments — map paymentType to columns
