@@ -24,7 +24,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react'
 import { Canvas, useLoader, useFrame } from '@react-three/fiber'
-import { OrbitControls, ContactShadows, Environment, PerspectiveCamera, Html, useProgress } from '@react-three/drei'
+import { OrbitControls, ContactShadows, Environment, PerspectiveCamera, Html, useProgress, RoundedBox } from '@react-three/drei'
 import * as THREE from 'three'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -161,101 +161,157 @@ function useFabricTexture(url: string | null, repeat: number) {
 // ────────────────────────────────────────────────────────────────────────
 
 // Default fabric material color (neutral gray, like the reference photo)
-const DEFAULT_FABRIC_COLOR = '#8a9099'
+const DEFAULT_FABRIC_COLOR = '#7a8290'
 
 interface FabricMaterialProps {
   fabricTexture: THREE.Texture | null
   color?: string
 }
 
-// Reusable fabric material — uses uploaded texture if available, otherwise
-// falls back to a solid color (so the sofa always looks like fabric, not
-// bare geometry).
+// ★ Realistic fabric material using meshPhysicalMaterial.
+// - sheen: gives a subtle fabric-like highlight along edges (where light grazes)
+// - sheenRoughness: how soft that highlight is
+// - sheenColor: tint of the highlight (warm white = natural fabric sheen)
+// - roughness: high (0.92) so the surface is matte like real upholstery
+// - metalness: 0 (fabric is non-metallic)
+// - clearcoat: 0 (no plastic shine — fabric is not glossy)
+//
+// When a texture is loaded, it's used as the map. The sheen still applies
+// on top, so the fabric keeps its soft sheen even with a pattern.
 function FabricMaterial({ fabricTexture, color = DEFAULT_FABRIC_COLOR }: FabricMaterialProps) {
   if (fabricTexture) {
     return (
-      <meshStandardMaterial
+      <meshPhysicalMaterial
         map={fabricTexture}
-        roughness={0.85}
+        roughness={0.92}
         metalness={0.0}
+        sheen={0.6}
+        sheenRoughness={0.55}
+        sheenColor="#f5f5f0"
+        clearcoat={0.0}
+        clearcoatRoughness={1.0}
         side={THREE.DoubleSide}
+        envMapIntensity={0.4}
       />
     )
   }
   return (
-    <meshStandardMaterial
+    <meshPhysicalMaterial
       color={color}
-      roughness={0.85}
+      roughness={0.92}
       metalness={0.0}
+      sheen={0.6}
+      sheenRoughness={0.55}
+      sheenColor="#f5f5f0"
+      clearcoat={0.0}
+      clearcoatRoughness={1.0}
       side={THREE.DoubleSide}
+      envMapIntensity={0.4}
+    />
+  )
+}
+
+// ★ Polished chrome material for legs — uses high metalness + low roughness
+// so the env map reflects clearly, giving a realistic chrome/steel look.
+function ChromeMaterial() {
+  return (
+    <meshStandardMaterial
+      color="#9a9a9a"
+      roughness={0.15}
+      metalness={0.95}
+      envMapIntensity={1.6}
+    />
+  )
+}
+
+// ★ Soft pillow material — slightly more sheen than seat fabric, since pillows
+// are usually a smoother fabric (like velvet or polished cotton).
+function PillowMaterial({ color = '#1e3a8a' }: { color?: string }) {
+  return (
+    <meshPhysicalMaterial
+      color={color}
+      roughness={0.55}
+      metalness={0.0}
+      sheen={0.7}
+      sheenRoughness={0.35}
+      sheenColor="#6b9eff"
+      clearcoat={0.08}
+      clearcoatRoughness={0.6}
+      envMapIntensity={0.6}
     />
   )
 }
 
 // Modern 2-seater sofa (matches reference photo #1)
+// Realistic look achieved via:
+//   - RoundedBox geometry (soft, beveled edges instead of sharp boxes)
+//   - meshPhysicalMaterial with sheen (fabric highlight along grazing angles)
+//   - Tilted backrest (slight recline for natural sitting posture)
+//   - Puffy seat cushions (larger radius for "stuffed" look)
+//   - Polished chrome legs with high envMapIntensity for real reflections
+//   - Soft accent pillows using PillowMaterial (subtle sheen + clearcoat)
 // All fabric surfaces share the same texture/material instance so the
 // uploaded fabric appears consistently across the whole sofa — like
 // one continuous piece of cloth, just like the reference photo.
 const ModernSofa: React.FC<{ fabricTexture: THREE.Texture | null }> = ({ fabricTexture }) => {
   return (
     <group position={[0, -0.4, 0]}>
-      {/* ─── Seat base (frame) ─── */}
-      <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
-        <boxGeometry args={[2.4, 0.3, 1.1]} />
+      {/* ─── Seat base (frame) — rounded edges, hidden under cushions ─── */}
+      <RoundedBox args={[2.4, 0.32, 1.1]} radius={0.06} smoothness={4} position={[0, 0.35, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
+      </RoundedBox>
 
-      {/* ─── Seat cushions (2) ─── */}
-      <mesh position={[-0.6, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.1, 0.35, 1.0]} />
+      {/* ─── Seat cushions (2) — puffy, with larger radius for "stuffed" look ─── */}
+      <RoundedBox args={[1.1, 0.38, 1.0]} radius={0.1} smoothness={4} position={[-0.58, 0.73, 0.02]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      <mesh position={[0.6, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.1, 0.35, 1.0]} />
+      </RoundedBox>
+      <RoundedBox args={[1.1, 0.38, 1.0]} radius={0.1} smoothness={4} position={[0.58, 0.73, 0.02]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
+      </RoundedBox>
 
-      {/* ─── Backrest cushions (2) ─── */}
-      <mesh position={[-0.6, 1.1, -0.42]} castShadow receiveShadow>
-        <boxGeometry args={[1.1, 0.7, 0.25]} />
+      {/* ─── Backrest cushions (2) — tilted slightly back for natural recline ─── */}
+      <RoundedBox args={[1.1, 0.75, 0.28]} radius={0.1} smoothness={4} position={[-0.58, 1.12, -0.4]} rotation={[-0.08, 0, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      <mesh position={[0.6, 1.1, -0.42]} castShadow receiveShadow>
-        <boxGeometry args={[1.1, 0.7, 0.25]} />
+      </RoundedBox>
+      <RoundedBox args={[1.1, 0.75, 0.28]} radius={0.1} smoothness={4} position={[0.58, 1.12, -0.4]} rotation={[-0.08, 0, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
+      </RoundedBox>
 
-      {/* ─── Armrests (2) ─── */}
-      <mesh position={[-1.2, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, 0.7, 1.1]} />
+      {/* ─── Armrests (2) — rounded top edge for soft look ─── */}
+      <RoundedBox args={[0.32, 0.7, 1.1]} radius={0.1} smoothness={4} position={[-1.2, 0.7, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      <mesh position={[1.2, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, 0.7, 1.1]} />
+      </RoundedBox>
+      <RoundedBox args={[0.32, 0.7, 1.1]} radius={0.1} smoothness={4} position={[1.2, 0.7, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
+      </RoundedBox>
 
-      {/* ─── Accent pillows (royal blue, non-fabric) ─── */}
-      <mesh position={[-0.6, 0.95, 0.2]} rotation={[0, 0, 0.1]} castShadow>
-        <boxGeometry args={[0.55, 0.55, 0.18]} />
-        <meshStandardMaterial color="#1e40af" roughness={0.6} metalness={0.0} />
-      </mesh>
-      <mesh position={[0.6, 0.95, 0.2]} rotation={[0, 0, -0.1]} castShadow>
-        <boxGeometry args={[0.55, 0.55, 0.18]} />
-        <meshStandardMaterial color="#1e40af" roughness={0.6} metalness={0.0} />
-      </mesh>
+      {/* ─── Accent pillows (royal blue) — soft, slightly tilted ─── */}
+      <RoundedBox args={[0.55, 0.55, 0.2]} radius={0.09} smoothness={4} position={[-0.6, 0.97, 0.18]} rotation={[0.05, 0, 0.08]} castShadow>
+        <PillowMaterial color="#1e3a8a" />
+      </RoundedBox>
+      <RoundedBox args={[0.55, 0.55, 0.2]} radius={0.09} smoothness={4} position={[0.6, 0.97, 0.18]} rotation={[0.05, 0, -0.08]} castShadow>
+        <PillowMaterial color="#1e3a8a" />
+      </RoundedBox>
 
-      {/* ─── Legs (4 short cylindrical metal legs) ─── */}
+      {/* ─── Legs (4 short cylindrical chrome legs) ─── */}
       {[
-        [-1.1, -0.15],
-        [1.1, -0.15],
+        [-1.1, -0.45],
+        [1.1, -0.45],
         [-1.1, 0.45],
         [1.1, 0.45],
       ].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.05, z]} castShadow>
-          <cylinderGeometry args={[0.04, 0.04, 0.2, 16]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.8} />
-        </mesh>
+        <group key={i} position={[x, 0.07, z]}>
+          {/* Tapered leg — wider at top, narrower at bottom */}
+          <mesh position={[0, 0, 0]} castShadow>
+            <cylinderGeometry args={[0.035, 0.05, 0.22, 24]} />
+            <ChromeMaterial />
+          </mesh>
+          {/* Small floor pad (felt/nylon tip) */}
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.038, 0.038, 0.02, 24]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} metalness={0.1} />
+          </mesh>
+        </group>
       ))}
     </group>
   )
@@ -266,40 +322,40 @@ const Armchair3D: React.FC<{ fabricTexture: THREE.Texture | null }> = ({ fabricT
   return (
     <group position={[0, -0.3, 0]}>
       {/* Seat base */}
-      <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.3, 0.3, 1.0]} />
+      <RoundedBox args={[1.3, 0.32, 1.0]} radius={0.06} smoothness={4} position={[0, 0.35, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Seat cushion */}
-      <mesh position={[0, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[1.1, 0.35, 0.95]} />
+      </RoundedBox>
+      {/* Seat cushion — puffy */}
+      <RoundedBox args={[1.1, 0.38, 0.95]} radius={0.1} smoothness={4} position={[0, 0.73, 0.02]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Backrest cushion */}
-      <mesh position={[0, 1.1, -0.38]} castShadow receiveShadow>
-        <boxGeometry args={[1.1, 0.7, 0.25]} />
+      </RoundedBox>
+      {/* Backrest cushion — tilted slightly back */}
+      <RoundedBox args={[1.1, 0.75, 0.28]} radius={0.1} smoothness={4} position={[0, 1.12, -0.36]} rotation={[-0.08, 0, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
+      </RoundedBox>
       {/* Armrests */}
-      <mesh position={[-0.65, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, 0.7, 1.0]} />
+      <RoundedBox args={[0.32, 0.7, 1.0]} radius={0.1} smoothness={4} position={[-0.65, 0.7, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      <mesh position={[0.65, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, 0.7, 1.0]} />
+      </RoundedBox>
+      <RoundedBox args={[0.32, 0.7, 1.0]} radius={0.1} smoothness={4} position={[0.65, 0.7, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Accent pillow */}
-      <mesh position={[0, 0.95, 0.2]} rotation={[0, 0, 0]} castShadow>
-        <boxGeometry args={[0.55, 0.55, 0.18]} />
-        <meshStandardMaterial color="#1e40af" roughness={0.6} />
-      </mesh>
-      {/* Legs */}
+      </RoundedBox>
+      {/* Accent pillow — soft, slightly tilted */}
+      <RoundedBox args={[0.55, 0.55, 0.2]} radius={0.09} smoothness={4} position={[0, 0.97, 0.18]} rotation={[0.05, 0, 0]} castShadow>
+        <PillowMaterial color="#1e3a8a" />
+      </RoundedBox>
+      {/* Legs — chrome with floor pads */}
       {[[-0.55, -0.4], [0.55, -0.4], [-0.55, 0.4], [0.55, 0.4]].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.05, z]} castShadow>
-          <cylinderGeometry args={[0.04, 0.04, 0.2, 16]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.8} />
-        </mesh>
+        <group key={i} position={[x, 0.07, z]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.035, 0.05, 0.22, 24]} />
+            <ChromeMaterial />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.038, 0.038, 0.02, 24]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} metalness={0.1} />
+          </mesh>
+        </group>
       ))}
     </group>
   )
@@ -310,92 +366,91 @@ const Sofa3Seater: React.FC<{ fabricTexture: THREE.Texture | null }> = ({ fabric
   return (
     <group position={[0, -0.4, 0]}>
       {/* Seat base */}
-      <mesh position={[0, 0.35, 0]} castShadow receiveShadow>
-        <boxGeometry args={[3.4, 0.3, 1.1]} />
+      <RoundedBox args={[3.4, 0.32, 1.1]} radius={0.06} smoothness={4} position={[0, 0.35, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Seat cushions (3) */}
+      </RoundedBox>
+      {/* Seat cushions (3) — puffy */}
       {[-1.05, 0, 1.05].map((x, i) => (
-        <mesh key={i} position={[x, 0.7, 0]} castShadow receiveShadow>
-          <boxGeometry args={[1.05, 0.35, 1.0]} />
+        <RoundedBox key={i} args={[1.05, 0.38, 1.0]} radius={0.1} smoothness={4} position={[x, 0.73, 0.02]} castShadow receiveShadow>
           <FabricMaterial fabricTexture={fabricTexture} />
-        </mesh>
+        </RoundedBox>
       ))}
-      {/* Backrest cushions (3) */}
+      {/* Backrest cushions (3) — tilted slightly back */}
       {[-1.05, 0, 1.05].map((x, i) => (
-        <mesh key={i} position={[x, 1.1, -0.42]} castShadow receiveShadow>
-          <boxGeometry args={[1.05, 0.7, 0.25]} />
+        <RoundedBox key={i} args={[1.05, 0.75, 0.28]} radius={0.1} smoothness={4} position={[x, 1.12, -0.4]} rotation={[-0.08, 0, 0]} castShadow receiveShadow>
           <FabricMaterial fabricTexture={fabricTexture} />
-        </mesh>
+        </RoundedBox>
       ))}
       {/* Armrests */}
-      <mesh position={[-1.7, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, 0.7, 1.1]} />
+      <RoundedBox args={[0.32, 0.7, 1.1]} radius={0.1} smoothness={4} position={[-1.7, 0.7, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      <mesh position={[1.7, 0.7, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.3, 0.7, 1.1]} />
+      </RoundedBox>
+      <RoundedBox args={[0.32, 0.7, 1.1]} radius={0.1} smoothness={4} position={[1.7, 0.7, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Accent pillows (3) */}
+      </RoundedBox>
+      {/* Accent pillows (3) — soft, tilted outward */}
       {[-1.05, 0, 1.05].map((x, i) => (
-        <mesh key={i} position={[x, 0.95, 0.2]} rotation={[0, 0, i === 1 ? 0 : (i === 0 ? 0.1 : -0.1)]} castShadow>
-          <boxGeometry args={[0.55, 0.55, 0.18]} />
-          <meshStandardMaterial color="#1e40af" roughness={0.6} />
-        </mesh>
+        <RoundedBox key={i} args={[0.55, 0.55, 0.2]} radius={0.09} smoothness={4} position={[x, 0.97, 0.18]} rotation={[0.05, 0, i === 1 ? 0 : (i === 0 ? 0.08 : -0.08)]} castShadow>
+          <PillowMaterial color="#1e3a8a" />
+        </RoundedBox>
       ))}
-      {/* Legs */}
+      {/* Legs — chrome with floor pads */}
       {[[-1.6, -0.45], [1.6, -0.45], [-1.6, 0.45], [1.6, 0.45]].map(([x, z], i) => (
-        <mesh key={i} position={[x, 0.05, z]} castShadow>
-          <cylinderGeometry args={[0.04, 0.04, 0.2, 16]} />
-          <meshStandardMaterial color="#1a1a1a" roughness={0.3} metalness={0.8} />
-        </mesh>
+        <group key={i} position={[x, 0.07, z]}>
+          <mesh castShadow>
+            <cylinderGeometry args={[0.035, 0.05, 0.22, 24]} />
+            <ChromeMaterial />
+          </mesh>
+          <mesh position={[0, -0.12, 0]}>
+            <cylinderGeometry args={[0.038, 0.038, 0.02, 24]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.8} metalness={0.1} />
+          </mesh>
+        </group>
       ))}
     </group>
   )
 }
 
 // Office chair (different style: tall backrest, 5-star base, wheels)
+// Realistic look: rounded seat + backrest cushions, chrome 5-star base,
+// polished center pole, dark nylon caster wheels.
 const OfficeChair3D: React.FC<{ fabricTexture: THREE.Texture | null }> = ({ fabricTexture }) => {
   return (
     <group position={[0, -0.6, 0]}>
-      {/* Seat cushion */}
-      <mesh position={[0, 0.5, 0]} castShadow receiveShadow>
-        <boxGeometry args={[0.7, 0.15, 0.7]} />
+      {/* Seat cushion — puffy rounded */}
+      <RoundedBox args={[0.7, 0.18, 0.7]} radius={0.08} smoothness={4} position={[0, 0.5, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Backrest */}
-      <mesh position={[0, 1.0, -0.35]} castShadow receiveShadow>
-        <boxGeometry args={[0.7, 0.9, 0.15]} />
+      </RoundedBox>
+      {/* Backrest — curved (achieved via slight tilt + rounded box) */}
+      <RoundedBox args={[0.7, 0.95, 0.18]} radius={0.1} smoothness={4} position={[0, 1.02, -0.32]} rotation={[-0.05, 0, 0]} castShadow receiveShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Headrest accent */}
-      <mesh position={[0, 1.4, -0.32]} castShadow>
-        <boxGeometry args={[0.6, 0.2, 0.12]} />
+      </RoundedBox>
+      {/* Headrest accent — small rounded pillow */}
+      <RoundedBox args={[0.55, 0.22, 0.14]} radius={0.07} smoothness={4} position={[0, 1.42, -0.29]} rotation={[-0.15, 0, 0]} castShadow>
         <FabricMaterial fabricTexture={fabricTexture} />
-      </mesh>
-      {/* Center pole */}
+      </RoundedBox>
+      {/* Center pole — chrome cylinder */}
       <mesh position={[0, 0.25, 0]} castShadow>
-        <cylinderGeometry args={[0.04, 0.04, 0.4, 16]} />
-        <meshStandardMaterial color="#2c3e50" roughness={0.3} metalness={0.8} />
+        <cylinderGeometry args={[0.04, 0.04, 0.4, 24]} />
+        <ChromeMaterial />
       </mesh>
-      {/* 5-star base */}
+      {/* 5-star base — chrome arms */}
       {[0, 72, 144, 216, 288].map((deg, i) => {
         const rad = (deg * Math.PI) / 180
         return (
           <mesh key={i} position={[Math.cos(rad) * 0.25, 0.05, Math.sin(rad) * 0.25]} rotation={[0, -rad, 0]} castShadow>
-            <boxGeometry args={[0.5, 0.05, 0.06]} />
-            <meshStandardMaterial color="#2c3e50" roughness={0.3} metalness={0.8} />
+            <boxGeometry args={[0.5, 0.06, 0.08]} />
+            <ChromeMaterial />
           </mesh>
         )
       })}
-      {/* Caster wheels (5) */}
+      {/* Caster wheels (5) — dark nylon */}
       {[0, 72, 144, 216, 288].map((deg, i) => {
         const rad = (deg * Math.PI) / 180
         return (
-          <mesh key={`wheel-${i}`} position={[Math.cos(rad) * 0.48, 0.02, Math.sin(rad) * 0.48]} castShadow>
-            <sphereGeometry args={[0.04, 16, 16]} />
-            <meshStandardMaterial color="#1a1a1a" roughness={0.5} />
+          <mesh key={`wheel-${i}`} position={[Math.cos(rad) * 0.48, 0.03, Math.sin(rad) * 0.48]} castShadow>
+            <sphereGeometry args={[0.045, 24, 24]} />
+            <meshStandardMaterial color="#1a1a1a" roughness={0.6} metalness={0.2} />
           </mesh>
         )
       })}
@@ -465,13 +520,17 @@ function Scene({
 
   return (
     <>
-      <PerspectiveCamera makeDefault position={[3.5, 2.2, 4]} fov={45} />
+      <PerspectiveCamera makeDefault position={[3.5, 2.0, 4]} fov={40} />
 
-      {/* Studio lighting — soft, even, like reference photo */}
-      <ambientLight intensity={0.6} />
+      {/* ★ Realistic studio lighting — 3-point setup + soft ambient
+         - Key light: strong, top-right, casts soft shadows
+         - Fill light: opposite side, weaker, fills shadow areas
+         - Rim light: from behind, adds edge highlight (separates from bg)
+         - Ambient: low base level so shadows aren't pure black */}
+      <ambientLight intensity={0.35} />
       <directionalLight
-        position={[5, 8, 5]}
-        intensity={1.2}
+        position={[6, 8, 5]}
+        intensity={2.0}
         castShadow
         shadow-mapSize-width={2048}
         shadow-mapSize-height={2048}
@@ -480,24 +539,39 @@ function Scene({
         shadow-camera-right={5}
         shadow-camera-top={5}
         shadow-camera-bottom={-5}
+        shadow-bias={-0.0005}
+        shadow-radius={6}
       />
-      <directionalLight position={[-5, 5, -5]} intensity={0.4} />
-      <directionalLight position={[0, 5, 5]} intensity={0.3} />
+      {/* Fill light — softer, opposite side */}
+      <directionalLight position={[-6, 5, -3]} intensity={0.7} color="#dfe7f5" />
+      {/* Rim light — adds edge highlight from behind */}
+      <directionalLight position={[0, 4, -6]} intensity={0.6} color="#ffffff" />
 
       {/* The actual 3D product */}
       <Suspense fallback={null}>
         {product.render3D(fabricTexture)}
       </Suspense>
 
-      {/* Contact shadow under the product (soft blob shadow) */}
+      {/* ★ Soft contact shadow — high resolution + blur for realistic grounding */}
       <ContactShadows
         position={[0, -0.59, 0]}
-        opacity={0.4}
-        scale={10}
-        blur={2.5}
-        far={4}
-        color="#1a1a1a"
+        opacity={0.55}
+        scale={12}
+        blur={3}
+        far={5}
+        resolution={1024}
+        color="#0a0a0a"
       />
+
+      {/* ★ Subtle floor plane — light wood/light concrete look, helps ground the model */}
+      <mesh position={[0, -0.6, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
+        <circleGeometry args={[8, 64]} />
+        <meshStandardMaterial
+          color="#e8e6e1"
+          roughness={0.85}
+          metalness={0.0}
+        />
+      </mesh>
 
       {/* OrbitControls — customer can rotate (left-drag), zoom (wheel), pan (right-drag) */}
       <OrbitControls
@@ -512,8 +586,8 @@ function Scene({
         makeDefault
       />
 
-      {/* Optional environment for nice reflections */}
-      <Environment preset="apartment" />
+      {/* ★ Studio HDRI environment for realistic reflections on metal legs + fabric sheen */}
+      <Environment preset="studio" background={false} />
     </>
   )
 }
@@ -667,14 +741,21 @@ export default function FabricStudio3D({ onPlaceOrder }: FabricStudio3DProps) {
             <div
               className="rounded-xl overflow-hidden relative"
               style={{
-                background: 'radial-gradient(ellipse at center, #f1f5f9 0%, #cbd5e1 100%)',
+                // Studio backdrop — soft vertical gradient like a professional product photo
+                background: 'linear-gradient(180deg, #f5f6f8 0%, #e2e5ea 60%, #c9cdd4 100%)',
                 minHeight: '450px',
               }}
             >
               <Canvas
                 shadows
                 dpr={[1, 2]}
-                gl={{ antialias: true, preserveDrawingBuffer: true }}
+                gl={{
+                  antialias: true,
+                  preserveDrawingBuffer: true,
+                  // Better color rendering — sRGB output + tone mapping for realism
+                  toneMapping: 2, // ACESFilmicToneMapping
+                  toneMappingExposure: 1.1,
+                }}
                 style={{ width: '100%', height: '450px', cursor: 'grab' }}
               >
                 <Suspense fallback={<CanvasLoader />}>
