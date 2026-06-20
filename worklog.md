@@ -20,3 +20,28 @@ Stage Summary:
 - Fix: 38 files patched to restore `getCurrentUser` import. Helper script kept at `scripts/fix-auth-imports.py` for future audits.
 - Affected pages now working: Item Price, Item Information, all Reports (Overview / Stock / Sales / Transfer / Adjustment / Incentive / Daily Income-Expense / Cash Sales Summary), Stock, Purchases, Sales Orders, Sales Returns, Transfers, Receives, Customers, Suppliers, Tailors, Employees, UoM, Groups, Sub Groups, Item Adjustments, Bookings, Booking Reasons, Accounts Categories, Accounts Entries, Incentives, Incentive Formulas, Supplier Payments, Tailor Payments, Making Info, News Ticker.
 - Deployment: User needs to redeploy on Vercel (auto-deploys from GitHub `main` branch, so it should already be triggered).
+
+---
+Task ID: 2
+Agent: main
+Task: User requested: "entity type factory add koro" — add a new "Factory" entity type to the system.
+
+Work Log:
+- Used Explore subagent to find all places that define or use entity types. Found that entityType is a free-text String column (no enum, no migration needed).
+- Identified three frontend locations in src/app/page.tsx: dropdown #1 (line ~8309), dropdown #2 (line ~9224), and the badge color in entity management table (line ~9193).
+- Identified two doc-only locations: prisma/schema.prisma comments and migrate-schema route comment.
+- Added <SelectItem value="factory">Factory</SelectItem> to both dropdowns (positioned between Outlet and Warehouse for logical grouping).
+- Updated both helper texts to mention factory.
+- Added an orange color branch for the factory badge (outlet=green, warehouse=blue, head_office=purple, factory=orange).
+- Updated prisma/schema.prisma comments on Entity and IncentiveFormula models to mention factory.
+- Updated migrate-schema route description comment.
+- Verified that commission logic in sales-orders/route.ts already handles factory correctly via the else-branch (factory → headOfficeCommission). No code change needed there.
+- Committed as f1380d2 v60-fix17: Add 'Factory' entity type.
+- Pushed to GitHub: b8cb56d..f1380d2 main -> main ✅
+
+Stage Summary:
+- New 'Factory' entity type is now available in the Entity create/edit form dropdown.
+- Entity management table shows an orange badge for factory-typed entities.
+- No DB migration required (entityType is a free-text column).
+- Factory commission behaviour: uses headOfficeCommission (matches existing "Head Office and others" branch).
+- User needs to wait for Vercel auto-deploy from main branch (2-3 minutes).
