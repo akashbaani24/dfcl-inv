@@ -200,6 +200,20 @@ model AccountsEntry {
   @@index([entryType])
 }
 
+// ★ v60: Master data for Income/Expense categories — admin can add/edit/delete
+model AccountsCategory {
+  id          String   @id @default(cuid())
+  name        String
+  entryType   String   // "income" or "expense"
+  description String   @default("")
+  status      String   @default("active")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@unique([name, entryType])
+  @@index([entryType])
+}
+
 model Item {
   id          String   @id @default(cuid())
   year        String

@@ -788,6 +788,49 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `AccountsEntry_entryType_idx` ON `AccountsEntry`(`entryType`)',
     description: 'Index on AccountsEntry.entryType',
   },
+  // ★ v60: AccountsCategory master table
+  {
+    id: '2026_06_20_accountscategory_table',
+    sql: `CREATE TABLE IF NOT EXISTS "AccountsCategory" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "name" TEXT NOT NULL,
+      "entryType" TEXT NOT NULL,
+      "description" TEXT NOT NULL DEFAULT '',
+      "status" TEXT NOT NULL DEFAULT 'active',
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      UNIQUE("name", "entryType")
+    )`,
+    description: 'Create AccountsCategory table',
+  },
+  {
+    id: '2026_06_20_accountscategory_idx_type',
+    sql: 'CREATE INDEX IF NOT EXISTS `AccountsCategory_entryType_idx` ON `AccountsCategory`(`entryType`)',
+    description: 'Index on AccountsCategory.entryType',
+  },
+  // ★ Seed default categories
+  {
+    id: '2026_06_20_accountscategory_seed_income',
+    sql: `INSERT OR IGNORE INTO "AccountsCategory" ("id","name","entryType","description","status","createdAt","updatedAt") VALUES
+      ('seed_ac_inc_1','Sales','income','Sales income','active',datetime('now'),datetime('now')),
+      ('seed_ac_inc_2','Service','income','Service income','active',datetime('now'),datetime('now')),
+      ('seed_ac_inc_3','Rent Income','income','Rent received','active',datetime('now'),datetime('now')),
+      ('seed_ac_inc_4','Interest','income','Bank interest','active',datetime('now'),datetime('now')),
+      ('seed_ac_inc_5','Other Income','income','Miscellaneous income','active',datetime('now'),datetime('now'))`,
+    description: 'Seed default income categories',
+  },
+  {
+    id: '2026_06_20_accountscategory_seed_expense',
+    sql: `INSERT OR IGNORE INTO "AccountsCategory" ("id","name","entryType","description","status","createdAt","updatedAt") VALUES
+      ('seed_ac_exp_1','Rent','expense','Office/shop rent','active',datetime('now'),datetime('now')),
+      ('seed_ac_exp_2','Salary','expense','Staff salary','active',datetime('now'),datetime('now')),
+      ('seed_ac_exp_3','Utilities','expense','Electricity, water, gas','active',datetime('now'),datetime('now')),
+      ('seed_ac_exp_4','Transport','expense','Transportation cost','active',datetime('now'),datetime('now')),
+      ('seed_ac_exp_5','Maintenance','expense','Equipment maintenance','active',datetime('now'),datetime('now')),
+      ('seed_ac_exp_6','Office Supplies','expense','Stationery, supplies','active',datetime('now'),datetime('now')),
+      ('seed_ac_exp_7','Misc Expense','expense','Other expenses','active',datetime('now'),datetime('now'))`,
+    description: 'Seed default expense categories',
+  },
 ];
 
 export async function POST(request: NextRequest) {

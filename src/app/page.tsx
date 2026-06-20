@@ -587,6 +587,10 @@ export default function Home() {
 
   // ★ Daily Sales + Accounts entries state
   const [accountsEntries, setAccountsEntries] = useState<any[]>([])
+  const [accountsCategories, setAccountsCategories] = useState<any[]>([])
+  const [accountsCatForm, setAccountsCatForm] = useState({ name: '', entryType: 'income', description: '' })
+  const [editingCatId, setEditingCatId] = useState<string | null>(null)
+  const [showCatDialog, setShowCatDialog] = useState(false)
   const [dailySalesForm, setDailySalesForm] = useState({ entryDate: new Date().toISOString().split('T')[0], cashAmount: '', cardAmount: '', chequeAmount: '', mobileAmount: '', description: '' })
   const [accountsForm, setAccountsForm] = useState({ entryType: 'income', category: 'misc', amount: '', paymentType: 'cash', entryDate: new Date().toISOString().split('T')[0], description: '' })
   const [tailorPayments, setTailorPayments] = useState<any[]>([])
@@ -1003,6 +1007,24 @@ export default function Home() {
   const handleDeleteAccountsEntry = async (id: string) => {
     if (!confirm('Delete this entry?')) return
     try { const res = await authFetch(`/api/accounts-entries/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchAccountsEntries() } } catch {}
+  }
+  // ★ Accounts categories
+  const fetchAccountsCategories = async () => {
+    try { const res = await authFetch('/api/accounts-categories'); if (res.ok) { const d = await res.json(); setAccountsCategories(d.categories || []) } } catch {}
+  }
+  const handleSaveCat = async (e: React.FormEvent) => {
+    e.preventDefault()
+    try {
+      const res = editingCatId
+        ? await authFetch(`/api/accounts-categories/${editingCatId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(accountsCatForm) })
+        : await authFetch('/api/accounts-categories', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(accountsCatForm) })
+      if (res.ok) { toast({ title: 'Success', description: editingCatId ? 'Category updated' : 'Category created' }); setShowCatDialog(false); setAccountsCatForm({ name: '', entryType: 'income', description: '' }); setEditingCatId(null); fetchAccountsCategories() }
+      else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
+    } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
+  }
+  const handleDeleteCat = async (id: string) => {
+    if (!confirm('Delete this category?')) return
+    try { const res = await authFetch(`/api/accounts-categories/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchAccountsCategories() } } catch {}
   }
   const fetchCustomers = async () => { try { const res = await authFetch('/api/customers'); if (res.ok) { const d = await res.json(); setCustomers(d.customers) } } catch {} }
 
@@ -1744,7 +1766,7 @@ export default function Home() {
   useEffect(() => {
     if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() }
     if (currentView === 'dailySales' && workingEntity) { fetchAccountsEntries('sales') }
-    if (currentView === 'accounts' && workingEntity) { fetchAccountsEntries() }
+    if (currentView === 'accounts' && workingEntity) { fetchAccountsEntries(); fetchAccountsCategories() }
     if (currentView === 'stockUpload' && workingEntity && !stockUploadEntityId) {
       setStockUploadEntityId(workingEntity.id)
     }
@@ -7327,6 +7349,9 @@ export default function Home() {
     return (
       <div className="space-y-4">
         <h2 className="text-xl font-semibold">Income & Expense — {workingEntity?.name}</h2>
+        <div className="flex justify-end">
+          <Button variant="outline" size="sm" onClick={() => { setAccountsCatForm({ name: '', entryType: 'income', description: '' }); setEditingCatId(null); setShowCatDialog(true) }}><Plus className="w-3.5 h-3.5 mr-1" />Manage Categories</Button>
+        </div>
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
           {/* Entry form */}
           <Card>
@@ -7346,9 +7371,9 @@ export default function Home() {
                     <Select value={accountsForm.category} onValueChange={v => setAccountsForm({ ...accountsForm, category: v })}>
                       <SelectTrigger><SelectValue /></SelectTrigger>
                       <SelectContent>
-                        {accountsForm.entryType === 'income'
-                          ? ['Sales', 'Service', 'Rent Income', 'Interest', 'Other Income'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)
-                          : ['Rent', 'Salary', 'Utilities', 'Transport', 'Maintenance', 'Office Supplies', 'Misc Expense'].map(c => <SelectItem key={c} value={c}>{c}</SelectItem>)
+                        {accountsCategories
+                          .filter((c: any) => c.entryType === accountsForm.entryType && c.status === 'active')
+                          .map((c: any) => <SelectItem key={c.id} value={c.name}>{c.name}</SelectItem>)
                         }
                       </SelectContent>
                     </Select>
@@ -7400,6 +7425,54 @@ export default function Home() {
             ))}
           </TableBody></Table>
         </div>
+
+        {/* Manage Categories Dialog */}
+        <Dialog open={showCatDialog} onOpenChange={setShowCatDialog}>
+          <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+            <DialogHeader><DialogTitle>Manage Income/Expense Categories</DialogTitle></DialogHeader>
+            {/* Add/Edit form */}
+            <form onSubmit={handleSaveCat} className="space-y-3">
+              <div className="grid grid-cols-2 gap-2">
+                <div className="space-y-1">
+                  <Label className="text-xs">Type *</Label>
+                  <Select value={accountsCatForm.entryType} onValueChange={v => setAccountsCatForm({ ...accountsCatForm, entryType: v })}>
+                    <SelectTrigger><SelectValue /></SelectTrigger>
+                    <SelectContent><SelectItem value="income">Income</SelectItem><SelectItem value="expense">Expense</SelectItem></SelectContent>
+                  </Select>
+                </div>
+                <div className="space-y-1"><Label className="text-xs">Category Name *</Label><Input value={accountsCatForm.name} onChange={e => setAccountsCatForm({ ...accountsCatForm, name: e.target.value })} required placeholder="e.g. Advertisement" /></div>
+              </div>
+              <div className="space-y-1"><Label className="text-xs">Description</Label><Input value={accountsCatForm.description} onChange={e => setAccountsCatForm({ ...accountsCatForm, description: e.target.value })} /></div>
+              <Button type="submit" size="sm"><Save className="w-3.5 h-3.5 mr-1" />{editingCatId ? 'Update' : 'Add'} Category</Button>
+              {editingCatId && <Button type="button" size="sm" variant="outline" className="ml-2" onClick={() => { setEditingCatId(null); setAccountsCatForm({ name: '', entryType: 'income', description: '' }) }}>Cancel Edit</Button>}
+            </form>
+            {/* Categories list */}
+            <div className="space-y-2 mt-3">
+              <p className="text-xs font-semibold text-muted-foreground">Existing Categories</p>
+              {['income', 'expense'].map(type => (
+                <div key={type}>
+                  <p className="text-xs font-semibold text-primary capitalize mb-1">{type} Categories</p>
+                  <div className="space-y-0.5">
+                    {accountsCategories.filter((c: any) => c.entryType === type).map((c: any) => (
+                      <div key={c.id} className="flex items-center justify-between border rounded px-2 py-1.5 text-xs">
+                        <div>
+                          <span className="font-medium">{c.name}</span>
+                          {c.description && <span className="text-muted-foreground ml-1">— {c.description}</span>}
+                          {c.status === 'inactive' && <Badge variant="outline" className="ml-1 text-[9px] bg-gray-100">Inactive</Badge>}
+                        </div>
+                        <div className="flex gap-1">
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={() => { setEditingCatId(c.id); setAccountsCatForm({ name: c.name, entryType: c.entryType, description: c.description }) }}><Edit className="w-3 h-3" /></Button>
+                          <Button variant="ghost" size="sm" className="h-6 w-6 p-0 text-destructive" onClick={() => handleDeleteCat(c.id)}><Trash2 className="w-3 h-3" /></Button>
+                        </div>
+                      </div>
+                    ))}
+                    {accountsCategories.filter((c: any) => c.entryType === type).length === 0 && <p className="text-xs text-muted-foreground italic px-2">No {type} categories yet</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
