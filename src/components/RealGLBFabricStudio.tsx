@@ -39,7 +39,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react'
 import { Canvas, useLoader, useFrame } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, Html, useProgress, Environment, ContactShadows, useGLTF } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, Html, useProgress, Environment, ContactShadows, useGLTF, useTexture } from '@react-three/drei'
 import * as THREE from 'three'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -173,31 +173,74 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
   // Clone the scene so we don't mutate the cached original
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
-  // Load fabric texture
-  const fabricTexture = useMemo(() => {
-    if (!fabricUrl) return null
-    const loader = new THREE.TextureLoader()
-    loader.crossOrigin = 'anonymous'
-    const tex = loader.load(fabricUrl)
-    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-    tex.repeat.set(fabricRepeat, fabricRepeat)
-    tex.colorSpace = THREE.SRGBColorSpace
-    tex.anisotropy = 8
-    tex.needsUpdate = true
-    return tex
-  }, [fabricUrl, fabricRepeat])
-
-  // Apply fabric texture (or default material) to all meshes
+  // ★ Load fabric texture using useTexture (Suspense-based, handles async properly)
+  // We conditionally load — useTexture suspends until the image is ready, so when
+  // this returns, the texture is fully loaded and ready to apply. This fixes the
+  // "fabric doesn't show" bug where the texture wasn't loaded when the material
+  // was created.
+  const loadedTexture = useTexture(fabricUrl || '/fabric-studio/transparent-pixel.png')
   useEffect(() => {
+    loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping
+    loadedTexture.repeat.set(fabricRepeat, fabricRepeat)
+    loadedTexture.colorSpace = THREE.SRGBColorSpace
+    loadedTexture.anisotropy = 8
+    loadedTexture.needsUpdate = true
+  }, [loadedTexture, fabricRepeat])
+
+  // ★ Generate UVs for any mesh that doesn't have them.
+  // The FBX model might have meshes without UV coordinates, which would cause
+  // the fabric texture to not show. We generate planar UVs based on the mesh's
+  // bounding box as a fallback.
+  useEffect(() => {
+    clonedScene.traverse((child) => {
+      if ((child as THREE.Mesh).isMesh) {
+        const mesh = child as THREE.Mesh
+        const geometry = mesh.geometry
+        // Check if UVs exist and have data
+        if (!geometry.attributes.uv || geometry.attributes.uv.count === 0) {
+          // Generate planar UVs from position XY coordinates
+          geometry.computeBoundingBox()
+          const bbox = geometry.boundingBox!
+          const size = new THREE.Vector3()
+          bbox.getSize(size)
+          const positions = geometry.attributes.position
+          const uvs = new Float32Array(positions.count * 2)
+          for (let i = 0; i < positions.count; i++) {
+            const x = positions.getX(i)
+            const y = positions.getY(i)
+            // Map position to 0..1 UV range based on bounding box
+            uvs[i * 2] = (x - bbox.min.x) / size.x
+            uvs[i * 2 + 1] = (y - bbox.min.y) / size.y
+          }
+          geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+          geometry.computeVertexNormals()
+        }
+      }
+    })
+  }, [clonedScene])
+
+  // ★ Apply fabric texture (or default material) to all meshes.
+  // Key fixes:
+  //   - When fabric is selected, we set map=texture AND a slight color tint
+  //     so we can verify the material is being applied even if the texture
+  //     has issues
+  //   - We set material.needsUpdate = true to force refresh
+  //   - We log to console for debugging
+  useEffect(() => {
+    let meshCount = 0
+    let fabricMeshCount = 0
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         mesh.castShadow = true
         mesh.receiveShadow = true
-        if (fabricTexture) {
-          // Create a new material with the fabric texture
-          mesh.material = new THREE.MeshPhysicalMaterial({
-            map: fabricTexture,
+        meshCount++
+        if (fabricUrl) {
+          // ★ Fabric is selected — apply texture
+          fabricMeshCount++
+          const mat = new THREE.MeshPhysicalMaterial({
+            map: loadedTexture,
+            color: '#ffffff', // white tint so texture shows true colors
             roughness: 0.85,
             metalness: 0.0,
             sheen: 0.6,
@@ -205,8 +248,10 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
             sheenColor: new THREE.Color('#f5f5f0'),
             side: THREE.DoubleSide,
           })
+          mat.needsUpdate = true
+          mesh.material = mat
         } else {
-          // Default warm beige fabric look
+          // No fabric — default warm beige fabric look
           mesh.material = new THREE.MeshPhysicalMaterial({
             color: '#c9b896',
             roughness: 0.85,
@@ -219,7 +264,8 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
         }
       }
     })
-  }, [clonedScene, fabricTexture])
+    console.log(`[FabricStudio] Applied material to ${meshCount} meshes. Fabric applied to ${fabricMeshCount}. fabricUrl=${fabricUrl}`)
+  }, [clonedScene, loadedTexture, fabricUrl])
 
   // Scale + position the model nicely in view
   return (
