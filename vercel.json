@@ -2,7 +2,7 @@
   "crons": [
     {
       "path": "/api/cron/backup?token=DFCL_BACKUP_2026",
-      "schedule": "30 12 * * *"
+      "schedule": "30 4,16 * * *"
     }
   ]
 }

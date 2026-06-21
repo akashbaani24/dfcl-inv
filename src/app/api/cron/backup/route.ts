@@ -2,17 +2,23 @@ import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { createClient } from '@libsql/client';
 import { bdNow } from '@/lib/bd-time';
+import { uploadBackupToDrive, listDriveBackups, driveStatus } from '@/lib/google-drive-backup';
 
 // GET /api/cron/backup?token=DFCL_BACKUP_2026
 //
 // This endpoint is called automatically by Vercel Cron at 12:30 UTC = 6:30 PM BD time.
-// It exports all tables as JSON and stores the backup in the database itself
-// (a 'Backup' table — created via migrate-schema). Old backups (>30 days) are auto-deleted.
+// It exports all tables as JSON and:
+//   1. Stores the backup in the database itself (a 'Backup' table — created via migrate-schema).
+//   2. Uploads the same backup JSON to Google Drive (if GOOGLE_DRIVE_FOLDER_ID +
+//      service account env vars are configured on Vercel). Old backups (>30 days) are
+//      auto-deleted from DB; Drive keeps everything (treated as off-site long-term backup).
 //
 // The backup can also be triggered manually from Settings → Backup.
 //
 // To download a backup: GET /api/cron/backup?token=DFCL_BACKUP_2026&action=download&id=xxx
-// To list backups: GET /api/cron/backup?token=DFCL_BACKUP_2026&action=list
+// To list backups:       GET /api/cron/backup?token=DFCL_BACKUP_2026&action=list
+// To check Drive status: GET /api/cron/backup?token=DFCL_BACKUP_2026&action=drive-status
+// To list Drive backups: GET /api/cron/backup?token=DFCL_BACKUP_2026&action=drive-list
 export async function GET(request: NextRequest) {
   try {
     const token = request.nextUrl.searchParams.get('token');
@@ -22,7 +28,19 @@ export async function GET(request: NextRequest) {
 
     const action = request.nextUrl.searchParams.get('action') || 'create';
 
-    // List backups
+    // Drive status check (no auth needed beyond the token)
+    if (action === 'drive-status') {
+      const status = await driveStatus();
+      return NextResponse.json(status);
+    }
+
+    // List recent Drive backups
+    if (action === 'drive-list') {
+      const result = await listDriveBackups();
+      return NextResponse.json(result);
+    }
+
+    // List in-DB backups
     if (action === 'list') {
       const tursoUrl = process.env.TURSO_DATABASE_URL;
       const tursoToken = process.env.TURSO_AUTH_TOKEN;
@@ -126,10 +144,29 @@ export async function GET(request: NextRequest) {
         args: [backupId, totalSize, `${tables.length} tables`, totalRecords, jsonStr],
       });
 
-      // Auto-delete backups older than 30 days
+      // Auto-delete backups older than 30 days (DB only — Drive keeps everything)
       await client.execute(`DELETE FROM "Backup" WHERE "createdAt" < datetime('now', '-30 days')`);
+
+      // ★ Upload the same backup JSON to Google Drive (off-site backup).
+      //    If Drive env vars aren't set, this no-ops gracefully.
+      const driveResult = await uploadBackupToDrive(jsonStr, backupId);
+
+      return NextResponse.json({
+        success: true,
+        backupId,
+        exportedAt: bdNow(),
+        tables: tables.length,
+        totalRecords,
+        sizeBytes: totalSize,
+        sizeKB: Math.round(totalSize / 1024),
+        drive: driveResult,
+        message: driveResult.uploaded
+          ? 'Backup created. DB + Google Drive upload OK. DB auto-cleanup removes >30-day entries.'
+          : 'Backup created in DB only. Drive upload skipped — see drive.reason or drive.error.',
+      });
     }
 
+    // Local dev fallback: no Turso configured — just return the JSON for inspection
     return NextResponse.json({
       success: true,
       backupId: `bk_${Date.now()}_${Math.floor(Math.random() * 10000)}`,
@@ -138,7 +175,8 @@ export async function GET(request: NextRequest) {
       totalRecords,
       sizeBytes: totalSize,
       sizeKB: Math.round(totalSize / 1024),
-      message: 'Backup created successfully. Auto-cleanup removes backups older than 30 days.',
+      drive: { uploaded: false, reason: 'no-db-configured' },
+      message: 'Backup generated (no Turso DB configured to store it).',
     });
   } catch (error) {
     console.error('Backup error:', error);
