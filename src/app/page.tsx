@@ -496,7 +496,7 @@ export default function Home() {
   // Entity state
   const [entities, setEntities] = useState<EntityData[]>([])
   const [entitiesLoading, setEntitiesLoading] = useState(false)
-  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet' })
+  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', logo: '' })
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
@@ -2580,7 +2580,7 @@ export default function Home() {
     try {
       const res = await authFetch('/api/entities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', logo: '' }); setShowEntityDialog(false); fetchEntities() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create entity', variant: 'destructive' }) }
   }
@@ -2590,9 +2590,20 @@ export default function Home() {
     if (!editingEntityId) return
     try {
       const res = await authFetch(`/api/entities/${editingEntityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
-      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', logo: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
       else { const data = await res.json(); toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update entity', variant: 'destructive' }) }
+  }
+
+  // ★ Handle logo upload — converts image to base64 data URL
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    if (!file.type.startsWith('image/')) { toast({ title: 'Error', description: 'Please select an image file', variant: 'destructive' }); return }
+    if (file.size > 2 * 1024 * 1024) { toast({ title: 'Error', description: 'Logo must be under 2 MB', variant: 'destructive' }); return }
+    const reader = new FileReader()
+    reader.onload = () => { setEntityForm({ ...entityForm, logo: reader.result as string }) }
+    reader.readAsDataURL(file)
   }
 
   const handleDeleteEntity = async (id: string) => {
@@ -8621,6 +8632,29 @@ export default function Home() {
                   </SelectContent>
                 </Select>
                 <p className="text-[11px] text-muted-foreground">Used by incentive formula: outlet → outletCommission, factory/head_office/warehouse → headOfficeCommission</p>
+              </div>
+              {/* ★ Company Logo Upload */}
+              <div className="space-y-2">
+                <Label>Company Logo</Label>
+                <div className="flex items-center gap-3">
+                  {entityForm.logo ? (
+                    <img src={entityForm.logo} alt="Logo" className="w-16 h-16 rounded-lg border object-contain bg-white" />
+                  ) : (
+                    <div className="w-16 h-16 rounded-lg border flex items-center justify-center text-muted-foreground text-xs">No logo</div>
+                  )}
+                  <div className="flex flex-col gap-1">
+                    <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" id="logo-upload-1" />
+                    <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload-1')?.click()}>
+                      <Upload className="w-3.5 h-3.5 mr-1.5" />Upload Logo
+                    </Button>
+                    {entityForm.logo && (
+                      <Button type="button" variant="ghost" size="sm" className="text-destructive h-7 text-xs" onClick={() => setEntityForm({ ...entityForm, logo: '' })}>
+                        <X className="w-3 h-3 mr-1" />Remove
+                      </Button>
+                    )}
+                  </div>
+                </div>
+                <p className="text-[11px] text-muted-foreground">JPG / PNG up to 2 MB. Logo shows on invoices and the entity selection page.</p>
               </div>
               <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEntityId ? 'Update' : 'Create'}</Button></DialogFooter>
             </form>

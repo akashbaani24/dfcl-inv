@@ -12,11 +12,16 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { name, description, entityType } = await request.json();
+    const { name, description, entityType, logo } = await request.json();
 
     const entity = await db.entity.update({
       where: { id },
-      data: { name, description: description || null, entityType: entityType || undefined },
+      data: {
+        name,
+        description: description || null,
+        entityType: entityType || undefined,
+        logo: logo !== undefined ? (logo || null) : undefined,
+      },
     });
 
     // Invalidate in-memory cache so the updated entity shows up immediately

@@ -116,6 +116,8 @@ model Entity {
   //   - head_office → use headOfficeCommission
   //   - warehouse → use headOfficeCommission (falls under "Head Office and others")
   entityType  String   @default("outlet")
+  // ★ Company logo — base64 data URL stored in DB (no file upload needed)
+  logo        String?
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

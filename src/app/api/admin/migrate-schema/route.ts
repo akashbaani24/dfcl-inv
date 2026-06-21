@@ -903,6 +903,12 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS `ItemBarcode_barcode_idx` ON `ItemBarcode`(`barcode`)',
     description: 'Index on barcode',
   },
+  // v62: Add logo column to Entity for company logo
+  {
+    id: '2026_06_22_entity_logo',
+    sql: 'ALTER TABLE Entity ADD COLUMN logo TEXT',
+    description: 'Add logo column to Entity (base64 data URL)',
+  },
 ];
 
 export async function POST(request: NextRequest) {
