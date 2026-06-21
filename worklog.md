@@ -317,3 +317,29 @@ Stage Summary:
 - ★ ALL DATA SAFE: 31 entities, 22,276 items, 694 stock, 8 users, 8 sales orders — nothing was lost.
 - Root cause: stale in-memory cache on Vercel serverless instance returned empty list.
 - Fix deployed. User needs to wait 2-3 min for Vercel auto-deploy, then refresh page — all 31 entities will appear.
+
+---
+Task ID: 12
+Agent: main
+Task: User reported: "Ekhono kaaz hoy nai. DB query fail dekhay." — even after v60-fix27 (cache disable), entities still not loading on production.
+
+Work Log:
+- Inspected local Prisma client at node_modules/.prisma/client/index.d.ts.
+- Found EntityFieldRefs interface did NOT include 'logo' field — only id, name, description, entityType, createdAt, updatedAt.
+- Root cause confirmed:
+  * package.json had NO 'postinstall' script, so Vercel's 'npm install' step never ran 'prisma generate'.
+  * Vercel was building with a Prisma client generated from an OLDER schema.prisma (before logo column was added).
+  * When /api/entities called db.entity.findMany({ select: { ..., logo: true, ... } }), the stale client threw an error like "Unknown selection field logo" or "Cannot read properties of undefined" — this was caught by the route's try/catch and returned as { error: 'DB query failed' } HTTP 500.
+  * Frontend toast showed 'DB query failed' (matching user's report).
+  * Direct Turso queries via /api/admin/debug-entities worked perfectly (raw SQL bypasses Prisma), which is why debug endpoint showed 31 entities while /api/entities returned 0.
+- Fix (v60-fix28):
+  * Added 'postinstall': 'prisma generate' to package.json scripts.
+    → Vercel's npm install will now regenerate Prisma client from current schema.prisma BEFORE next build runs.
+  * Also prepended 'prisma generate &&' to the build script as belt-and-suspenders.
+  * Verified locally: npx prisma generate now produces EntityFieldRefs including 'readonly logo: FieldRef<"Entity", "String">'.
+- Pushed v60-fix28.
+
+Stage Summary:
+- ★ ROOT CAUSE: stale Prisma client on Vercel (missing postinstall hook).
+- Fix deployed. User needs to wait 3-4 min for Vercel deploy (slightly longer this time because prisma generate adds ~3-5s to the build).
+- After deploy: hard refresh (Ctrl+Shift+R / Cmd+Shift+R) → all 31 entities will appear.
