@@ -47,7 +47,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Slider } from '@/components/ui/slider'
 import { useLanguage } from '@/lib/i18n'
-import { Upload, ShoppingCart, RotateCcw, Wand2, Check, X, Maximize2, Move3d, Sofa } from 'lucide-react'
+import { Upload, ShoppingCart, RotateCcw, Wand2, Check, X, Maximize2, Move3d, Sofa, RotateCw, Camera } from 'lucide-react'
 
 // ────────────────────────────────────────────────────────────────────────
 // ★ Product catalog — ADD NEW 3D MODELS HERE
@@ -312,10 +312,12 @@ function Scene({
   product,
   fabricUrl,
   fabricRepeat,
+  autoRotate,
 }: {
   product: ProductDef
   fabricUrl: string | null
   fabricRepeat: number
+  autoRotate: boolean
 }) {
   return (
     <>
@@ -372,7 +374,9 @@ function Scene({
         <meshStandardMaterial color="#eceae5" roughness={0.75} metalness={0.0} />
       </mesh>
 
-      {/* OrbitControls — left-drag rotate, wheel zoom, right-drag pan */}
+      {/* OrbitControls — left-drag rotate, wheel zoom, right-drag pan
+          ★ autoRotate makes the model slowly spin like a product showcase
+          when the customer isn't interacting */}
       <OrbitControls
         enablePan
         enableZoom
@@ -382,6 +386,8 @@ function Scene({
         minPolarAngle={Math.PI / 6}
         maxPolarAngle={Math.PI / 2.05}
         target={[0, 0.2, 0]}
+        autoRotate={autoRotate}
+        autoRotateSpeed={1.5}
         makeDefault
       />
 
@@ -405,7 +411,10 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
   const [fabrics, setFabrics] = useState<FabricDef[]>(PRESET_FABRICS)
   const [selectedFabricId, setSelectedFabricId] = useState<string | null>(null)
   const [fabricRepeat, setFabricRepeat] = useState<number>(2)
+  const [autoRotate, setAutoRotate] = useState<boolean>(true)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
+  // ★ Canvas ref for Save Design screenshot
+  const canvasContainerRef = useRef<HTMLDivElement | null>(null)
 
   useEffect(() => {
     try {
@@ -476,6 +485,37 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
 
   const handleReset = () => setFabricRepeat(2)
 
+  // ★ Save Design — captures the current 3D view as a PNG image and downloads it.
+  // The Canvas was created with preserveDrawingBuffer: true, so we can read its
+  // pixels via toDataURL. Customer can save their fabric+sofa combo to share
+  // with family, send to the shop, or post on social media.
+  const handleSaveDesign = () => {
+    const container = canvasContainerRef.current
+    if (!container) return
+    const canvas = container.querySelector('canvas')
+    if (!canvas) {
+      alert(t('3D view not ready yet — please wait a moment and try again', '3D ভিউ এখনও প্রস্তুত নয় — একটু পরে আবার চেষ্টা করুন'))
+      return
+    }
+    try {
+      // Force a render before capturing (in case autoRotate is off and nothing
+      // has triggered a redraw recently)
+      const dataUrl = canvas.toDataURL('image/png')
+      const link = document.createElement('a')
+      const productSlug = selectedProduct.id
+      const fabricSlug = selectedFabric ? selectedFabric.id : 'no-fabric'
+      const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
+      link.download = `fabric-studio-${productSlug}-${fabricSlug}-${timestamp}.png`
+      link.href = dataUrl
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+    } catch (err) {
+      console.error('Save design failed:', err)
+      alert(t('Could not save design. Please try again.', 'ডিজাইন সেভ করা যায়নি। আবার চেষ্টা করুন।'))
+    }
+  }
+
   return (
     <div className="space-y-4">
       {/* Header */}
@@ -513,14 +553,41 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
         {/* 3D Preview area */}
         <Card className="lg:col-span-2">
           <CardHeader className="pb-3">
-            <CardTitle className="text-base flex items-center gap-2">
-              <Maximize2 className="w-4 h-4" />
-              {t(selectedProduct.nameEn, selectedProduct.nameBn)}
-            </CardTitle>
+            <div className="flex items-center justify-between gap-2 flex-wrap">
+              <CardTitle className="text-base flex items-center gap-2">
+                <Maximize2 className="w-4 h-4" />
+                {t(selectedProduct.nameEn, selectedProduct.nameBn)}
+              </CardTitle>
+              <div className="flex items-center gap-1.5">
+                {/* ★ Auto-rotate toggle */}
+                <Button
+                  variant={autoRotate ? 'default' : 'outline'}
+                  size="sm"
+                  onClick={() => setAutoRotate(!autoRotate)}
+                  title={autoRotate ? t('Stop auto-rotate', 'অটো-রোটেশন বন্ধ করুন') : t('Start auto-rotate', 'অটো-রোটেশন চালু করুন')}
+                  className="h-8"
+                >
+                  <RotateCw className={`w-3.5 h-3.5 mr-1.5 ${autoRotate ? 'animate-spin' : ''}`} style={{ animationDuration: '3s' }} />
+                  {t('Auto-rotate', 'অটো-রোটেট')}
+                </Button>
+                {/* ★ Save Design button */}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleSaveDesign}
+                  title={t('Save current view as PNG image', 'বর্তমান ভিউ PNG ছবি হিসেবে সেভ করুন')}
+                  className="h-8"
+                >
+                  <Camera className="w-3.5 h-3.5 mr-1.5" />
+                  {t('Save Design', 'ডিজাইন সেভ')}
+                </Button>
+              </div>
+            </div>
             <p className="text-xs text-muted-foreground">{t(selectedProduct.descEn, selectedProduct.descBn)}</p>
           </CardHeader>
           <CardContent>
             <div
+              ref={canvasContainerRef}
               className="rounded-xl overflow-hidden relative"
               style={{
                 background: 'linear-gradient(180deg, #f5f6f8 0%, #e2e5ea 60%, #c9cdd4 100%)',
@@ -542,6 +609,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                   product={selectedProduct}
                   fabricUrl={selectedFabric?.url || null}
                   fabricRepeat={fabricRepeat}
+                  autoRotate={autoRotate}
                 />
               </Canvas>
               <div className="absolute bottom-3 left-3 bg-white/80 backdrop-blur px-2.5 py-1.5 rounded-md text-[11px] text-slate-700 shadow-sm pointer-events-none">
