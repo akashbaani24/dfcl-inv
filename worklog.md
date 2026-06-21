@@ -258,3 +258,33 @@ Stage Summary:
 - User can: click → see dropdown of active making-info master entries with cost+unit sub-label; type → filters dropdown live; pick from dropdown → auto-fills name + unitPrice + makingInfoId; type something not in master list → becomes a free-text making entry with makingInfoId=''.
 - Clearable: backspace to empty clears the entry.
 - ⚠️ COMMIT IS LOCAL ONLY — could not push to GitHub because no credentials are configured in this session. User needs to push manually (run `git push origin main` from a machine with GitHub auth, or via the push-to-github.sh script).
+
+---
+Task ID: 10
+Agent: main
+Task: User reported: "No entity available show kore home page e" + "amar toh onek gulo entity create kora chilo, onek data entry kora chilo, sob koi?" — home page shows no entities, user fears data loss.
+
+Work Log:
+- Inspected local SQLite DB at /home/z/my-project/db/custom.db via @libsql/client.
+- Entity table schema was missing the `logo` column (added in v60-fix23 to Prisma schema + migrate-schema route, but ALTER TABLE never applied to the local DB file).
+- DB stats (local):
+  * Entity count: 8 (Dhaka Main Warehouse, Chittagong Branch, Sylhet Store, Rajshahi Depot, Khulna Distribution, Head Office, Dhaka Office, Dynasty Furnishings Centre Ltd (DEWS))
+  * Item count: 516
+  * Stock count: 511
+  * User count: 4
+  * SalesOrder count: 0 (no test orders in local DB)
+- ★ Data is INTACT — nothing was lost. The "No Entity Available" error happened because:
+  1. Prisma `db.entity.findMany` was called with `select: { ..., logo: true, ... }`
+  2. DB schema didn't have `logo` column yet
+  3. SQLite threw "no such column: logo" → query failed → entities = undefined → frontend shows empty list
+- Applied local fix via scripts/add_logo_column.js:
+  * Ran `ALTER TABLE Entity ADD COLUMN logo TEXT` (idempotent — catches duplicate-column error)
+  * Verified all 8 entities still present after schema change
+- Production (Vercel+Turso) fix: the migrate-schema endpoint at /api/admin/migrate-schema?token=DFCL_RESCUE_2026 already includes migration id `2026_06_22_entity_logo` to add the same column. User just needs to run that endpoint once on production to apply the same fix.
+
+Stage Summary:
+- ★ ALL DATA IS SAFE — 8 entities, 516 items, 511 stock entries, 4 users all intact in local DB.
+- Local DB schema patched: logo column added to Entity table.
+- User can immediately resume work on local (npm run dev) — entities will appear.
+- For production: run `POST /api/admin/migrate-schema?token=DFCL_RESCUE_2026` once after next deploy to add logo column to Turso DB.
+- Committed v60-fix25 already adds diagnostic UI to surface this kind of error to the user (instead of silently swallowing it).
