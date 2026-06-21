@@ -19,11 +19,15 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Return cached result if available (5 min TTL)
-    const cached = getEntitiesCache();
-    if (cached) {
-      return NextResponse.json({ entities: cached });
-    }
+    // ★ Cache DISABLED — was causing stale empty responses on some serverless
+    //   instances when the cache got populated with [] from a transient failure
+    //   (despite the `length > 0` guard, Vercel's serverless instance reuse
+    //   pattern meant a stale cache could persist). For 31 entities the query
+    //   is fast enough to skip caching entirely.
+    // const cached = getEntitiesCache();
+    // if (cached) {
+    //   return NextResponse.json({ entities: cached, source: 'cache' });
+    // }
 
     // Optimized: skip _count (was causing slow COUNT subqueries on 22k+ items)
     let entities;
@@ -38,11 +42,11 @@ export async function GET(request: NextRequest) {
     }
 
     // Cache for next call (only if non-empty to avoid caching transient failures)
-    if (entities && entities.length > 0) {
-      setEntitiesCache(entities);
-    }
+    // if (entities && entities.length > 0) {
+    //   setEntitiesCache(entities);
+    // }
 
-    return NextResponse.json({ entities });
+    return NextResponse.json({ entities, source: 'db', count: entities?.length ?? 0 });
   } catch (error) {
     console.error('Get entities error:', error);
     return NextResponse.json({ error: 'Internal server error', detail: String(error) }, { status: 500 });
