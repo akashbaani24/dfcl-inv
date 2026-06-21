@@ -13,6 +13,11 @@ export type ComboOption = {
 
 interface ComboboxProps {
   options: ComboOption[]
+  /**
+   * The text to display in the input.
+   * - When `allowFreeText` is false (default): pass the selected option's value (ID).
+   * - When `allowFreeText` is true: pass the human-readable text (e.g. the entry's name).
+   */
   value: string
   onChange: (value: string, option?: ComboOption) => void
   placeholder?: string
@@ -22,6 +27,13 @@ interface ComboboxProps {
   clearable?: boolean
   /** Render a footer line below options (e.g. "+ Add new"). */
   footer?: React.ReactNode
+  /**
+   * When true, the input shows `value` directly (treated as free text).
+   * Typing fires onChange with the typed text and no option — so callers can store
+   * free-text entries that are not in the options list.
+   * Selecting from the dropdown still fires onChange with the option's label/value.
+   */
+  allowFreeText?: boolean
 }
 
 /**
@@ -37,6 +49,7 @@ export function Combobox({
   disabled,
   clearable,
   footer,
+  allowFreeText,
 }: ComboboxProps) {
   const [open, setOpen] = React.useState(false)
   const [query, setQuery] = React.useState('')
@@ -55,8 +68,10 @@ export function Combobox({
   }, [open])
 
   // Find the currently-selected option to display its label
-  const selected = options.find(o => o.value === value)
-  const displayValue = open ? query : (selected?.label ?? '')
+  const selected = options.find(o => o.value === value || (allowFreeText && o.label === value))
+  // In free-text mode, `value` itself IS the text to show (the user's typed name).
+  // In id-mode, show the matched option's label.
+  const displayValue = open ? query : (allowFreeText ? (value ?? '') : (selected?.label ?? ''))
 
   // Filter options based on the query (case-insensitive, matches label OR subLabel)
   const filtered = React.useMemo(() => {
@@ -76,16 +91,34 @@ export function Combobox({
   }
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setQuery(e.target.value)
+    const v = e.target.value
+    setQuery(v)
     setOpen(true)
+    // In free-text mode, every keystroke propagates the typed text upward so the
+    // parent state stays in sync with what's displayed. option is undefined so the
+    // caller knows this is a free-text entry (no makingInfoId match).
+    if (allowFreeText) {
+      // If the typed text matches an option's label exactly, also pass that option
+      // so the caller can pick up the associated id/cost/unit.
+      const matched = options.find(o => o.label === v)
+      onChange(v, matched)
+      return
+    }
     // If the field is clearable and input is empty, fire onChange with empty string
-    if (clearable && !e.target.value) {
+    if (clearable && !v) {
       onChange('', undefined)
     }
   }
 
   const handleSelect = (opt: ComboOption) => {
-    onChange(opt.value, opt)
+    // In free-text mode, propagate the human-readable label so the input continues
+    // to show the chosen name. Callers receive the option too, so they can grab
+    // the underlying id/cost.
+    if (allowFreeText) {
+      onChange(opt.label, opt)
+    } else {
+      onChange(opt.value, opt)
+    }
     setOpen(false)
     setQuery('')
   }
@@ -93,9 +126,13 @@ export function Combobox({
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
-      // Select the first matching option
+      // Select the first matching option if any.
+      // In free-text mode, if nothing matches, the typed text is already preserved
+      // via handleInputChange — just close the dropdown.
       if (filtered.length > 0) {
         handleSelect(filtered[0])
+      } else {
+        setOpen(false)
       }
     } else if (e.key === 'Escape') {
       setOpen(false)

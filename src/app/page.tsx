@@ -1503,6 +1503,32 @@ export default function Home() {
     })
   }
 
+  // ★ Unified making-entry handler for the combobox (search + dropdown in one field).
+  // - If `option` is provided (user picked from dropdown OR typed text that exactly
+  //   matches an existing making-info), set makingInfoId + name + unitPrice.
+  // - If `option` is undefined (user is typing custom free-text), keep the typed
+  //   name and clear makingInfoId so we don't end up with a stale id→name mismatch.
+  const updateMakingEntryCombo = (itemIndex: number, meIndex: number, text: string, option?: { value: string; label: string; raw?: unknown }) => {
+    setSalesOrderForm(f => {
+      const items = [...f.items]
+      const entry: any = { ...items[itemIndex].makingEntries[meIndex], name: text }
+      if (option && option.value) {
+        const info = makingInfoList.find(m => m.id === option.value)
+        entry.makingInfoId = option.value
+        if (info) {
+          // Sync name + unitPrice from the master record so totals stay correct.
+          entry.name = info.name
+          entry.unitPrice = String(info.cost || 0)
+        }
+      } else {
+        // Free-text: clear any prior makingInfoId so the saved entry is purely custom.
+        entry.makingInfoId = ''
+      }
+      items[itemIndex].makingEntries[meIndex] = entry
+      return { ...f, items }
+    })
+  }
+
   const addPayment = () => {
     setSalesOrderForm(f => ({ ...f, payments: [...f.payments, { amount: '', paymentType: 'cash', paymentMode: 'advance', paymentDate: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', notes: '' }] }))
   }
@@ -4526,13 +4552,15 @@ export default function Home() {
                         <div className="space-y-1 pl-3 border-l-2 border-muted">
                           {item.makingEntries.map((me, mi) => (
                             <div key={mi} className="flex gap-2 items-center">
-                              <Select value={(me as any).makingInfoId || ''} onValueChange={v => updateMakingEntry(i, mi, 'makingInfoId', v)}>
-                                <SelectTrigger className="h-7 text-xs flex-1"><SelectValue placeholder="Select making..." /></SelectTrigger>
-                                <SelectContent>
-                                  {makingInfoList.filter(m => m.status === 'active').map(m => <SelectItem key={m.id} value={m.id}>{m.name} (৳{m.cost || 0}/{m.unit || 'PCS'})</SelectItem>)}
-                                </SelectContent>
-                              </Select>
-                              <Input placeholder="Or type name" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs w-32" />
+                              <Combobox
+                                allowFreeText
+                                clearable
+                                value={me.name || ''}
+                                onChange={(text, opt) => updateMakingEntryCombo(i, mi, text, opt as any)}
+                                placeholder="Search or type making..."
+                                className="h-7 text-xs flex-1 min-w-[140px]"
+                                options={makingInfoList.filter(m => m.status === 'active').map(m => ({ value: m.id, label: m.name, subLabel: `৳${m.cost || 0}/${m.unit || 'PCS'}` }))}
+                              />
                               <Input type="number" step="0.01" placeholder="Qty" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-xs w-16" />
                               <Input type="number" step="0.01" placeholder="Price" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-xs w-20" />
                               <Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-7"><X className="w-3 h-3" /></Button>
@@ -4986,13 +5014,15 @@ export default function Home() {
                                   <td className="px-2 py-1.5">
                                     <div className="flex items-center gap-2">
                                       <span className="text-[11px] italic text-muted-foreground">Making:</span>
-                                      <Select value={(me as any).makingInfoId || ''} onValueChange={v => updateMakingEntry(i, mi, 'makingInfoId', v)}>
-                                        <SelectTrigger className="h-7 text-xs flex-1 min-w-[120px]"><SelectValue placeholder="Select making..." /></SelectTrigger>
-                                        <SelectContent>
-                                          {makingInfoList.filter(m => m.status === 'active').map(m => <SelectItem key={m.id} value={m.id}>{m.name} (৳{m.cost || 0}/{m.unit || 'PCS'})</SelectItem>)}
-                                        </SelectContent>
-                                      </Select>
-                                      <Input placeholder="Or type" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs w-24" />
+                                      <Combobox
+                                        allowFreeText
+                                        clearable
+                                        value={me.name || ''}
+                                        onChange={(text, opt) => updateMakingEntryCombo(i, mi, text, opt as any)}
+                                        placeholder="Search or type making..."
+                                        className="h-7 text-xs flex-1 min-w-[140px]"
+                                        options={makingInfoList.filter(m => m.status === 'active').map(m => ({ value: m.id, label: m.name, subLabel: `৳${m.cost || 0}/${m.unit || 'PCS'}` }))}
+                                      />
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-right"><Input type="number" step="0.01" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-right text-xs w-full min-w-[70px]" /></td>
