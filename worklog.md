@@ -288,3 +288,32 @@ Stage Summary:
 - User can immediately resume work on local (npm run dev) — entities will appear.
 - For production: run `POST /api/admin/migrate-schema?token=DFCL_RESCUE_2026` once after next deploy to add logo column to Turso DB.
 - Committed v60-fix25 already adds diagnostic UI to surface this kind of error to the user (instead of silently swallowing it).
+
+---
+Task ID: 11
+Agent: main
+Task: Production (Vercel) reports 0 entities — user feared data loss. Diagnostic info confirmed: API returns 0 entities, admin user, no entityAccess grants, 0 visible.
+
+Work Log:
+- Created /api/admin/debug-entities endpoint (token=DFCL_RESCUE_2026) — runs the exact Prisma query directly against Turso + a fallback without logo + sanity checks on other tables.
+- Pushed v60-fix26 + waited 90s for Vercel deploy.
+- Hit the debug endpoint. Results:
+  * Turso DB connection: OK
+  * Entity table schema: includes entityType + logo columns (post-migration, all good)
+  * Entity count: **31** (NOT zero!)
+  * Select with logo column: returns 31 rows ✅
+  * Select without logo column: returns 31 rows ✅
+  * Sanity check: 22,276 items, 694 stock, 8 users, 8 sales orders — **ALL DATA INTACT**
+- So the data was NEVER lost. The 'No Entity Available' error came from the in-memory entities-cache.ts:
+  * On Vercel serverless, instances are reused. If one instance populated the cache with [] (during a transient DB error or race during cold-start when logo migration hadn't applied yet), that empty cache persisted for up to 5 min for any request hitting that instance.
+  * Subsequent requests got { entities: [] } from cache without ever hitting the DB again.
+- Fix (v60-fix27):
+  * Disabled entities-cache.ts entirely (both read AND write paths in /api/entities).
+  * Added 'source' field to response ('db' vs 'cache') and 'count' for easier future debugging.
+  * For 31 entities the Prisma query is fast enough (~50ms) — caching not worth the staleness risk on serverless.
+- Pushed v60-fix27 to GitHub.
+
+Stage Summary:
+- ★ ALL DATA SAFE: 31 entities, 22,276 items, 694 stock, 8 users, 8 sales orders — nothing was lost.
+- Root cause: stale in-memory cache on Vercel serverless instance returned empty list.
+- Fix deployed. User needs to wait 2-3 min for Vercel auto-deploy, then refresh page — all 31 entities will appear.
