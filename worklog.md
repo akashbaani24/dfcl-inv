@@ -221,3 +221,40 @@ Stage Summary:
 - The grad-fabric-shadow overlay does NOT carry the .fabric-area class, so when a user uploads a fabric, the 3D puff effect stays ON TOP of the fabric pattern.
 - Customer can now clearly see how their fabric would look on a real chair or in a real room context.
 - User needs to wait for Vercel auto-deploy (2-3 minutes), then refresh the Fabric Studio page to see the new 3D look and full room scenes.
+
+---
+Task ID: 9
+Agent: main
+Task: User reported: "Sales order e making er kaaz ta hoy nai. Ek e field e search and drop-down hobe. Type korar jonno alalda jayga dorkar nai." — making entries in sales order had two separate fields (a Select dropdown + an Input for free text). User wants them combined into ONE field that supports both search-to-filter dropdown AND free typing.
+
+Work Log:
+- Located the two places where making entries are rendered in src/app/page.tsx:
+  1. Dialog form (line ~4553): per-item "Making entries" block with <Select> + <Input placeholder='Or type name'> side-by-side.
+  2. Main table form (line ~5009): per-item making row with <Select> + <Input placeholder='Or type'> side-by-side.
+- Enhanced src/components/ui/combobox.tsx with a new `allowFreeText` prop:
+  * When true, the input displays the human-readable text (the entry's name) rather than an id.
+  * Typing propagates the typed text upward via onChange(text, optionIfExactMatch) — every keystroke keeps the parent state in sync.
+  * Picking from dropdown propagates onChange(label, option) — callers still get the underlying id+cost via option.value + option.raw.
+  * Enter key selects the first match if any; otherwise just closes the dropdown (free-text preserved).
+- Added new handler updateMakingEntryCombo(itemIndex, meIndex, text, option?) in page.tsx:
+  * If option provided: sets makingInfoId = option.value, name = info.name, unitPrice = info.cost (auto-fills cost from makingInfoList so totals stay correct).
+  * If no option (free-text): sets name = text, clears makingInfoId (so we don't end up with a stale id→name mismatch).
+- Replaced both 2-field making rows with a single Combobox:
+    <Combobox
+      allowFreeText
+      clearable
+      value={me.name || ''}
+      onChange={(text, opt) => updateMakingEntryCombo(i, mi, text, opt as any)}
+      placeholder='Search or type making...'
+      options={makingInfoList.filter(m => m.status === 'active').map(m => ({
+        value: m.id, label: m.name, subLabel: `৳${m.cost || 0}/${m.unit || 'PCS'}`
+      }))}
+    />
+- TypeScript: no new errors introduced. Pre-existing errors (about ConfirmOptions, role on {}, subTotal/makingTotal scope) are still ignored via next.config.ts:typescript.ignoreBuildErrors=true.
+- Committed locally as 7b4ec60 v60-fix24.
+
+Stage Summary:
+- Making entries in sales order (both dialog form + main form) now use ONE Combobox field per row instead of Select+Input side-by-side.
+- User can: click → see dropdown of active making-info master entries with cost+unit sub-label; type → filters dropdown live; pick from dropdown → auto-fills name + unitPrice + makingInfoId; type something not in master list → becomes a free-text making entry with makingInfoId=''.
+- Clearable: backspace to empty clears the entry.
+- ⚠️ COMMIT IS LOCAL ONLY — could not push to GitHub because no credentials are configured in this session. User needs to push manually (run `git push origin main` from a machine with GitHub auth, or via the push-to-github.sh script).
