@@ -223,3 +223,85 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
 }
+
+// ★ PUT — Update existing sales order (admin/manager only)
+// Replaces items, making entries, and payments with the new set.
+export async function PUT(request: NextRequest) {
+  try {
+    const currentUser = await getCurrentUser(request);
+    if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
+
+    const isAdmin = currentUser.role === 'admin' || currentUser.role === 'manager';
+    if (!isAdmin) return NextResponse.json({ error: 'Only admins/managers can edit sales orders' }, { status: 403 });
+
+    const body = await request.json();
+    const { id } = body;
+    if (!id) return NextResponse.json({ error: 'Sales order ID is required' }, { status: 400 });
+
+    const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments } = body;
+
+    // Delete existing items + making entries + payments, then recreate
+    await db.salesMakingEntry.deleteMany({ where: { salesOrderItem: { salesOrderId: id } } });
+    await db.salesOrderItem.deleteMany({ where: { salesOrderId: id } });
+    await db.salesPayment.deleteMany({ where: { salesOrderId: id } });
+
+    // Update the order
+    const salesOrder = await db.salesOrder.update({
+      where: { id },
+      data: {
+        customerId: customerId || undefined,
+        salesPersonId: salesPersonId || null,
+        discount: parseFloat(discount) || 0,
+        orderDate: orderDate ? new Date(orderDate) : undefined,
+        deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
+        status: status || 'pending',
+        notes: notes || null,
+        items: {
+          create: (items || []).map((item: any) => ({
+            itemId: item.itemId,
+            entityId,
+            quantity: parseFloat(item.quantity) || 1,
+            unitPrice: parseFloat(item.unitPrice) || 0,
+            makingEntries: {
+              create: (item.makingEntries || []).map((me: any) => ({
+                name: me.name || '',
+                makingInfoId: me.makingInfoId || null,
+                unitPrice: parseFloat(me.unitPrice) || 0,
+                quantity: parseFloat(me.quantity) || 1,
+              })),
+            },
+          })),
+        },
+        payments: (payments && Array.isArray(payments)) ? {
+          create: payments.map((p: any) => {
+            const pNow = new Date();
+            const pDateStr = pNow.getFullYear().toString() + String(pNow.getMonth() + 1).padStart(2, '0') + String(pNow.getDate()).padStart(2, '0');
+            const pRandom = Math.floor(1000 + Math.random() * 9000).toString();
+            return {
+              receiptNo: p.receiptNo || `MR-${pDateStr}-${pRandom}`,
+              amount: parseFloat(p.amount) || 0,
+              paymentType: p.paymentType || 'cash',
+              paymentMode: p.paymentMode || 'advance',
+              paymentDate: p.paymentDate ? new Date(p.paymentDate) : new Date(),
+              chequeNo: p.chequeNo || null,
+              bankName: p.bankName || null,
+              notes: p.notes || null,
+              createdBy: currentUser.id,
+            };
+          }),
+        } : undefined,
+      },
+      include: {
+        entity: { select: { name: true } },
+        customer: { select: { name: true, phone: true } },
+        items: { include: { item: { select: { itemName: true, barcode: true, itemCode: true, uom: true } }, makingEntries: true } },
+        payments: true,
+      },
+    });
+
+    return NextResponse.json({ salesOrder });
+  } catch (error) {
+    console.error('Update sales order error:', error);
+    return NextResponse.json({ error: 'Internal server error: ' + (error instanceof Error ? error.message : String(error)) }, { status: 500 });
+  }
+}

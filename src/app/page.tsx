@@ -1479,15 +1479,28 @@ export default function Home() {
   }
 
   const addMakingEntry = (itemIndex: number) => {
-    setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries.push({ name: '', unitPrice: '0', quantity: '1' }); return { ...f, items } })
+    setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries.push({ name: '', unitPrice: '0', quantity: '1', makingInfoId: '' }); return { ...f, items } })
   }
 
   const removeMakingEntry = (itemIndex: number, meIndex: number) => {
     setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries = items[itemIndex].makingEntries.filter((_, i) => i !== meIndex); return { ...f, items } })
   }
 
-  const updateMakingEntry = (itemIndex: number, meIndex: number, field: 'name' | 'unitPrice' | 'quantity', value: string) => {
-    setSalesOrderForm(f => { const items = [...f.items]; items[itemIndex].makingEntries[meIndex] = { ...items[itemIndex].makingEntries[meIndex], [field]: value }; return { ...f, items } })
+  const updateMakingEntry = (itemIndex: number, meIndex: number, field: 'name' | 'unitPrice' | 'quantity' | 'makingInfoId', value: string) => {
+    setSalesOrderForm(f => {
+      const items = [...f.items]
+      const entry = { ...items[itemIndex].makingEntries[meIndex], [field]: value }
+      // ★ If makingInfoId is set, auto-fill name, cost and unit from makingInfoList
+      if (field === 'makingInfoId' && value) {
+        const info = makingInfoList.find(m => m.id === value)
+        if (info) {
+          entry.name = info.name
+          entry.unitPrice = String(info.cost || 0)
+        }
+      }
+      items[itemIndex].makingEntries[meIndex] = entry
+      return { ...f, items }
+    })
   }
 
   const addPayment = () => {
@@ -1524,16 +1537,22 @@ export default function Home() {
         if (custRes.ok && custData.customer) { customerId = custData.customer.id } else { toast({ title: 'Error', description: 'Failed to create customer', variant: 'destructive' }); return }
       }
       const payload = {
+        id: editingSalesOrderId || undefined,
         entityId: workingEntity.id, customerId,
         salesPersonId: salesOrderForm.salesPersonId || undefined,
         discount: parseFloat(salesOrderForm.discount) || 0,
         orderDate: salesOrderForm.orderDate, deliveryDate: salesOrderForm.deliveryDate || undefined,
         status: salesOrderForm.status, notes: salesOrderForm.notes,
-        items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseFloat(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseFloat(me.quantity) || 1 })) })),
+        salesType: salesOrderForm.salesType,
+        tailorId: salesOrderForm.salesType === 'order' ? (salesOrderForm.tailorId || undefined) : undefined,
+        items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseFloat(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseFloat(me.quantity) || 1, makingInfoId: (me as any).makingInfoId || undefined })) })),
         payments: salesOrderForm.payments.map(p => ({ amount: parseFloat(p.amount) || 0, paymentType: p.paymentType, paymentMode: p.paymentMode, paymentDate: p.paymentDate, chequeNo: p.chequeNo || undefined, bankName: p.bankName || undefined, notes: p.notes || undefined })),
       }
-      const res = await authFetch('/api/sales-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (res.ok) { const data = await res.json(); toast({ title: 'Success', description: `Sales order created: ${data.salesOrder?.salesNo || ''}` }); setShowSalesOrderDialog(false); resetSalesOrderForm(); fetchSalesOrders() }
+      // ★ If editing, use PUT to update existing order; otherwise POST to create new
+      const url = editingSalesOrderId ? `/api/sales-orders/${editingSalesOrderId}` : '/api/sales-orders'
+      const method = editingSalesOrderId ? 'PUT' : 'POST'
+      const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
+      if (res.ok) { const data = await res.json(); toast({ title: 'Success', description: editingSalesOrderId ? `Sales order updated: ${data.salesOrder?.salesNo || ''}` : `Sales order created: ${data.salesOrder?.salesNo || ''}` }); setShowSalesOrderDialog(false); resetSalesOrderForm(); fetchSalesOrders(); if (editingSalesOrderId) setCurrentView('salesOrder') }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -4496,7 +4515,13 @@ export default function Home() {
                         <div className="space-y-1 pl-3 border-l-2 border-muted">
                           {item.makingEntries.map((me, mi) => (
                             <div key={mi} className="flex gap-2 items-center">
-                              <Input placeholder="Making name" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs flex-1" />
+                              <Select value={(me as any).makingInfoId || ''} onValueChange={v => updateMakingEntry(i, mi, 'makingInfoId', v)}>
+                                <SelectTrigger className="h-7 text-xs flex-1"><SelectValue placeholder="Select making..." /></SelectTrigger>
+                                <SelectContent>
+                                  {makingInfoList.filter(m => m.status === 'active').map(m => <SelectItem key={m.id} value={m.id}>{m.name} (৳{m.cost || 0}/{m.unit || 'PCS'})</SelectItem>)}
+                                </SelectContent>
+                              </Select>
+                              <Input placeholder="Or type name" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs w-32" />
                               <Input type="number" step="0.01" placeholder="Qty" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-xs w-16" />
                               <Input type="number" step="0.01" placeholder="Price" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-xs w-20" />
                               <Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-7"><X className="w-3 h-3" /></Button>
@@ -4950,7 +4975,13 @@ export default function Home() {
                                   <td className="px-2 py-1.5">
                                     <div className="flex items-center gap-2">
                                       <span className="text-[11px] italic text-muted-foreground">Making:</span>
-                                      <Input placeholder="e.g. Stitching" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs flex-1 min-w-[120px]" />
+                                      <Select value={(me as any).makingInfoId || ''} onValueChange={v => updateMakingEntry(i, mi, 'makingInfoId', v)}>
+                                        <SelectTrigger className="h-7 text-xs flex-1 min-w-[120px]"><SelectValue placeholder="Select making..." /></SelectTrigger>
+                                        <SelectContent>
+                                          {makingInfoList.filter(m => m.status === 'active').map(m => <SelectItem key={m.id} value={m.id}>{m.name} (৳{m.cost || 0}/{m.unit || 'PCS'})</SelectItem>)}
+                                        </SelectContent>
+                                      </Select>
+                                      <Input placeholder="Or type" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs w-24" />
                                     </div>
                                   </td>
                                   <td className="px-2 py-1.5 text-right"><Input type="number" step="0.01" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-right text-xs w-full min-w-[70px]" /></td>
