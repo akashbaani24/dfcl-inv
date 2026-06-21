@@ -4442,7 +4442,7 @@ export default function Home() {
                         <Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive"><X className="w-3 h-3" /></Button>
                       </div>
                       <div className="grid grid-cols-2 gap-2">
-                        <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input type="number" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-sm" /></div>
+                        <div className="space-y-1"><Label className="text-xs">Quantity</Label><Input type="number" step="0.01" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-sm" /></div>
                         <div className="space-y-1"><Label className="text-xs">Unit Price</Label><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-8 text-sm" /></div>
                       </div>
                       {/* Making entries */}
@@ -4451,7 +4451,7 @@ export default function Home() {
                           {item.makingEntries.map((me, mi) => (
                             <div key={mi} className="flex gap-2 items-center">
                               <Input placeholder="Making name" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs flex-1" />
-                              <Input type="number" placeholder="Qty" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-xs w-16" />
+                              <Input type="number" step="0.01" placeholder="Qty" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-xs w-16" />
                               <Input type="number" step="0.01" placeholder="Price" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-xs w-20" />
                               <Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-7"><X className="w-3 h-3" /></Button>
                             </div>
@@ -4836,7 +4836,7 @@ export default function Home() {
                             <tr className="border-t hover:bg-muted/20">
                               <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
                               <td className="px-2 py-2 font-medium">{item.itemName}</td>
-                              <td className="px-2 py-2 text-right"><Input type="number" min="1" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-right text-sm w-full min-w-[70px]" /></td>
+                              <td className="px-2 py-2 text-right"><Input type="number" step="0.01" value={item.quantity} onChange={e => updateSalesItem(i, 'quantity', e.target.value)} className="h-8 text-right text-sm w-full min-w-[70px]" /></td>
                               <td className="px-2 py-2 text-right"><Input type="number" step="0.01" value={item.unitPrice} onChange={e => updateSalesItem(i, 'unitPrice', e.target.value)} className="h-8 text-right text-sm w-full min-w-[90px]" /></td>
                               <td className="px-2 py-2 text-right font-bold">৳ {itemBaseTotal.toFixed(2)}</td>
                               <td className="px-2 py-2 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeSalesItem(i)} className="text-destructive h-7 w-7 p-0"><X className="w-3.5 h-3.5" /></Button></td>
@@ -4853,7 +4853,7 @@ export default function Home() {
                                       <Input placeholder="e.g. Stitching" value={me.name} onChange={e => updateMakingEntry(i, mi, 'name', e.target.value)} className="h-7 text-xs flex-1 min-w-[120px]" />
                                     </div>
                                   </td>
-                                  <td className="px-2 py-1.5 text-right"><Input type="number" min="1" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-right text-xs w-full min-w-[70px]" /></td>
+                                  <td className="px-2 py-1.5 text-right"><Input type="number" step="0.01" value={me.quantity} onChange={e => updateMakingEntry(i, mi, 'quantity', e.target.value)} className="h-7 text-right text-xs w-full min-w-[70px]" /></td>
                                   <td className="px-2 py-1.5 text-right"><Input type="number" step="0.01" value={me.unitPrice} onChange={e => updateMakingEntry(i, mi, 'unitPrice', e.target.value)} className="h-7 text-right text-xs w-full min-w-[90px]" /></td>
                                   <td className="px-2 py-1.5 text-right font-medium text-muted-foreground">৳ {meTotal.toFixed(2)}</td>
                                   <td className="px-2 py-1.5 text-center"><Button type="button" variant="ghost" size="sm" onClick={() => removeMakingEntry(i, mi)} className="text-destructive h-6 w-6 p-0"><X className="w-3 h-3" /></Button></td>
