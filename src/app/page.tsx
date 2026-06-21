@@ -4343,9 +4343,9 @@ export default function Home() {
           <TableHeader><TableRow className="bg-muted/50">
             <TableHead className="font-semibold">Sales No</TableHead>
             <TableHead className="font-semibold">Customer</TableHead>
-            <TableHead className="font-semibold">Items</TableHead>
             <TableHead className="font-semibold text-right">Total</TableHead>
             <TableHead className="font-semibold text-right">Paid</TableHead>
+            <TableHead className="font-semibold text-right">Due</TableHead>
             <TableHead className="font-semibold">Order Date</TableHead>
             <TableHead className="font-semibold">Delivery</TableHead>
             <TableHead className="font-semibold">Status</TableHead>
@@ -4354,20 +4354,63 @@ export default function Home() {
           <TableBody>
             {salesOrders.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
             : salesOrders.map((s: any) => {
-              const total = (s.items||[]).reduce((sum:number,si:any)=>sum+si.quantity*si.unitPrice+(si.makingEntries||[]).reduce((m:number,me:any)=>m+me.quantity*me.unitPrice,0),0)
+              const total = (s.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
               const paid = (s.payments||[]).reduce((sum:number,p:any)=>sum+p.amount,0)
+              const due = total - paid
+              const isAdmin = user?.role === 'admin' || user?.role === 'manager'
               return (
               <TableRow key={s.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => { setSelectedSalesOrder(s); setShowSalesDetailDialog(true) }}>
                 <TableCell className="font-medium">{s.salesNo || s.id?.slice(0,8)}</TableCell>
                 <TableCell>{s.customer?.name || '—'}</TableCell>
-                <TableCell className="text-xs">{(s.items||[]).map((si:any,i:number)=>(<div key={i}>{si.item?.itemName||'—'} ×{si.quantity}</div>))}</TableCell>
                 <TableCell className="text-right font-semibold">৳ {fmtBDT(total)}</TableCell>
                 <TableCell className="text-right">৳ {fmtBDT(paid)}</TableCell>
+                <TableCell className={`text-right font-semibold ${due > 0 ? 'text-red-600' : due < 0 ? 'text-green-600' : 'text-muted-foreground'}`}>
+                  {due === 0 ? 'Paid' : due > 0 ? `৳ ${fmtBDT(due)}` : `৳ ${fmtBDT(Math.abs(due))} adv`}
+                </TableCell>
                 <TableCell className="text-xs">{bdDate(new Date(s.orderDate||s.createdAt))}</TableCell>
                 <TableCell className="text-xs">{s.deliveryDate?bdDate(new Date(s.deliveryDate)):'—'}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
                 <TableCell className="text-center" onClick={(e)=>e.stopPropagation()}>
                   <Button variant="ghost" size="sm" onClick={() => printSalesInvoice(s)} title="Print Invoice"><FileText className="w-4 h-4" /></Button>
+                  {isAdmin && (
+                    <Button variant="ghost" size="sm" onClick={() => {
+                      setEditingSalesOrderId(s.id)
+                      // Pre-fill form with existing order data
+                      setSalesOrderForm({
+                        customerId: s.customerId || '',
+                        salesPersonId: s.salesPersonId || '',
+                        items: (s.items||[]).map((si:any) => ({
+                          itemId: si.itemId,
+                          itemName: si.item?.itemName || '',
+                          quantity: String(si.quantity),
+                          unitPrice: String(si.unitPrice),
+                          makingEntries: (si.makingEntries||[]).map((me:any) => ({
+                            name: me.name,
+                            makingInfoId: me.makingInfoId || '',
+                            unitPrice: String(me.unitPrice),
+                            quantity: String(me.quantity),
+                          })),
+                        })),
+                        payments: (s.payments||[]).map((p:any) => ({
+                          amount: String(p.amount),
+                          paymentType: p.paymentType || 'cash',
+                          paymentMode: p.paymentMode || 'advance',
+                          paymentDate: p.paymentDate ? new Date(p.paymentDate).toISOString().slice(0,10) : '',
+                          chequeNo: p.chequeNo || '',
+                          bankName: p.bankName || '',
+                          notes: p.notes || '',
+                        })),
+                        discount: String(s.discount || 0),
+                        orderDate: s.orderDate ? new Date(s.orderDate).toISOString().slice(0,10) : '',
+                        deliveryDate: s.deliveryDate ? new Date(s.deliveryDate).toISOString().slice(0,10) : '',
+                        status: s.status || 'pending',
+                        notes: s.notes || '',
+                        newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
+                      })
+                      fetchCustomers(); fetchEmployees()
+                      setCurrentView('newSalesOrder')
+                    }} title="Edit/Modify Order"><Edit className="w-4 h-4" /></Button>
+                  )}
                   <Button variant="ghost" size="sm" onClick={() => { setEditingSalesOrderId(s.id); setShowAddPaymentDialog(true) }} title="Add Payment"><DollarSign className="w-4 h-4" /></Button>
                 </TableCell>
               </TableRow>
@@ -4686,6 +4729,25 @@ export default function Home() {
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle>Add Payment</DialogTitle></DialogHeader>
           <div className="space-y-4">
+            {/* ★ Show customer advance/balance if applicable */}
+            {(() => {
+              const so = salesOrders.find((s: any) => s.id === editingSalesOrderId)
+              if (!so) return null
+              const total = (so.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
+              const paid = (so.payments||[]).reduce((sum:number,p:any)=>sum+p.amount,0)
+              const due = total - paid
+              if (due >= 0) return null // No advance, show nothing
+              // Customer has overpaid (advance/balance)
+              return (
+                <div className="rounded-md border border-green-200 bg-green-50 p-3 text-sm">
+                  <p className="font-semibold text-green-800">💰 Customer Advance Available</p>
+                  <p className="text-green-700 text-xs mt-1">
+                    This customer has an overpayment of <strong>৳ {fmtBDT(Math.abs(due))}</strong> from this order.
+                    You can adjust this amount from the new payment.
+                  </p>
+                </div>
+              )
+            })()}
             <div className="space-y-2"><Label>Amount *</Label><Input type="number" step="0.01" value={addPaymentForm.amount} onChange={e => setAddPaymentForm({...addPaymentForm, amount: e.target.value})} /></div>
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Payment Type</Label><Select value={addPaymentForm.paymentType} onValueChange={v => setAddPaymentForm({...addPaymentForm, paymentType: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cash">Cash</SelectItem><SelectItem value="card">Card</SelectItem><SelectItem value="mobile_banking">Mobile Banking</SelectItem><SelectItem value="cheque">Cheque</SelectItem></SelectContent></Select></div>
