@@ -4644,7 +4644,10 @@ export default function Home() {
                         <table className="w-full text-sm">
                           <tbody>
                             <tr><td className="px-3 py-1.5 text-muted-foreground">Total Paid</td><td className="px-3 py-1.5 text-right font-mono">৳ {totalPaid.toFixed(2)}</td></tr>
-                            <tr className="bg-red-50 text-red-700 border-t-2 border-red-300"><td className="px-3 py-2 font-bold">DUE AMOUNT</td><td className="px-3 py-2 text-right font-mono font-bold">৳ {due.toFixed(2)}</td></tr>
+                            <tr className={due > 0 ? "bg-red-50 text-red-700 border-t-2 border-red-300" : "bg-green-50 text-green-700 border-t-2 border-green-300"}>
+                              <td className="px-3 py-2 font-bold">{due > 0 ? 'DUE AMOUNT' : due < 0 ? 'REFUND DUE' : 'FULLY PAID'}</td>
+                              <td className="px-3 py-2 text-right font-mono font-bold">৳ {Math.abs(due).toFixed(2)}</td>
+                            </tr>
                           </tbody>
                         </table>
                       </div>
