@@ -874,6 +874,35 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE SalesMakingEntry RENAME COLUMN quantity_new TO quantity',
     description: 'Rename quantity_new to quantity',
   },
+  // v61: Create ItemBarcode table — one item can have multiple barcodes with per-entity stock
+  {
+    id: '2026_06_22_item_barcode_table',
+    sql: `CREATE TABLE IF NOT EXISTS "ItemBarcode" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "itemId" TEXT NOT NULL,
+      "barcode" TEXT NOT NULL,
+      "entityId" TEXT NOT NULL,
+      "quantity" REAL NOT NULL DEFAULT 0,
+      FOREIGN KEY ("itemId") REFERENCES "Item"("id") ON DELETE CASCADE,
+      FOREIGN KEY ("entityId") REFERENCES "Entity"("id") ON DELETE CASCADE
+    )`,
+    description: 'Create ItemBarcode table for multiple barcodes per item',
+  },
+  {
+    id: '2026_06_22_item_barcode_unique',
+    sql: 'CREATE UNIQUE INDEX IF NOT EXISTS `ItemBarcode_barcode_entityId_key` ON `ItemBarcode`(`barcode`, `entityId`)',
+    description: 'Unique index on (barcode, entityId)',
+  },
+  {
+    id: '2026_06_22_item_barcode_idx_item',
+    sql: 'CREATE INDEX IF NOT EXISTS `ItemBarcode_itemId_entityId_idx` ON `ItemBarcode`(`itemId`, `entityId`)',
+    description: 'Index on (itemId, entityId)',
+  },
+  {
+    id: '2026_06_22_item_barcode_idx_barcode',
+    sql: 'CREATE INDEX IF NOT EXISTS `ItemBarcode_barcode_idx` ON `ItemBarcode`(`barcode`)',
+    description: 'Index on barcode',
+  },
 ];
 
 export async function POST(request: NextRequest) {

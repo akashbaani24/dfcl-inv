@@ -121,6 +121,7 @@ model Entity {
 
   userAccess      UserEntityAccess[]
   stocks          Stock[]
+  itemBarcodes    ItemBarcode[]
   adjustments     ItemAdjustment[]
   transfersFrom   Transfer[]         @relation("TransfersFrom")
   transfersTo     Transfer[]         @relation("TransfersTo")
@@ -238,9 +239,10 @@ model Item {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  stocks       Stock[]
-  supplier     Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
-  adjustments  ItemAdjustment[]
+  stocks         Stock[]
+  barcodes       ItemBarcode[]
+  supplier       Supplier?       @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+  adjustments    ItemAdjustment[]
   transfers    Transfer[]
   receives     Receive[]
   salesOrderItems SalesOrderItem[]
@@ -272,6 +274,24 @@ model Stock {
 
   @@unique([itemId, entityId])
   @@index([entityId])
+}
+
+// ★ ItemBarcode — one item can have MULTIPLE barcodes, each with its own stock qty per entity.
+// This allows: Item "AN-2005-22X22X4" has barcode "BC-001" (qty 7) + barcode "BC-002" (qty 6)
+// Delivery scans exact barcode → decrements from that specific barcode's stock
+model ItemBarcode {
+  id        String @id @default(cuid())
+  itemId    String
+  barcode   String
+  entityId  String
+  quantity  Float  @default(0)
+
+  item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)
+
+  @@unique([barcode, entityId])
+  @@index([itemId, entityId])
+  @@index([barcode])
 }
 
 // ---- Master Data Models (Head Office) ----
