@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUser, canMasterData } from '@/lib/auth';
+import { Prisma } from '@prisma/client';
 
 // PUT update item
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -15,18 +16,47 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { year, lcNo, group, subGroup, itemName, price, uom, barcode, itemCode, color, pattern, supplierCode, dimension, description } = await request.json();
+    const body = await request.json();
+    const { year, lcNo, group, subGroup, itemName, price, uom, barcode, itemCode, color, pattern, supplierCode, dimension, description } = body;
+
+    // ★ Check for duplicate itemName (unique constraint)
+    if (itemName) {
+      const existing = await db.item.findFirst({
+        where: { itemName: { equals: itemName }, id: { not: id } },
+        select: { id: true },
+      });
+      if (existing) {
+        return NextResponse.json(
+          { error: `Item "${itemName}" already exists. Duplicate item names are not allowed.` },
+          { status: 409 }
+        );
+      }
+    }
+
+    // ★ Check for duplicate barcode (unique constraint)
+    if (barcode) {
+      const existingBc = await db.item.findFirst({
+        where: { barcode: { equals: barcode }, id: { not: id } },
+        select: { id: true, itemName: true },
+      });
+      if (existingBc) {
+        return NextResponse.json(
+          { error: `Barcode "${barcode}" is already used by item "${existingBc.itemName}".` },
+          { status: 409 }
+        );
+      }
+    }
 
     const item = await db.item.update({
       where: { id },
       data: {
-        year,
-        lcNo,
-        group,
-        subGroup,
-        itemName,
-        price: parseFloat(price) || 0,
-        uom,
+        year: year !== undefined ? (year || 'N/A') : undefined,
+        lcNo: lcNo !== undefined ? (lcNo || 'N/A') : undefined,
+        group: group !== undefined ? (group || 'N/A') : undefined,
+        subGroup: subGroup !== undefined ? (subGroup || 'N/A') : undefined,
+        itemName: itemName !== undefined ? itemName : undefined,
+        price: price !== undefined ? (parseFloat(price) || 0) : undefined,
+        uom: uom !== undefined ? (uom || 'PCS') : undefined,
         barcode: barcode !== undefined ? (barcode || null) : undefined,
         itemCode: itemCode !== undefined ? (itemCode || null) : undefined,
         color: color !== undefined ? (color || null) : undefined,
@@ -41,7 +71,20 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     return NextResponse.json({ item });
   } catch (error) {
     console.error('Update item error:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+
+    // Handle Prisma unique constraint violations
+    if (error instanceof Prisma.PrismaClientKnownRequestError) {
+      if (error.code === 'P2002') {
+        const target = (error.meta?.target as string[]) || [];
+        const field = target.join(', ');
+        return NextResponse.json(
+          { error: `This ${field} is already in use by another item. Please use a different value.` },
+          { status: 409 }
+        );
+      }
+    }
+
+    return NextResponse.json({ error: 'Internal server error: ' + (error instanceof Error ? error.message : String(error)) }, { status: 500 });
   }
 }
 

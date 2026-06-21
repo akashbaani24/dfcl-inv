@@ -841,9 +841,17 @@ export default function Home() {
     try {
       const res = await authFetch(`/api/items/${editingItemId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(itemForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Item updated' }); setEditingItemId(null); setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' }); setCurrentView('items'); fetchItems() }
-      else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
-    } catch { toast({ title: 'Error', description: 'Failed to update item', variant: 'destructive' }) }
+      if (res.ok) {
+        toast({ title: 'Success', description: 'Item updated successfully — all stock, sales, and reports now show the updated info' })
+        setEditingItemId(null)
+        setItemForm({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' })
+        setCurrentView('items')
+        fetchItems()
+      }
+      else { toast({ title: 'Error', description: data.error || 'Failed to update item', variant: 'destructive' }) }
+    } catch (err) {
+      toast({ title: 'Error', description: 'Failed to update item: ' + (err instanceof Error ? err.message : 'network error'), variant: 'destructive' })
+    }
   }
 
   const handleDeleteItem = async (id: string) => {
