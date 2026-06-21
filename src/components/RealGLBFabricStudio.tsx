@@ -195,11 +195,17 @@ interface GLBModelProps {
 }
 
 // ★ Mesh name patterns that identify cushion/pillow meshes.
-// If a mesh's name (lower-cased) contains any of these substrings, it gets
+// If a mesh's node name (lower-cased) contains any of these substrings, it gets
 // the cushion fabric; otherwise it gets the body fabric.
 // Patterns cover: Spanish (cojin = cushion), English (cushion/pillow),
 // common model naming conventions.
-const CUSHION_NAME_PATTERNS = ['cojin', 'cushion', 'pillow', 'cuadro', 'back', 'seat']
+const CUSHION_NAME_PATTERNS = [
+  'cojin',       // Spanish: cushion
+  'cushion',     // English: cushion
+  'pillow',      // English: pillow
+  'cuadro',      // Spanish: square (sometimes used for cushions)
+  'sofa-cojin',  // specific to user's couch model
+]
 
 function isCushionMesh(meshName: string): boolean {
   const lower = meshName.toLowerCase()
@@ -282,6 +288,7 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], bodyFabricUrl,
     let meshCount = 0
     let bodyMeshCount = 0
     let cushionMeshCount = 0
+    const meshNames: string[] = []
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
@@ -289,9 +296,17 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], bodyFabricUrl,
         mesh.receiveShadow = true
         meshCount++
 
-        const isCushion = isCushionMesh(mesh.name)
-        if (isCushion) cushionMeshCount++
-        else bodyMeshCount++
+        // ★ Use child.name (the node name from FBX/GLB — e.g. "sofa-cojin", "espaldar sofa")
+        // NOT mesh.geometry.name (which is auto-generated like "Plane.004")
+        const nodeName = child.name || ''
+        const isCushion = isCushionMesh(nodeName)
+        if (isCushion) {
+          cushionMeshCount++
+          meshNames.push(`  [CUSHION] "${nodeName}"`)
+        } else {
+          bodyMeshCount++
+          meshNames.push(`  [BODY]    "${nodeName}"`)
+        }
 
         // Pick which fabric applies to this mesh
         const fabricForThisMesh = isCushion ? cushionFabricUrl : bodyFabricUrl
@@ -326,7 +341,7 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], bodyFabricUrl,
         }
       }
     })
-    console.log(`[FabricStudio] ${meshCount} meshes: ${bodyMeshCount} body + ${cushionMeshCount} cushion. body=${bodyFabricUrl ? 'set' : 'null'}, cushion=${cushionFabricUrl ? 'set' : 'null'}`)
+    console.log(`[FabricStudio] ${meshCount} meshes: ${bodyMeshCount} body + ${cushionMeshCount} cushion. body=${bodyFabricUrl ? 'set' : 'null'}, cushion=${cushionFabricUrl ? 'set' : 'null'}\n${meshNames.join('\n')}`)
   }, [clonedScene, bodyTexture, cushionTexture, bodyFabricUrl, cushionFabricUrl])
 
   // Scale + position the model nicely in view
@@ -348,6 +363,7 @@ function Scene({
   fabricRepeat,
   autoRotate,
   bgColor,
+  floorColor,
 }: {
   product: ProductDef
   bodyFabricUrl: string | null
@@ -355,6 +371,7 @@ function Scene({
   fabricRepeat: number
   autoRotate: boolean
   bgColor: string
+  floorColor: string
 }) {
   return (
     <>
@@ -406,10 +423,10 @@ function Scene({
         color="#0a0a0a"
       />
 
-      {/* ★ Floor plane — uses bgColor so the floor + background feel cohesive */}
+      {/* ★ Floor plane — uses floorColor (separate from bgColor) */}
       <mesh position={[0, -0.72, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[8, 64]} />
-        <meshStandardMaterial color={bgColor} roughness={0.75} metalness={0.0} />
+        <meshStandardMaterial color={floorColor} roughness={0.75} metalness={0.0} />
       </mesh>
 
       {/* OrbitControls — left-drag rotate, wheel zoom, right-drag pan
@@ -452,13 +469,17 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
   const [cushionFabricId, setCushionFabricId] = useState<string | null>(null)
   const [fabricRepeat, setFabricRepeat] = useState<number>(2)
   const [autoRotate, setAutoRotate] = useState<boolean>(true)
-  // ★ Background color — default light gray (studio look)
+  // ★ Background color (the sky/wall area) and Floor color (the ground plane)
+  // — separate so the customer can create a more realistic scene.
   const [bgColor, setBgColor] = useState<string>('#eceae5')
+  const [floorColor, setFloorColor] = useState<string>('#d4cfc4')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   // ★ Canvas ref for Save Design screenshot
   const canvasContainerRef = useRef<HTMLDivElement | null>(null)
-  // ★ Track which fabric slot the next upload goes into: 'body' or 'cushion'
-  const [uploadTarget, setUploadTarget] = useState<'body' | 'cushion'>('body')
+  // ★ Use a ref (not state) for upload target — avoids race condition where
+  // the state hasn't updated by the time fileInputRef.current?.click() fires.
+  // Refs are synchronous so the value is set BEFORE the click happens.
+  const uploadTargetRef = useRef<'body' | 'cushion'>('body')
 
   useEffect(() => {
     try {
@@ -519,8 +540,8 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
         persistUploads(newUploads)
         return [newFabric, ...prev]
       })
-      // Apply to whichever slot is the current upload target
-      if (uploadTarget === 'cushion') {
+      // Apply to whichever slot is the current upload target (ref-based, synchronous)
+      if (uploadTargetRef.current === 'cushion') {
         setCushionFabricId(newFabric.id)
       } else {
         setBodyFabricId(newFabric.id)
@@ -670,6 +691,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                   fabricRepeat={fabricRepeat}
                   autoRotate={autoRotate}
                   bgColor={bgColor}
+                  floorColor={floorColor}
                 />
               </Canvas>
               <div className="absolute bottom-3 left-3 bg-white/80 backdrop-blur px-2.5 py-1.5 rounded-md text-[11px] text-slate-700 shadow-sm pointer-events-none">
@@ -709,7 +731,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => { setUploadTarget('body'); fileInputRef.current?.click() }}
+                  onClick={() => { uploadTargetRef.current = 'body'; fileInputRef.current?.click() }}
                 >
                   <Upload className="w-3 h-3 mr-1" />
                   {t('Upload', 'আপলোড')}
@@ -752,7 +774,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                   variant="outline"
                   size="sm"
                   className="h-7 text-xs"
-                  onClick={() => { setUploadTarget('cushion'); fileInputRef.current?.click() }}
+                  onClick={() => { uploadTargetRef.current = 'cushion'; fileInputRef.current?.click() }}
                 >
                   <Upload className="w-3 h-3 mr-1" />
                   {t('Upload', 'আপলোড')}
@@ -791,37 +813,86 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
             </div>
 
             {/* ★ Background Color section */}
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
-              <Label className="text-xs font-semibold text-slate-700 mb-2 block">{t('Background Color', 'ব্যাকগ্রাউন্ড কালার')}</Label>
-              <div className="flex items-center gap-3">
-                <input
-                  type="color"
-                  value={bgColor}
-                  onChange={(e) => setBgColor(e.target.value)}
-                  className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer bg-white p-1"
-                  title={t('Pick background color', 'ব্যাকগ্রাউন্ড কালার বাছুন')}
-                />
-                <Input
-                  type="text"
-                  value={bgColor}
-                  onChange={(e) => setBgColor(e.target.value)}
-                  className="font-mono text-sm h-10 w-28"
-                  placeholder="#eceae5"
-                />
-                <div className="flex gap-1 flex-wrap">
-                  {/* Quick color presets */}
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-3">
+              <div>
+                <Label className="text-xs font-semibold text-slate-700 mb-2 block">{t('Background Color', 'ব্যাকগ্রাউন্ড কালার')}</Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={bgColor}
+                    onChange={(e) => setBgColor(e.target.value)}
+                    className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer bg-white p-1"
+                    title={t('Pick background color', 'ব্যাকগ্রাউন্ড কালার বাছুন')}
+                  />
+                  <Input
+                    type="text"
+                    value={bgColor}
+                    onChange={(e) => setBgColor(e.target.value)}
+                    className="font-mono text-sm h-10 w-28"
+                    placeholder="#eceae5"
+                  />
+                </div>
+                <div className="flex gap-1.5 flex-wrap mt-2">
+                  {/* Quick color presets — 12 options */}
                   {[
                     { name: 'Light Gray', color: '#eceae5' },
                     { name: 'White', color: '#ffffff' },
-                    { name: 'Black', color: '#1a1a1a' },
+                    { name: 'Cream', color: '#f5f0e6' },
                     { name: 'Beige', color: '#e8dcc0' },
-                    { name: 'Blue', color: '#1e3a5f' },
-                    { name: 'Green', color: '#2d4a3e' },
+                    { name: 'Soft Pink', color: '#f3d9d9' },
+                    { name: 'Soft Yellow', color: '#f5ecc7' },
+                    { name: 'Soft Blue', color: '#d6e3f0' },
+                    { name: 'Soft Green', color: '#d4e8d4' },
+                    { name: 'Navy Blue', color: '#1e3a5f' },
+                    { name: 'Forest Green', color: '#2d4a3e' },
+                    { name: 'Dark Gray', color: '#3a3a3a' },
+                    { name: 'Black', color: '#1a1a1a' },
                   ].map(c => (
                     <button
                       key={c.color}
                       onClick={() => setBgColor(c.color)}
-                      className="w-7 h-7 rounded-md border-2 border-slate-200 hover:scale-110 transition-transform"
+                      className={`w-7 h-7 rounded-md border-2 transition-transform hover:scale-110 ${bgColor.toLowerCase() === c.color.toLowerCase() ? 'border-indigo-600 ring-1 ring-indigo-300' : 'border-slate-200'}`}
+                      style={{ background: c.color }}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-xs font-semibold text-slate-700 mb-2 block">{t('Floor Color', 'ফ্লোর কালার')}</Label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="color"
+                    value={floorColor}
+                    onChange={(e) => setFloorColor(e.target.value)}
+                    className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer bg-white p-1"
+                    title={t('Pick floor color', 'ফ্লোর কালার বাছুন')}
+                  />
+                  <Input
+                    type="text"
+                    value={floorColor}
+                    onChange={(e) => setFloorColor(e.target.value)}
+                    className="font-mono text-sm h-10 w-28"
+                    placeholder="#d4cfc4"
+                  />
+                </div>
+                <div className="flex gap-1.5 flex-wrap mt-2">
+                  {/* Floor color presets — 8 wood/concrete tones */}
+                  {[
+                    { name: 'Concrete', color: '#d4cfc4' },
+                    { name: 'Light Oak', color: '#d4b896' },
+                    { name: 'Walnut', color: '#8b6f47' },
+                    { name: 'Dark Walnut', color: '#5d4037' },
+                    { name: 'Cherry', color: '#8b4513' },
+                    { name: 'Maple', color: '#e6d5b8' },
+                    { name: 'White Marble', color: '#f0f0f0' },
+                    { name: 'Black Tile', color: '#2a2a2a' },
+                  ].map(c => (
+                    <button
+                      key={c.color}
+                      onClick={() => setFloorColor(c.color)}
+                      className={`w-7 h-7 rounded-md border-2 transition-transform hover:scale-110 ${floorColor.toLowerCase() === c.color.toLowerCase() ? 'border-emerald-600 ring-1 ring-emerald-300' : 'border-slate-200'}`}
                       style={{ background: c.color }}
                       title={c.name}
                     />
