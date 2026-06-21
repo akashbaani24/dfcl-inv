@@ -39,7 +39,7 @@
 
 import React, { useState, useRef, useEffect, useMemo, Suspense } from 'react'
 import { Canvas, useLoader, useFrame } from '@react-three/fiber'
-import { OrbitControls, PerspectiveCamera, Html, useProgress, Environment, ContactShadows, useGLTF, useTexture } from '@react-three/drei'
+import { OrbitControls, PerspectiveCamera, Html, useProgress, Environment, ContactShadows, useGLTF } from '@react-three/drei'
 import * as THREE from 'three'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -213,168 +213,118 @@ function isCushionMesh(meshName: string): boolean {
 }
 
 function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], bodyFabricUrl, cushionFabricUrl, fabricRepeat }: GLBModelProps) {
-  // Load the GLB model
   const { scene } = useGLTF(glbUrl)
-
-  // Clone the scene so we don't mutate the cached original
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
-  // ★ Manual texture loading — avoids useTexture caching bugs.
-  // useTexture caches by URL internally. When body and cushion both point
-  // to the same URL (transparent pixel), they get the SAME cached object.
-  // Even with clone(), drei's internal cache can cause issues when URLs
-  // change. This manual approach loads each texture independently.
-  const [bodyTexture, setBodyTexture] = useState<THREE.Texture | null>(null)
-  const [cushionTexture, setCushionTexture] = useState<THREE.Texture | null>(null)
-
-  // Load body texture when URL changes
-  useEffect(() => {
-    if (!bodyFabricUrl) {
-      setBodyTexture(null)
-      return
-    }
+  // ★ Create textures SYNCHRONOUSLY via useMemo.
+  // TextureLoader.load() returns a Texture immediately — the image loads
+  // async but three.js handles that internally (texture.needsUpdate fires
+  // when image arrives). This avoids ALL race conditions with state updates.
+  const bodyTexture = useMemo(() => {
+    if (!bodyFabricUrl) return null
     const loader = new THREE.TextureLoader()
     loader.crossOrigin = 'anonymous'
-    loader.load(
-      bodyFabricUrl,
-      (tex) => {
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-        tex.repeat.set(fabricRepeat, fabricRepeat)
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = 8
-        tex.flipY = true
-        tex.needsUpdate = true
-        setBodyTexture(tex)
-      },
-      undefined,
-      (err) => {
-        console.error('[FabricStudio] Body texture load error:', err)
-        setBodyTexture(null)
-      }
-    )
-  }, [bodyFabricUrl]) // intentionally NOT including fabricRepeat — handled below
+    const tex = loader.load(bodyFabricUrl)
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(fabricRepeat, fabricRepeat)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.anisotropy = 8
+    tex.flipY = true
+    tex.needsUpdate = true
+    return tex
+  }, [bodyFabricUrl, fabricRepeat])
 
-  // Load cushion texture when URL changes
-  useEffect(() => {
-    if (!cushionFabricUrl) {
-      setCushionTexture(null)
-      return
-    }
+  const cushionTexture = useMemo(() => {
+    if (!cushionFabricUrl) return null
     const loader = new THREE.TextureLoader()
     loader.crossOrigin = 'anonymous'
-    loader.load(
-      cushionFabricUrl,
-      (tex) => {
-        tex.wrapS = tex.wrapT = THREE.RepeatWrapping
-        tex.repeat.set(fabricRepeat, fabricRepeat)
-        tex.colorSpace = THREE.SRGBColorSpace
-        tex.anisotropy = 8
-        tex.flipY = true
-        tex.needsUpdate = true
-        setCushionTexture(tex)
-      },
-      undefined,
-      (err) => {
-        console.error('[FabricStudio] Cushion texture load error:', err)
-        setCushionTexture(null)
-      }
-    )
-  }, [cushionFabricUrl]) // intentionally NOT including fabricRepeat
+    const tex = loader.load(cushionFabricUrl)
+    tex.wrapS = tex.wrapT = THREE.RepeatWrapping
+    tex.repeat.set(fabricRepeat, fabricRepeat)
+    tex.colorSpace = THREE.SRGBColorSpace
+    tex.anisotropy = 8
+    tex.flipY = true
+    tex.needsUpdate = true
+    return tex
+  }, [cushionFabricUrl, fabricRepeat])
 
-  // Update repeat when fabricRepeat changes (without reloading texture)
+  // ★ Apply materials — runs whenever any dependency changes.
+  // Key: body mesh gets bodyTexture, cushion mesh gets cushionTexture.
+  // No mixing, no sharing, no race conditions.
   useEffect(() => {
-    if (bodyTexture) {
-      bodyTexture.repeat.set(fabricRepeat, fabricRepeat)
-      bodyTexture.needsUpdate = true
-    }
-  }, [bodyTexture, fabricRepeat])
-
-  useEffect(() => {
-    if (cushionTexture) {
-      cushionTexture.repeat.set(fabricRepeat, fabricRepeat)
-      cushionTexture.needsUpdate = true
-    }
-  }, [cushionTexture, fabricRepeat])
-
-  // ★ Apply fabric texture + generate UVs in ONE combined effect.
-  useEffect(() => {
-    if (bodyTexture) bodyTexture.needsUpdate = true
-    if (cushionTexture) cushionTexture.needsUpdate = true
-
-    let meshCount = 0
-    let bodyMeshCount = 0
-    let cushionMeshCount = 0
-    const meshNames: string[] = []
+    let meshIndex = 0
+    const logs: string[] = []
     clonedScene.traverse((child) => {
-      if ((child as THREE.Mesh).isMesh) {
-        const mesh = child as THREE.Mesh
-        mesh.castShadow = true
-        mesh.receiveShadow = true
-        meshCount++
+      if (!(child as THREE.Mesh).isMesh) return
+      const mesh = child as THREE.Mesh
+      mesh.castShadow = true
+      mesh.receiveShadow = true
+      meshIndex++
 
-        // Generate UVs if missing
-        const geometry = mesh.geometry as THREE.BufferGeometry
-        const uvAttr = geometry.getAttribute('uv') as THREE.BufferAttribute | undefined
-        if (!uvAttr || uvAttr.count === 0) {
-          geometry.computeBoundingBox()
-          const bbox = geometry.boundingBox!
-          const size = new THREE.Vector3()
-          bbox.getSize(size)
-          const sx = size.x || 1
-          const sz = size.z || 1
-          const positions = geometry.attributes.position
-          const uvs = new Float32Array(positions.count * 2)
-          for (let i = 0; i < positions.count; i++) {
-            uvs[i * 2] = (positions.getX(i) - bbox.min.x) / sx * fabricRepeat
-            uvs[i * 2 + 1] = (positions.getZ(i) - bbox.min.z) / sz * fabricRepeat
-          }
-          geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
+      // Generate UVs if missing
+      const geometry = mesh.geometry as THREE.BufferGeometry
+      const uvAttr = geometry.getAttribute('uv') as THREE.BufferAttribute | undefined
+      if (!uvAttr || uvAttr.count === 0) {
+        geometry.computeBoundingBox()
+        const bbox = geometry.boundingBox!
+        const size = new THREE.Vector3()
+        bbox.getSize(size)
+        const sx = size.x || 1
+        const sz = size.z || 1
+        const positions = geometry.attributes.position
+        const uvs = new Float32Array(positions.count * 2)
+        for (let i = 0; i < positions.count; i++) {
+          uvs[i * 2] = (positions.getX(i) - bbox.min.x) / sx * fabricRepeat
+          uvs[i * 2 + 1] = (positions.getZ(i) - bbox.min.z) / sz * fabricRepeat
         }
-
-        // Determine if this mesh is a cushion by checking node name
-        const nodeName = child.name || ''
-        const isCushion = isCushionMesh(nodeName)
-        if (isCushion) {
-          cushionMeshCount++
-          meshNames.push(`  [CUSHION ✅] "${nodeName}"`)
-        } else {
-          bodyMeshCount++
-          meshNames.push(`  [BODY]       "${nodeName}"`)
-        }
-
-        // ★ KEY FIX: pick texture + URL independently for body vs cushion
-        const useCushion = isCushion && cushionFabricUrl
-        const tex = useCushion ? cushionTexture : bodyTexture
-        const hasFabric = useCushion ? !!cushionFabricUrl : !!bodyFabricUrl
-
-        if (hasFabric && tex) {
-          const mat = new THREE.MeshPhysicalMaterial({
-            map: tex,
-            color: 0xffffff,
-            roughness: 0.92,
-            metalness: 0.0,
-            sheen: 0.5,
-            sheenRoughness: 0.5,
-            sheenColor: new THREE.Color('#ffffff'),
-            side: THREE.DoubleSide,
-          })
-          mat.needsUpdate = true
-          mesh.material = mat
-          mesh.geometry.attributes.uv && (mesh.geometry.attributes.uv.needsUpdate = true)
-        } else {
-          mesh.material = new THREE.MeshPhysicalMaterial({
-            color: '#c9b896',
-            roughness: 0.85,
-            metalness: 0.0,
-            sheen: 0.5,
-            sheenRoughness: 0.6,
-            sheenColor: new THREE.Color('#fff5e0'),
-            side: THREE.DoubleSide,
-          })
-        }
+        geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
       }
+
+      // ★ Determine cushion vs body by node name
+      const nodeName = child.name || ''
+      const isCushion = isCushionMesh(nodeName)
+
+      // ★ Pick the CORRECT texture for this mesh type
+      // Cushion mesh → cushionTexture (if cushionFabricUrl set)
+      // Body mesh    → bodyTexture (if bodyFabricUrl set)
+      let tex: THREE.Texture | null = null
+      let fabricSelected = false
+
+      if (isCushion) {
+        tex = cushionTexture
+        fabricSelected = !!cushionFabricUrl
+        logs.push(`  [CUSHION ✅] "${nodeName}" → cushionTexture=${tex ? 'YES' : 'no'}, cushionFabricUrl=${cushionFabricUrl ? 'SET' : 'null'}`)
+      } else {
+        tex = bodyTexture
+        fabricSelected = !!bodyFabricUrl
+        logs.push(`  [BODY]       "${nodeName}" → bodyTexture=${tex ? 'YES' : 'no'}, bodyFabricUrl=${bodyFabricUrl ? 'SET' : 'null'}`)
+      }
+
+      if (fabricSelected && tex) {
+        mesh.material = new THREE.MeshPhysicalMaterial({
+          map: tex,
+          color: 0xffffff,
+          roughness: 0.92,
+          metalness: 0.0,
+          sheen: 0.5,
+          sheenRoughness: 0.5,
+          sheenColor: new THREE.Color('#ffffff'),
+          side: THREE.DoubleSide,
+        })
+      } else {
+        mesh.material = new THREE.MeshPhysicalMaterial({
+          color: '#c9b896',
+          roughness: 0.85,
+          metalness: 0.0,
+          sheen: 0.5,
+          sheenRoughness: 0.6,
+          sheenColor: new THREE.Color('#fff5e0'),
+          side: THREE.DoubleSide,
+        })
+      }
+      mesh.geometry.attributes.uv && (mesh.geometry.attributes.uv.needsUpdate = true)
     })
-    console.log(`[FabricStudio] ${meshCount} meshes: ${bodyMeshCount} body + ${cushionMeshCount} cushion.\n  bodyFabricUrl=${bodyFabricUrl ? 'SET ✅' : 'null'}\n  cushionFabricUrl=${cushionFabricUrl ? 'SET ✅' : 'null'}\n  bodyTexture=${bodyTexture ? 'LOADED' : 'null'}\n  cushionTexture=${cushionTexture ? 'LOADED' : 'null'}\n${meshNames.join('\n')}`)
+    console.log(`[FabricStudio] ${meshIndex} meshes processed.\n${logs.join('\n')}`)
   }, [clonedScene, bodyTexture, cushionTexture, bodyFabricUrl, cushionFabricUrl, fabricRepeat])
 
   // Scale + position the model nicely in view
