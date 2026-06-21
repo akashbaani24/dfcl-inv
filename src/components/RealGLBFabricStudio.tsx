@@ -90,6 +90,16 @@ const PRODUCTS: ProductDef[] = [
     scale: 3.0,
     position: [0, -0.5, 0],
   },
+  {
+    id: 'sofa-3',
+    nameEn: 'Elegant Sofa',
+    nameBn: 'এলিগ্যান্ট সোফা',
+    descEn: 'Elegant single-mesh sofa with detailed fabric texture',
+    descBn: 'বিস্তারিত ফ্যাব্রিক টেক্সচার সহ এলিগ্যান্ট সিঙ্গেল-মেশ সোফা',
+    glbUrl: '/fabric-studio/sofa-3.glb',
+    scale: 3.0,
+    position: [0, -0.5, 0],
+  },
   // ★ ADD MORE MODELS HERE ★
   // Example template:
   // {
@@ -179,40 +189,59 @@ interface GLBModelProps {
   glbUrl: string
   scale?: number
   position?: [number, number, number]
-  fabricUrl: string | null
+  bodyFabricUrl: string | null
+  cushionFabricUrl: string | null
   fabricRepeat: number
 }
 
-function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fabricRepeat }: GLBModelProps) {
+// ★ Mesh name patterns that identify cushion/pillow meshes.
+// If a mesh's name (lower-cased) contains any of these substrings, it gets
+// the cushion fabric; otherwise it gets the body fabric.
+// Patterns cover: Spanish (cojin = cushion), English (cushion/pillow),
+// common model naming conventions.
+const CUSHION_NAME_PATTERNS = ['cojin', 'cushion', 'pillow', 'cuadro', 'back', 'seat']
+
+function isCushionMesh(meshName: string): boolean {
+  const lower = meshName.toLowerCase()
+  return CUSHION_NAME_PATTERNS.some(p => lower.includes(p))
+}
+
+function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], bodyFabricUrl, cushionFabricUrl, fabricRepeat }: GLBModelProps) {
   // Load the GLB model
   const { scene } = useGLTF(glbUrl)
 
   // Clone the scene so we don't mutate the cached original
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
-  // ★ Load fabric texture using useTexture (Suspense-based, handles async properly)
-  // useTexture suspends until the image is fully loaded.
-  const loadedTexture = useTexture(fabricUrl || '/fabric-studio/transparent-pixel.png')
+  // ★ Load BOTH textures via useTexture (Suspense handles async).
+  // When the user picks a fabric for body or cushion (or both), we load it.
+  // If a slot is null, we use the transparent pixel as a no-op placeholder.
+  const bodyTexture = useTexture(bodyFabricUrl || '/fabric-studio/transparent-pixel.png')
+  const cushionTexture = useTexture(cushionFabricUrl || '/fabric-studio/transparent-pixel.png')
 
-  // ★ Configure texture settings SYNCHRONOUSLY before applying to any material.
-  // This is critical — if we set colorSpace AFTER creating the material, the
-  // renderer caches the texture with the wrong color space and colors look washed
-  // out or wrong.
+  // Configure body texture settings
   useMemo(() => {
-    loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping
-    loadedTexture.repeat.set(fabricRepeat, fabricRepeat)
-    loadedTexture.colorSpace = THREE.SRGBColorSpace
-    loadedTexture.anisotropy = 8
-    // ★ flipY = true (default) keeps the texture upright as authored.
-    loadedTexture.flipY = true
-    loadedTexture.needsUpdate = true
-    return loadedTexture
-  }, [loadedTexture, fabricRepeat])
+    bodyTexture.wrapS = bodyTexture.wrapT = THREE.RepeatWrapping
+    bodyTexture.repeat.set(fabricRepeat, fabricRepeat)
+    bodyTexture.colorSpace = THREE.SRGBColorSpace
+    bodyTexture.anisotropy = 8
+    bodyTexture.flipY = true
+    bodyTexture.needsUpdate = true
+    return bodyTexture
+  }, [bodyTexture, fabricRepeat])
+
+  // Configure cushion texture settings
+  useMemo(() => {
+    cushionTexture.wrapS = cushionTexture.wrapT = THREE.RepeatWrapping
+    cushionTexture.repeat.set(fabricRepeat, fabricRepeat)
+    cushionTexture.colorSpace = THREE.SRGBColorSpace
+    cushionTexture.anisotropy = 8
+    cushionTexture.flipY = true
+    cushionTexture.needsUpdate = true
+    return cushionTexture
+  }, [cushionTexture, fabricRepeat])
 
   // ★ Generate UVs ONLY for meshes that have NO uv attribute at all.
-  // We do NOT overwrite existing UVs — the FBX model's UVs should be respected.
-  // Only meshes missing UVs entirely (rare) get fallback planar UVs from
-  // bounding-box XY coordinates.
   useEffect(() => {
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
@@ -225,7 +254,6 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
           const bbox = geometry.boundingBox!
           const size = new THREE.Vector3()
           bbox.getSize(size)
-          // Avoid divide-by-zero
           const sx = size.x || 1
           const sy = size.y || 1
           const positions = geometry.attributes.position
@@ -244,30 +272,36 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
     })
   }, [clonedScene])
 
-  // ★ Apply fabric texture (or default material) to all meshes.
-  // Key things done right here:
-  //   1. Force loadedTexture.needsUpdate = true before creating material
-  //   2. Use color = white (0xffffff) so texture colors show TRUE — no tint
-  //   3. Set mat.needsUpdate = true after creating material
-  //   4. Use console.log to verify what's being applied
+  // ★ Apply fabric texture to each mesh based on its name.
+  // Cushion meshes get cushionFabric, body meshes get bodyFabric.
+  // If neither fabric is selected, fall back to default beige.
   useEffect(() => {
-    // Force texture refresh in case settings changed
-    loadedTexture.needsUpdate = true
+    bodyTexture.needsUpdate = true
+    cushionTexture.needsUpdate = true
 
     let meshCount = 0
-    let fabricMeshCount = 0
+    let bodyMeshCount = 0
+    let cushionMeshCount = 0
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
         mesh.castShadow = true
         mesh.receiveShadow = true
         meshCount++
-        if (fabricUrl) {
-          // ★ Fabric is selected — apply texture
-          fabricMeshCount++
+
+        const isCushion = isCushionMesh(mesh.name)
+        if (isCushion) cushionMeshCount++
+        else bodyMeshCount++
+
+        // Pick which fabric applies to this mesh
+        const fabricForThisMesh = isCushion ? cushionFabricUrl : bodyFabricUrl
+        const textureForThisMesh = isCushion ? cushionTexture : bodyTexture
+
+        if (fabricForThisMesh) {
+          // Apply fabric texture
           const mat = new THREE.MeshPhysicalMaterial({
-            map: loadedTexture,
-            color: 0xffffff, // pure white so texture colors show true
+            map: textureForThisMesh,
+            color: 0xffffff,
             roughness: 0.92,
             metalness: 0.0,
             sheen: 0.5,
@@ -277,10 +311,9 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
           })
           mat.needsUpdate = true
           mesh.material = mat
-          // Also force the geometry to refresh
           mesh.geometry.attributes.uv && (mesh.geometry.attributes.uv.needsUpdate = true)
         } else {
-          // No fabric — default warm beige fabric look
+          // No fabric for this slot — default warm beige fabric look
           mesh.material = new THREE.MeshPhysicalMaterial({
             color: '#c9b896',
             roughness: 0.85,
@@ -293,8 +326,8 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
         }
       }
     })
-    console.log(`[FabricStudio] Applied material to ${meshCount} meshes. Fabric applied to ${fabricMeshCount}. fabricUrl=${fabricUrl ? fabricUrl.substring(0, 60) + '...' : 'null'}`)
-  }, [clonedScene, loadedTexture, fabricUrl])
+    console.log(`[FabricStudio] ${meshCount} meshes: ${bodyMeshCount} body + ${cushionMeshCount} cushion. body=${bodyFabricUrl ? 'set' : 'null'}, cushion=${cushionFabricUrl ? 'set' : 'null'}`)
+  }, [clonedScene, bodyTexture, cushionTexture, bodyFabricUrl, cushionFabricUrl])
 
   // Scale + position the model nicely in view
   return (
@@ -310,14 +343,18 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
 
 function Scene({
   product,
-  fabricUrl,
+  bodyFabricUrl,
+  cushionFabricUrl,
   fabricRepeat,
   autoRotate,
+  bgColor,
 }: {
   product: ProductDef
-  fabricUrl: string | null
+  bodyFabricUrl: string | null
+  cushionFabricUrl: string | null
   fabricRepeat: number
   autoRotate: boolean
+  bgColor: string
 }) {
   return (
     <>
@@ -352,7 +389,8 @@ function Scene({
           glbUrl={product.glbUrl}
           scale={product.scale}
           position={product.position}
-          fabricUrl={fabricUrl}
+          bodyFabricUrl={bodyFabricUrl}
+          cushionFabricUrl={cushionFabricUrl}
           fabricRepeat={fabricRepeat}
         />
       </Suspense>
@@ -368,10 +406,10 @@ function Scene({
         color="#0a0a0a"
       />
 
-      {/* Subtle floor plane */}
+      {/* ★ Floor plane — uses bgColor so the floor + background feel cohesive */}
       <mesh position={[0, -0.72, 0]} rotation={[-Math.PI / 2, 0, 0]} receiveShadow>
         <circleGeometry args={[8, 64]} />
-        <meshStandardMaterial color="#eceae5" roughness={0.75} metalness={0.0} />
+        <meshStandardMaterial color={bgColor} roughness={0.75} metalness={0.0} />
       </mesh>
 
       {/* OrbitControls — left-drag rotate, wheel zoom, right-drag pan
@@ -409,12 +447,18 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
   const { t } = useLanguage()
   const [selectedProductId, setSelectedProductId] = useState<string>(PRODUCTS[0].id)
   const [fabrics, setFabrics] = useState<FabricDef[]>(PRESET_FABRICS)
-  const [selectedFabricId, setSelectedFabricId] = useState<string | null>(null)
+  // ★ Two separate fabric selections — body and cushion
+  const [bodyFabricId, setBodyFabricId] = useState<string | null>(null)
+  const [cushionFabricId, setCushionFabricId] = useState<string | null>(null)
   const [fabricRepeat, setFabricRepeat] = useState<number>(2)
   const [autoRotate, setAutoRotate] = useState<boolean>(true)
+  // ★ Background color — default light gray (studio look)
+  const [bgColor, setBgColor] = useState<string>('#eceae5')
   const fileInputRef = useRef<HTMLInputElement | null>(null)
   // ★ Canvas ref for Save Design screenshot
   const canvasContainerRef = useRef<HTMLDivElement | null>(null)
+  // ★ Track which fabric slot the next upload goes into: 'body' or 'cushion'
+  const [uploadTarget, setUploadTarget] = useState<'body' | 'cushion'>('body')
 
   useEffect(() => {
     try {
@@ -437,11 +481,18 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
     [selectedProductId]
   )
 
-  const selectedFabric = useMemo(
-    () => fabrics.find(f => f.id === selectedFabricId) || null,
-    [fabrics, selectedFabricId]
+  const bodyFabric = useMemo(
+    () => fabrics.find(f => f.id === bodyFabricId) || null,
+    [fabrics, bodyFabricId]
+  )
+  const cushionFabric = useMemo(
+    () => fabrics.find(f => f.id === cushionFabricId) || null,
+    [fabrics, cushionFabricId]
   )
 
+  // ★ handleUpload uses uploadTarget state to decide which slot to fill.
+  // The two "Upload Your Fabric" buttons set uploadTarget before clicking
+  // the hidden file input.
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
     if (!file) return
@@ -468,7 +519,12 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
         persistUploads(newUploads)
         return [newFabric, ...prev]
       })
-      setSelectedFabricId(newFabric.id)
+      // Apply to whichever slot is the current upload target
+      if (uploadTarget === 'cushion') {
+        setCushionFabricId(newFabric.id)
+      } else {
+        setBodyFabricId(newFabric.id)
+      }
     }
     reader.readAsDataURL(file)
     if (fileInputRef.current) fileInputRef.current.value = ''
@@ -480,7 +536,8 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
       persistUploads(filtered.filter(f => f.uploaded))
       return filtered
     })
-    if (selectedFabricId === id) setSelectedFabricId(null)
+    if (bodyFabricId === id) setBodyFabricId(null)
+    if (cushionFabricId === id) setCushionFabricId(null)
   }
 
   const handleReset = () => setFabricRepeat(2)
@@ -503,9 +560,10 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
       const dataUrl = canvas.toDataURL('image/png')
       const link = document.createElement('a')
       const productSlug = selectedProduct.id
-      const fabricSlug = selectedFabric ? selectedFabric.id : 'no-fabric'
+      const bodySlug = bodyFabric ? bodyFabric.id : 'no-body-fabric'
+      const cushionSlug = cushionFabric ? cushionFabric.id : 'no-cushion-fabric'
       const timestamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, '-')
-      link.download = `fabric-studio-${productSlug}-${fabricSlug}-${timestamp}.png`
+      link.download = `fabric-studio-${productSlug}-${bodySlug}-${cushionSlug}-${timestamp}.png`
       link.href = dataUrl
       document.body.appendChild(link)
       link.click()
@@ -590,7 +648,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
               ref={canvasContainerRef}
               className="rounded-xl overflow-hidden relative"
               style={{
-                background: 'linear-gradient(180deg, #f5f6f8 0%, #e2e5ea 60%, #c9cdd4 100%)',
+                background: bgColor,
                 minHeight: '500px',
               }}
             >
@@ -607,9 +665,11 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
               >
                 <Scene
                   product={selectedProduct}
-                  fabricUrl={selectedFabric?.url || null}
+                  bodyFabricUrl={bodyFabric?.url || null}
+                  cushionFabricUrl={cushionFabric?.url || null}
                   fabricRepeat={fabricRepeat}
                   autoRotate={autoRotate}
+                  bgColor={bgColor}
                 />
               </Canvas>
               <div className="absolute bottom-3 left-3 bg-white/80 backdrop-blur px-2.5 py-1.5 rounded-md text-[11px] text-slate-700 shadow-sm pointer-events-none">
@@ -619,56 +679,52 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                 </span>
               </div>
             </div>
-            {selectedFabric && (
-              <p className="text-xs text-muted-foreground mt-2 text-center">
-                {t('Fabric:', 'ফ্যাব্রিক:')} <span className="font-medium text-foreground">{t(selectedFabric.nameEn, selectedFabric.nameBn)}</span>
-                {' · '}{t('Repeat:', 'রিপিট:')} {fabricRepeat}×{fabricRepeat}
-              </p>
-            )}
+            <p className="text-xs text-muted-foreground mt-2 text-center">
+              {bodyFabric && <>{t('Body:', 'বডি:')} <span className="font-medium text-foreground">{t(bodyFabric.nameEn, bodyFabric.nameBn)}</span>{' · '}</>}
+              {cushionFabric && <>{t('Cushion:', 'কুশন:')} <span className="font-medium text-foreground">{t(cushionFabric.nameEn, cushionFabric.nameBn)}</span>{' · '}</>}
+              {t('Repeat:', 'রিপিট:')} {fabricRepeat}×{fabricRepeat}
+            </p>
           </CardContent>
         </Card>
 
         {/* Fabric controls */}
         <Card>
           <CardHeader className="pb-3">
-            <CardTitle className="text-base">{t('Fabric Selection', 'ফ্যাব্রিক নির্বাচন')}</CardTitle>
+            <CardTitle className="text-base">{t('Fabric & Background', 'ফ্যাব্রিক ও ব্যাকগ্রাউন্ড')}</CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            {/* Upload */}
-            <div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleUpload}
-                className="hidden"
-              />
-              <Button
-                variant="default"
-                className="w-full"
-                onClick={() => fileInputRef.current?.click()}
-              >
-                <Upload className="w-4 h-4 mr-2" />
-                {t('Upload Your Fabric', 'আপনার ফ্যাব্রিক আপলোড করুন')}
-              </Button>
-              <p className="text-[11px] text-muted-foreground mt-1.5">
-                {t('JPG / PNG / WebP up to 5 MB · auto-repeats on the 3D model', 'JPG / PNG / WebP — ৫ মেগাবাইট পর্যন্ত · 3D মডেলে অটো-রিপিট হবে')}
-              </p>
-            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleUpload}
+              className="hidden"
+            />
 
-            {/* Fabric gallery */}
+            {/* ★ Body Fabric section */}
             <div>
-              <Label className="text-xs text-muted-foreground">{t('Preset & Uploaded Fabrics', 'প্রিসেট ও আপলোড করা ফ্যাব্রিক')}</Label>
-              <div className="grid grid-cols-3 gap-2 mt-1.5">
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="text-xs font-semibold text-slate-700">{t('Sofa Body Fabric', 'সোফা বডি ফ্যাব্রিক')}</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => { setUploadTarget('body'); fileInputRef.current?.click() }}
+                >
+                  <Upload className="w-3 h-3 mr-1" />
+                  {t('Upload', 'আপলোড')}
+                </Button>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
                 {fabrics.map(f => (
                   <button
-                    key={f.id}
-                    onClick={() => setSelectedFabricId(f.id)}
-                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${selectedFabricId === f.id ? 'border-indigo-600 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-slate-400'}`}
+                    key={`body-${f.id}`}
+                    onClick={() => setBodyFabricId(bodyFabricId === f.id ? null : f.id)}
+                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${bodyFabricId === f.id ? 'border-indigo-600 ring-2 ring-indigo-200' : 'border-slate-200 hover:border-slate-400'}`}
                     title={t(f.nameEn, f.nameBn)}
                   >
                     <img src={f.url} alt={f.nameEn} className="w-full h-full object-cover" />
-                    {selectedFabricId === f.id && (
+                    {bodyFabricId === f.id && (
                       <span className="absolute top-1 right-1 bg-indigo-600 text-white rounded-full w-4 h-4 flex items-center justify-center">
                         <Check className="w-2.5 h-2.5" />
                       </span>
@@ -688,8 +744,94 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
               </div>
             </div>
 
+            {/* ★ Cushion Fabric section */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <Label className="text-xs font-semibold text-slate-700">{t('Cushion Fabric', 'কুশন ফ্যাব্রিক')}</Label>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs"
+                  onClick={() => { setUploadTarget('cushion'); fileInputRef.current?.click() }}
+                >
+                  <Upload className="w-3 h-3 mr-1" />
+                  {t('Upload', 'আপলোড')}
+                </Button>
+              </div>
+              <div className="grid grid-cols-4 gap-2">
+                {fabrics.map(f => (
+                  <button
+                    key={`cushion-${f.id}`}
+                    onClick={() => setCushionFabricId(cushionFabricId === f.id ? null : f.id)}
+                    className={`relative aspect-square rounded-lg overflow-hidden border-2 transition-all ${cushionFabricId === f.id ? 'border-emerald-600 ring-2 ring-emerald-200' : 'border-slate-200 hover:border-slate-400'}`}
+                    title={t(f.nameEn, f.nameBn)}
+                  >
+                    <img src={f.url} alt={f.nameEn} className="w-full h-full object-cover" />
+                    {cushionFabricId === f.id && (
+                      <span className="absolute top-1 right-1 bg-emerald-600 text-white rounded-full w-4 h-4 flex items-center justify-center">
+                        <Check className="w-2.5 h-2.5" />
+                      </span>
+                    )}
+                    {f.uploaded && (
+                      <button
+                        type="button"
+                        onClick={(e) => { e.stopPropagation(); handleDeleteFabric(f.id) }}
+                        className="absolute top-1 left-1 bg-red-500 text-white rounded-full w-4 h-4 flex items-center justify-center hover:bg-red-600"
+                        title={t('Remove', 'মুছুন')}
+                      >
+                        <X className="w-2.5 h-2.5" />
+                      </button>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-muted-foreground mt-1">
+                {t('Note: cushion fabric only applies to models with separately-named cushion meshes (like the Couch). Single-mesh sofas will use body fabric only.', 'নোট: কুশন ফ্যাব্রিক শুধুমাত্র আলাদা কুশন মেশ সহ মডেলে (যেমন কাউচ) প্রযোজ্য। সিঙ্গেল-মেশ সোফায় শুধু বডি ফ্যাব্রিক ব্যবহৃত হবে।')}
+              </p>
+            </div>
+
+            {/* ★ Background Color section */}
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+              <Label className="text-xs font-semibold text-slate-700 mb-2 block">{t('Background Color', 'ব্যাকগ্রাউন্ড কালার')}</Label>
+              <div className="flex items-center gap-3">
+                <input
+                  type="color"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="w-12 h-12 rounded-lg border-2 border-slate-200 cursor-pointer bg-white p-1"
+                  title={t('Pick background color', 'ব্যাকগ্রাউন্ড কালার বাছুন')}
+                />
+                <Input
+                  type="text"
+                  value={bgColor}
+                  onChange={(e) => setBgColor(e.target.value)}
+                  className="font-mono text-sm h-10 w-28"
+                  placeholder="#eceae5"
+                />
+                <div className="flex gap-1 flex-wrap">
+                  {/* Quick color presets */}
+                  {[
+                    { name: 'Light Gray', color: '#eceae5' },
+                    { name: 'White', color: '#ffffff' },
+                    { name: 'Black', color: '#1a1a1a' },
+                    { name: 'Beige', color: '#e8dcc0' },
+                    { name: 'Blue', color: '#1e3a5f' },
+                    { name: 'Green', color: '#2d4a3e' },
+                  ].map(c => (
+                    <button
+                      key={c.color}
+                      onClick={() => setBgColor(c.color)}
+                      className="w-7 h-7 rounded-md border-2 border-slate-200 hover:scale-110 transition-transform"
+                      style={{ background: c.color }}
+                      title={c.name}
+                    />
+                  ))}
+                </div>
+              </div>
+            </div>
+
             {/* Pattern repeat slider */}
-            {selectedFabric && (
+            {(bodyFabric || cushionFabric) && (
               <div className="space-y-3 p-3 bg-slate-50 rounded-lg border border-slate-200">
                 <div>
                   <div className="flex justify-between mb-1">
@@ -703,27 +845,19 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                 </div>
                 <Button variant="ghost" size="sm" className="w-full" onClick={handleReset}>
                   <RotateCcw className="w-3.5 h-3.5 mr-1.5" />
-                  {t('Reset', 'রিসেট')}
+                  {t('Reset Repeat', 'রিপিট রিসেট')}
                 </Button>
               </div>
             )}
-
-            {/* Help card */}
-            <div className="p-3 bg-indigo-50 rounded-lg border border-indigo-200">
-              <p className="text-xs text-indigo-800 leading-relaxed">
-                <strong>{t('💡 Real 3D Model:', '💡 রিয়েল 3D মডেল:')}</strong>{' '}
-                {t('True 3D mesh — drag to rotate 360°, scroll to zoom. Upload a fabric and it auto-repeats across the entire model.', 'সত্যিকারের 3D মেশ — ঘোরাতে টানুন ৩৬০°, জুম করতে স্ক্রল করুন। একটি ফ্যাব্রিক আপলোড করুন এবং এটি পুরো মডেল জুড়ে অটো-রিপিট হবে।')}
-              </p>
-            </div>
 
             {/* Place Order */}
             <Button
               size="lg"
               className="w-full bg-gradient-to-r from-emerald-600 to-green-700 hover:from-emerald-700 hover:to-green-800"
-              onClick={() => onPlaceOrder?.(selectedProduct, selectedFabric)}
+              onClick={() => onPlaceOrder?.(selectedProduct, bodyFabric || cushionFabric)}
             >
               <ShoppingCart className="w-4 h-4 mr-2" />
-              {t('Place Order with This Fabric', 'এই ফ্যাব্রিক দিয়ে অর্ডার করুন')}
+              {t('Place Order with This Design', 'এই ডিজাইন দিয়ে অর্ডার করুন')}
             </Button>
           </CardContent>
         </Card>
