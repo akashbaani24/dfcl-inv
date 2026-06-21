@@ -782,10 +782,22 @@ export default function Home() {
     setEntitiesLoading(true)
     try {
       const res = await authFetch('/api/entities')
-      if (res.ok) { const data = await res.json(); setEntities(data.entities) }
-    } catch { /* ignore */ }
+      if (res.ok) {
+        const data = await res.json()
+        setEntities(data.entities || [])
+      } else {
+        // Surface the error to the user so they know what's wrong
+        let detail = `HTTP ${res.status}`
+        try { const e = await res.json(); detail = e.error || e.detail || detail } catch {}
+        toast({ title: 'Failed to load entities', description: detail, variant: 'destructive' })
+        setEntities([])
+      }
+    } catch (err) {
+      toast({ title: 'Failed to load entities', description: String(err), variant: 'destructive' })
+      setEntities([])
+    }
     finally { setEntitiesLoading(false) }
-  }, [])
+  }, [toast])
 
   const fetchUsers = async () => {
     try {
@@ -8600,6 +8612,23 @@ export default function Home() {
                 <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
                 <p className="text-lg font-medium">{entitySearch ? 'No entities match your search' : 'No Entity Available'}</p>
                 {entitySearch && <p className="text-muted-foreground">Try a different search term.</p>}
+                {!entitySearch && (
+                  <div className="mt-6 text-left max-w-md mx-auto bg-muted/40 rounded-md p-4 text-xs space-y-1">
+                    <p className="font-semibold text-foreground">Debug info:</p>
+                    <p>• Logged in as: <span className="font-mono">{user.displayName}</span> ({user.role})</p>
+                    <p>• Total entities loaded from API: <span className="font-mono">{entities.length}</span></p>
+                    <p>• Your entityAccess grants: <span className="font-mono">{user.entityAccess?.length || 0}</span> entities</p>
+                    <p>• Filtered (visible) entities: <span className="font-mono">{availableEntities.length}</span></p>
+                    {user.role !== 'admin' && user.role !== 'manager' && availableEntities.length === 0 && entities.length > 0 && (
+                      <p className="text-yellow-700 mt-2">→ Your account has no entity access. Ask an admin to assign entities via User Management.</p>
+                    )}
+                    {entities.length === 0 && (
+                      <p className="text-yellow-700 mt-2">→ Database returned 0 entities. If you just deployed, run the migrate-schema endpoint.</p>
+                    )}
+                    <p className="mt-3 text-muted-foreground">Open browser dev console (F12) for more details, or try:</p>
+                    <pre className="bg-background border rounded p-2 mt-1 overflow-x-auto">curl "{typeof window !== 'undefined' ? window.location.origin : ''}/api/entities" -H "Cookie: session=YOUR_COOKIE"</pre>
+                  </div>
+                )}
               </CardContent>
             </Card>
           ) : (
