@@ -1505,8 +1505,8 @@ export default function Home() {
     if (!workingEntity) return
     if (salesOrderForm.items.length === 0) { toast({ title: 'Error', description: 'Add at least one item', variant: 'destructive' }); return }
     const itemCount = salesOrderForm.items.length
-    const totalQty = salesOrderForm.items.reduce((s, it: any) => s + (parseInt(it.quantity) || 0), 0)
-    const totalAmount = salesOrderForm.items.reduce((s, it: any) => s + (parseInt(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0) - (parseFloat(salesOrderForm.discount) || 0)
+    const totalQty = salesOrderForm.items.reduce((s, it: any) => s + (parseFloat(it.quantity) || 0), 0)
+    const totalAmount = salesOrderForm.items.reduce((s, it: any) => s + (parseFloat(it.quantity) || 0) * (parseFloat(it.unitPrice) || 0), 0) - (parseFloat(salesOrderForm.discount) || 0)
     const ok = await confirm({
       title: editingSalesOrderId ? 'Update Sales Order?' : 'Create Sales Order?',
       message: `This will ${editingSalesOrderId ? 'update' : 'create'} a sales order with ${itemCount} item line(s), ${totalQty} unit(s) total, and a net amount of ${fmtBDT(totalAmount)}. Stock will be reduced and incentives will be auto-calculated. Regular users will not be able to modify this order afterwards. (Admins can still edit.) Do you want to continue?`,
@@ -1527,7 +1527,7 @@ export default function Home() {
         discount: parseFloat(salesOrderForm.discount) || 0,
         orderDate: salesOrderForm.orderDate, deliveryDate: salesOrderForm.deliveryDate || undefined,
         status: salesOrderForm.status, notes: salesOrderForm.notes,
-        items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseInt(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseInt(me.quantity) || 1 })) })),
+        items: salesOrderForm.items.map(i => ({ itemId: i.itemId, quantity: parseFloat(i.quantity) || 1, unitPrice: parseFloat(i.unitPrice) || 0, makingEntries: i.makingEntries.map(me => ({ name: me.name, unitPrice: parseFloat(me.unitPrice) || 0, quantity: parseFloat(me.quantity) || 1 })) })),
         payments: salesOrderForm.payments.map(p => ({ amount: parseFloat(p.amount) || 0, paymentType: p.paymentType, paymentMode: p.paymentMode, paymentDate: p.paymentDate, chequeNo: p.chequeNo || undefined, bankName: p.bankName || undefined, notes: p.notes || undefined })),
       }
       const res = await authFetch('/api/sales-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -1756,7 +1756,7 @@ export default function Home() {
     })
     if (!ok) return
     try {
-      const res = await authFetch('/api/sales-returns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...salesReturnForm, entityId: workingEntity.id, quantity: parseInt(salesReturnForm.quantity), price: parseFloat(salesReturnForm.price), salesOrderId: salesReturnForm.salesOrderId || undefined }) })
+      const res = await authFetch('/api/sales-returns', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...salesReturnForm, entityId: workingEntity.id, quantity: parseFloat(salesReturnForm.quantity), price: parseFloat(salesReturnForm.price), salesOrderId: salesReturnForm.salesOrderId || undefined }) })
       if (res.ok) { toast({ title: 'Success', description: 'Sales return created' }); setShowSalesReturnDialog(false); setSalesReturnForm({ itemId: '', customerId: '', salesOrderId: '', quantity: '', price: '', reason: '' }); fetchSalesReturns() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
@@ -4706,8 +4706,8 @@ export default function Home() {
   // New Sales Order — full page (not dialog)
   const renderNewSalesOrderPage = () => {
     // Live calculations
-    const subTotal = salesOrderForm.items.reduce((s, item) => s + (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0)
-    const makingTotal = salesOrderForm.items.reduce((s, item) => s + item.makingEntries.reduce((m, me) => m + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0)
+    const subTotal = salesOrderForm.items.reduce((s, item) => s + (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0), 0)
+    const makingTotal = salesOrderForm.items.reduce((s, item) => s + item.makingEntries.reduce((m, me) => m + (parseFloat(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0), 0)
     const grandTotal = subTotal + makingTotal
     const discount = parseFloat(salesOrderForm.discount) || 0
     const netTotal = grandTotal - discount
@@ -4828,8 +4828,8 @@ export default function Home() {
                       </thead>
                       <tbody>
                         {salesOrderForm.items.map((item, i) => {
-                          const itemBaseTotal = (parseInt(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
-                          const itemMakingTotal = item.makingEntries.reduce((s, me) => s + (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0)
+                          const itemBaseTotal = (parseFloat(item.quantity) || 0) * (parseFloat(item.unitPrice) || 0)
+                          const itemMakingTotal = item.makingEntries.reduce((s, me) => s + (parseFloat(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0), 0)
                           const itemTotal = itemBaseTotal + itemMakingTotal
                           return (
                             <React.Fragment key={i}>
@@ -4843,7 +4843,7 @@ export default function Home() {
                             </tr>
                             {/* Making entries — same column style */}
                             {item.makingEntries.map((me, mi) => {
-                              const meTotal = (parseInt(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0)
+                              const meTotal = (parseFloat(me.quantity) || 0) * (parseFloat(me.unitPrice) || 0)
                               return (
                                 <tr key={`m-${i}-${mi}`} className="border-t bg-muted/20">
                                   <td className="px-2 py-1.5 text-center text-muted-foreground">↳</td>

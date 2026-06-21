@@ -78,7 +78,7 @@ export async function POST(request: NextRequest) {
     const aggregated = new Map<string, number>();
     for (const item of items as any[]) {
       const key = `${item.itemId}|${entityId}`;
-      aggregated.set(key, (aggregated.get(key) || 0) + (parseInt(item.quantity) || 1));
+      aggregated.set(key, (aggregated.get(key) || 0) + (parseFloat(item.quantity) || 1));
     }
     for (const [key, totalQty] of aggregated.entries()) {
       const [itemId] = key.split('|');
@@ -106,14 +106,14 @@ export async function POST(request: NextRequest) {
           create: items.map((item: any) => ({
             itemId: item.itemId,
             entityId,
-            quantity: parseInt(item.quantity) || 1,
+            quantity: parseFloat(item.quantity) || 1,
             unitPrice: parseFloat(item.unitPrice) || 0,
             makingEntries: {
               create: (item.makingEntries || []).map((me: any) => ({
                 name: me.name || '',
                 makingInfoId: me.makingInfoId || null,
                 unitPrice: parseFloat(me.unitPrice) || 0,
-                quantity: parseInt(me.quantity) || 1,
+                quantity: parseFloat(me.quantity) || 1,
               })),
             },
           })),
@@ -179,7 +179,7 @@ export async function POST(request: NextRequest) {
         // For each item, find a matching range in any formula
         for (const item of items) {
           const unitPrice = parseFloat(item.unitPrice) || 0;
-          const quantity = parseInt(item.quantity) || 1;
+          const quantity = parseFloat(item.quantity) || 1;
           const fis = byItem.get(item.itemId) || [];
           // Sort formulas by createdAt asc, then find first matching range
           let matchedFormula: any = null;

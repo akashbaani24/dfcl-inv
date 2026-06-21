@@ -653,7 +653,7 @@ model SalesOrderItem {
   salesOrderId String
   itemId       String
   entityId     String
-  quantity     Int     @default(1)
+  quantity     Float   @default(1)
   unitPrice    Float   @default(0)
 
   makingEntries SalesMakingEntry[]
@@ -672,7 +672,7 @@ model SalesMakingEntry {
   makingInfoId    String?
   name            String  // making process name
   unitPrice       Float   @default(0)
-  quantity        Int     @default(1)
+  quantity        Float   @default(1)
 
   salesOrderItem SalesOrderItem @relation(fields: [salesOrderItemId], references: [id], onDelete: Cascade)
 

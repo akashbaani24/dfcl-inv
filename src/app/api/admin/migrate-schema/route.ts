@@ -831,6 +831,49 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
       ('seed_ac_exp_7','Misc Expense','expense','Other expenses','active',datetime('now'),datetime('now'))`,
     description: 'Seed default expense categories',
   },
+  // v60: Change SalesOrderItem.quantity from INTEGER to REAL (Float) for decimal quantities (e.g. 7.5 meters)
+  // SQLite doesn't support ALTER COLUMN TYPE, so we add a new column, copy data, drop old, rename.
+  {
+    id: '2026_06_21_soitem_qty_float_1',
+    sql: 'ALTER TABLE SalesOrderItem ADD COLUMN quantity_new REAL NOT NULL DEFAULT 1',
+    description: 'Add quantity_new REAL column to SalesOrderItem',
+  },
+  {
+    id: '2026_06_21_soitem_qty_float_2',
+    sql: 'UPDATE SalesOrderItem SET quantity_new = CAST(quantity AS REAL)',
+    description: 'Copy quantity data to quantity_new as REAL',
+  },
+  {
+    id: '2026_06_21_soitem_qty_float_3',
+    sql: 'ALTER TABLE SalesOrderItem DROP COLUMN quantity',
+    description: 'Drop old INTEGER quantity column',
+  },
+  {
+    id: '2026_06_21_soitem_qty_float_4',
+    sql: 'ALTER TABLE SalesOrderItem RENAME COLUMN quantity_new TO quantity',
+    description: 'Rename quantity_new to quantity',
+  },
+  // v60: SalesMakingEntry.quantity from INTEGER to REAL
+  {
+    id: '2026_06_21_sme_qty_float_1',
+    sql: 'ALTER TABLE SalesMakingEntry ADD COLUMN quantity_new REAL NOT NULL DEFAULT 1',
+    description: 'Add quantity_new REAL column to SalesMakingEntry',
+  },
+  {
+    id: '2026_06_21_sme_qty_float_2',
+    sql: 'UPDATE SalesMakingEntry SET quantity_new = CAST(quantity AS REAL)',
+    description: 'Copy quantity data to quantity_new as REAL',
+  },
+  {
+    id: '2026_06_21_sme_qty_float_3',
+    sql: 'ALTER TABLE SalesMakingEntry DROP COLUMN quantity',
+    description: 'Drop old INTEGER quantity column',
+  },
+  {
+    id: '2026_06_21_sme_qty_float_4',
+    sql: 'ALTER TABLE SalesMakingEntry RENAME COLUMN quantity_new TO quantity',
+    description: 'Rename quantity_new to quantity',
+  },
 ];
 
 export async function POST(request: NextRequest) {
