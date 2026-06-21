@@ -343,3 +343,33 @@ Stage Summary:
 - ★ ROOT CAUSE: stale Prisma client on Vercel (missing postinstall hook).
 - Fix deployed. User needs to wait 3-4 min for Vercel deploy (slightly longer this time because prisma generate adds ~3-5s to the build).
 - After deploy: hard refresh (Ctrl+Shift+R / Cmd+Shift+R) → all 31 entities will appear.
+
+---
+Task ID: 13
+Agent: main
+Task: User requested: "auto backup nia rakho google drive e" — set up automatic backup to Google Drive.
+
+Work Log:
+- Installed googleapis ^173 npm package.
+- Created src/lib/google-drive-backup.ts:
+  * uploadBackupToDrive(jsonStr, backupId) — uploads a uniquely-named JSON file to the configured Drive folder.
+  * listDriveBackups() — returns last 10 backups.
+  * driveStatus() — checks if Drive is configured + reachable.
+  * All three no-op gracefully if env vars are missing.
+- Modified /api/cron/backup route:
+  * Kept existing list / download / create actions intact.
+  * Added action=drive-status + action=drive-list.
+  * Default action=create now ALSO uploads the JSON to Drive after writing to DB. Response includes 'drive' field with upload result.
+  * DB-only fallback still works if Drive isn't configured.
+- Updated vercel.json cron schedule from '30 12 * * *' (once daily 6:30 PM BD) to '30 4,16 * * *' (twice daily at 10:30 AM + 10:30 PM BD) — gives half-day RPO.
+- Pushed v60-fix29 to GitHub.
+
+Stage Summary:
+- Code complete + deployed. User needs to do the one-time Google Cloud setup (create service account, share a Drive folder, set 3 env vars on Vercel):
+  1. GOOGLE_DRIVE_FOLDER_ID
+  2. GOOGLE_SERVICE_ACCOUNT_EMAIL
+  3. GOOGLE_SERVICE_ACCOUNT_PRIVATE_KEY (full PEM with \n)
+- Once env vars are set, the existing cron will automatically upload backups twice a day. User can verify by running:
+    curl 'https://dfcl-inv.vercel.app/api/cron/backup?token=DFCL_BACKUP_2026'
+  and looking for 'drive.uploaded: true' in the response.
+- Until env vars are set, the route still works — just falls back to DB-only backup and reports 'drive.uploaded: false' with reason.
