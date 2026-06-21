@@ -174,59 +174,69 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
   const clonedScene = useMemo(() => scene.clone(true), [scene])
 
   // ★ Load fabric texture using useTexture (Suspense-based, handles async properly)
-  // We conditionally load — useTexture suspends until the image is ready, so when
-  // this returns, the texture is fully loaded and ready to apply. This fixes the
-  // "fabric doesn't show" bug where the texture wasn't loaded when the material
-  // was created.
+  // useTexture suspends until the image is fully loaded.
   const loadedTexture = useTexture(fabricUrl || '/fabric-studio/transparent-pixel.png')
-  useEffect(() => {
+
+  // ★ Configure texture settings SYNCHRONOUSLY before applying to any material.
+  // This is critical — if we set colorSpace AFTER creating the material, the
+  // renderer caches the texture with the wrong color space and colors look washed
+  // out or wrong.
+  useMemo(() => {
     loadedTexture.wrapS = loadedTexture.wrapT = THREE.RepeatWrapping
     loadedTexture.repeat.set(fabricRepeat, fabricRepeat)
     loadedTexture.colorSpace = THREE.SRGBColorSpace
     loadedTexture.anisotropy = 8
+    // ★ flipY = true (default) keeps the texture upright as authored.
+    loadedTexture.flipY = true
     loadedTexture.needsUpdate = true
+    return loadedTexture
   }, [loadedTexture, fabricRepeat])
 
-  // ★ Generate UVs for any mesh that doesn't have them.
-  // The FBX model might have meshes without UV coordinates, which would cause
-  // the fabric texture to not show. We generate planar UVs based on the mesh's
-  // bounding box as a fallback.
+  // ★ Generate UVs ONLY for meshes that have NO uv attribute at all.
+  // We do NOT overwrite existing UVs — the FBX model's UVs should be respected.
+  // Only meshes missing UVs entirely (rare) get fallback planar UVs from
+  // bounding-box XY coordinates.
   useEffect(() => {
     clonedScene.traverse((child) => {
       if ((child as THREE.Mesh).isMesh) {
         const mesh = child as THREE.Mesh
-        const geometry = mesh.geometry
-        // Check if UVs exist and have data
-        if (!geometry.attributes.uv || geometry.attributes.uv.count === 0) {
-          // Generate planar UVs from position XY coordinates
+        const geometry = mesh.geometry as THREE.BufferGeometry
+        const uvAttr = geometry.getAttribute('uv') as THREE.BufferAttribute | undefined
+        if (!uvAttr || uvAttr.count === 0) {
+          console.log(`[FabricStudio] Mesh "${mesh.name}" has no UVs — generating planar fallback`)
           geometry.computeBoundingBox()
           const bbox = geometry.boundingBox!
           const size = new THREE.Vector3()
           bbox.getSize(size)
+          // Avoid divide-by-zero
+          const sx = size.x || 1
+          const sy = size.y || 1
           const positions = geometry.attributes.position
           const uvs = new Float32Array(positions.count * 2)
           for (let i = 0; i < positions.count; i++) {
             const x = positions.getX(i)
             const y = positions.getY(i)
-            // Map position to 0..1 UV range based on bounding box
-            uvs[i * 2] = (x - bbox.min.x) / size.x
-            uvs[i * 2 + 1] = (y - bbox.min.y) / size.y
+            uvs[i * 2] = (x - bbox.min.x) / sx
+            uvs[i * 2 + 1] = (y - bbox.min.y) / sy
           }
           geometry.setAttribute('uv', new THREE.BufferAttribute(uvs, 2))
-          geometry.computeVertexNormals()
+        } else {
+          console.log(`[FabricStudio] Mesh "${mesh.name}" has ${uvAttr.count} UVs — keeping original`)
         }
       }
     })
   }, [clonedScene])
 
   // ★ Apply fabric texture (or default material) to all meshes.
-  // Key fixes:
-  //   - When fabric is selected, we set map=texture AND a slight color tint
-  //     so we can verify the material is being applied even if the texture
-  //     has issues
-  //   - We set material.needsUpdate = true to force refresh
-  //   - We log to console for debugging
+  // Key things done right here:
+  //   1. Force loadedTexture.needsUpdate = true before creating material
+  //   2. Use color = white (0xffffff) so texture colors show TRUE — no tint
+  //   3. Set mat.needsUpdate = true after creating material
+  //   4. Use console.log to verify what's being applied
   useEffect(() => {
+    // Force texture refresh in case settings changed
+    loadedTexture.needsUpdate = true
+
     let meshCount = 0
     let fabricMeshCount = 0
     clonedScene.traverse((child) => {
@@ -240,16 +250,18 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
           fabricMeshCount++
           const mat = new THREE.MeshPhysicalMaterial({
             map: loadedTexture,
-            color: '#ffffff', // white tint so texture shows true colors
-            roughness: 0.85,
+            color: 0xffffff, // pure white so texture colors show true
+            roughness: 0.92,
             metalness: 0.0,
-            sheen: 0.6,
+            sheen: 0.5,
             sheenRoughness: 0.5,
-            sheenColor: new THREE.Color('#f5f5f0'),
+            sheenColor: new THREE.Color('#ffffff'),
             side: THREE.DoubleSide,
           })
           mat.needsUpdate = true
           mesh.material = mat
+          // Also force the geometry to refresh
+          mesh.geometry.attributes.uv && (mesh.geometry.attributes.uv.needsUpdate = true)
         } else {
           // No fabric — default warm beige fabric look
           mesh.material = new THREE.MeshPhysicalMaterial({
@@ -264,7 +276,7 @@ function GLBModel({ glbUrl, scale = 1.5, position = [0, -0.7, 0], fabricUrl, fab
         }
       }
     })
-    console.log(`[FabricStudio] Applied material to ${meshCount} meshes. Fabric applied to ${fabricMeshCount}. fabricUrl=${fabricUrl}`)
+    console.log(`[FabricStudio] Applied material to ${meshCount} meshes. Fabric applied to ${fabricMeshCount}. fabricUrl=${fabricUrl ? fabricUrl.substring(0, 60) + '...' : 'null'}`)
   }, [clonedScene, loadedTexture, fabricUrl])
 
   // Scale + position the model nicely in view
@@ -375,7 +387,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
   const [selectedProductId, setSelectedProductId] = useState<string>(PRODUCTS[0].id)
   const [fabrics, setFabrics] = useState<FabricDef[]>(PRESET_FABRICS)
   const [selectedFabricId, setSelectedFabricId] = useState<string | null>(null)
-  const [fabricRepeat, setFabricRepeat] = useState<number>(4)
+  const [fabricRepeat, setFabricRepeat] = useState<number>(2)
   const fileInputRef = useRef<HTMLInputElement | null>(null)
 
   useEffect(() => {
@@ -445,7 +457,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
     if (selectedFabricId === id) setSelectedFabricId(null)
   }
 
-  const handleReset = () => setFabricRepeat(4)
+  const handleReset = () => setFabricRepeat(2)
 
   return (
     <div className="space-y-4">
@@ -505,7 +517,7 @@ export default function RealGLBFabricStudio({ onPlaceOrder }: RealGLBFabricStudi
                   antialias: true,
                   preserveDrawingBuffer: true,
                   toneMapping: 2,
-                  toneMappingExposure: 1.1,
+                  toneMappingExposure: 1.0,
                 }}
                 style={{ width: '100%', height: '500px', cursor: 'grab' }}
               >
