@@ -80,6 +80,16 @@ const PRODUCTS: ProductDef[] = [
     scale: 1.5,
     position: [0, -0.7, 0],
   },
+  {
+    id: 'sofa-2',
+    nameEn: 'Modern Sofa',
+    nameBn: 'মডার্ন সোফা',
+    descEn: 'Stylish modern sofa with cushions and detailed fabric texture',
+    descBn: 'কুশন ও বিস্তারিত ফ্যাব্রিক টেক্সচার সহ স্টাইলিশ মডার্ন সোফা',
+    glbUrl: '/fabric-studio/sofa-2.glb',
+    scale: 3.0,
+    position: [0, -0.5, 0],
+  },
   // ★ ADD MORE MODELS HERE ★
   // Example template:
   // {
@@ -96,6 +106,13 @@ const PRODUCTS: ProductDef[] = [
 
 // Preload all model URLs so they cache on first visit
 PRODUCTS.forEach(p => useGLTF.preload(p.glbUrl))
+
+// ★ Set up Draco decoder for compressed GLB files
+// Some models (like sofa-2.glb) are Draco-compressed for smaller file size.
+// We configure the global GLTFLoader (which useGLTF uses internally) to use
+// a Draco decoder hosted on a CDN. Without this, Draco-compressed models
+// would fail to load.
+useGLTF.setDecoderPath('https://www.gstatic.com/draco/v1/decoders/')
 
 // ────────────────────────────────────────────────────────────────────────
 // Types
