@@ -395,6 +395,8 @@ export default function Home() {
   const [salesOrders, setSalesOrders] = useState<Array<any>>([])
   const [salesOrderForm, setSalesOrderForm] = useState({
     customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '',
+    salesType: 'cash' as 'cash' | 'order', // ★ Cash Sales or Order Sales
+    tailorId: '', // ★ Tailor for order sales
     items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; makingEntries: Array<{ name: string; unitPrice: string; quantity: string }> }>,
     payments: [] as Array<{ amount: string; paymentType: string; paymentMode: string; paymentDate: string; chequeNo: string; bankName: string; notes: string }>,
     newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
@@ -1453,7 +1455,7 @@ export default function Home() {
 
   // Sales order handlers
   const resetSalesOrderForm = () => {
-    setSalesOrderForm({ customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
+    setSalesOrderForm({ customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', salesType: 'cash' as 'cash' | 'order', tailorId: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
     setEditingSalesOrderId(null); setSalesCustomerMode('existing'); setSalesCustomerSearch(''); setSalesItemSearch(''); setSalesItemResults([])
   }
 
@@ -4335,7 +4337,7 @@ export default function Home() {
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Sales Order - {workingEntity?.name}</h2>
         <div className="flex gap-2">
-          <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); fetchEmployees(); setCurrentView('newSalesOrder') }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
+          <Button onClick={() => { resetSalesOrderForm(); fetchCustomers(); fetchEmployees(); fetchTailors(); setCurrentView('newSalesOrder') }} className="gap-2"><Plus className="w-4 h-4" />New Sales</Button>
         </div>
       </div>
       <div className="border rounded-lg overflow-hidden">
@@ -4406,8 +4408,9 @@ export default function Home() {
                         status: s.status || 'pending',
                         notes: s.notes || '',
                         newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
+                        salesType: 'cash' as 'cash' | 'order', tailorId: '',
                       })
-                      fetchCustomers(); fetchEmployees()
+                      fetchCustomers(); fetchEmployees(); fetchTailors()
                       setCurrentView('newSalesOrder')
                     }} title="Edit/Modify Order"><Edit className="w-4 h-4" /></Button>
                   )}
@@ -4784,8 +4787,40 @@ export default function Home() {
     return (
     <div className="space-y-4 max-w-6xl mx-auto">
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold">New Sales Order</h2>
+        <h2 className="text-xl font-bold">{editingSalesOrderId ? 'Edit Sales Order' : 'New Sales Order'}</h2>
         <Button variant="outline" onClick={() => { resetSalesOrderForm(); setCurrentView('salesOrder') }}><X className="w-4 h-4 mr-2" />Back to List</Button>
+      </div>
+
+      {/* ★ Cash Sales vs Order Sales toggle */}
+      <div className="flex items-center gap-3 p-3 bg-card rounded-lg border">
+        <Label className="text-sm font-semibold">Sales Type:</Label>
+        <Button
+          type="button"
+          size="sm"
+          variant={salesOrderForm.salesType === 'cash' ? 'default' : 'outline'}
+          onClick={() => setSalesOrderForm({...salesOrderForm, salesType: 'cash'})}
+        >
+          💵 Cash Sales
+        </Button>
+        <Button
+          type="button"
+          size="sm"
+          variant={salesOrderForm.salesType === 'order' ? 'default' : 'outline'}
+          onClick={() => setSalesOrderForm({...salesOrderForm, salesType: 'order'})}
+        >
+          ✂️ Order Sales
+        </Button>
+        {salesOrderForm.salesType === 'order' && (
+          <div className="flex items-center gap-2 ml-auto">
+            <Label className="text-xs font-semibold">Tailor:</Label>
+            <Select value={salesOrderForm.tailorId} onValueChange={v => setSalesOrderForm({...salesOrderForm, tailorId: v})}>
+              <SelectTrigger className="w-48 h-8 text-sm"><SelectValue placeholder="Select tailor" /></SelectTrigger>
+              <SelectContent>
+                {tailors.map(t => <SelectItem key={t.id} value={t.id}>{t.name} {t.phone ? `(${t.phone})` : ''}</SelectItem>)}
+              </SelectContent>
+            </Select>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSaveSalesOrder} className="space-y-5">
@@ -9024,7 +9059,7 @@ export default function Home() {
       case 'dailySales': return renderDailySalesPage()
       case 'reports': return renderReportsPage()
       case 'tailors': return renderTailorsPage()
-      case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
+      case 'makingInfo': return renderMasterDataPage<MakingInfoData>('Making Information', makingInfoList, ['name','description','cost','unit','status'], makingInfoForm, setMakingInfoForm, editingMakingInfoId, setEditingMakingInfoId, showMakingInfoDialog, setShowMakingInfoDialog, handleSaveMakingInfo, handleDeleteMakingInfo, { name:{label:'Process Name*',type:'text',placeholder:'e.g. Stitching, Cutting, Finishing'},description:{label:'Description',type:'text'},cost:{label:'Cost',type:'number'},unit:{label:'Unit',type:'select',options:uomList.length > 0 ? uomList.map(u => u.name) : ['PCS','KG','LTR','MTR','SET']},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'uom': return renderMasterDataPage<UoMData>('Unit of Measure (UoM)', uomList, ['name','description'], uomForm, setUomForm, editingUomId, setEditingUomId, showUomDialog, setShowUomDialog, handleSaveUom, handleDeleteUom, { name:{label:'UoM Name*',type:'text',placeholder:'e.g. PCS, KG, LTR'},description:{label:'Description',type:'text'} })
       case 'suppliers': return renderMasterDataPage<SupplierData>('Suppliers', suppliers, ['name','phone','email','address','status'], supplierForm, setSupplierForm, editingSupplierId, setEditingSupplierId, showSupplierDialog, setShowSupplierDialog, handleSaveSupplier, handleDeleteSupplier, { name:{label:'Supplier Name*',type:'text'},phone:{label:'Phone',type:'text'},email:{label:'Email',type:'text'},address:{label:'Address',type:'text'},status:{label:'Status',type:'select',options:['active','inactive']} })
       case 'employees': return renderEmployeesPage()
