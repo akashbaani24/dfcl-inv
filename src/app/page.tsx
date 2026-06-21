@@ -3429,6 +3429,9 @@ export default function Home() {
     const [uploading, setUploading] = useState(false)
     const [uploadResult, setUploadResult] = useState<any>(null)
     const fileInputRef = useRef<HTMLInputElement | null>(null)
+    // ★ Pagination state — default 20, user can select 20/50/100/All
+    const [stkPageSize, setStkPageSize] = useState<number>(20)
+    const [stkCurrentPage, setStkCurrentPage] = useState(1)
 
     useEffect(() => {
       const fetchStock = async () => {
@@ -3465,6 +3468,16 @@ export default function Home() {
       (s.barcode || '').toLowerCase().includes(stkSearch.toLowerCase()) ||
       (s.itemCode || '').toLowerCase().includes(stkSearch.toLowerCase())
     ) : stockData
+
+    // ★ Pagination calculations
+    const stkTotalItems = filtered.length
+    const stkTotalPages = stkPageSize === 999999 ? 1 : Math.ceil(stkTotalItems / stkPageSize)
+    const stkStart = (stkCurrentPage - 1) * stkPageSize
+    const stkEnd = stkPageSize === 999999 ? stkTotalItems : Math.min(stkStart + stkPageSize, stkTotalItems)
+    const pagedData = stkPageSize === 999999 ? filtered : filtered.slice(stkStart, stkEnd)
+
+    // Reset page when search or page size changes
+    useEffect(() => { setStkCurrentPage(1) }, [stkSearch, stkPageSize, entityId])
 
     // Download CSV template — pre-filled with the selected entity name
     const downloadFormat = () => {
@@ -3544,8 +3557,8 @@ export default function Home() {
             </TableRow></TableHeader>
             <TableBody>
               {stkLoading ? <TableRow><TableCell colSpan={entityId ? 8 : 9} className="text-center py-8">Loading...</TableCell></TableRow>
-              : filtered.length === 0 ? <TableRow><TableCell colSpan={entityId ? 8 : 9} className="text-center py-8 text-muted-foreground">No stock data</TableCell></TableRow>
-              : filtered.map((s, i) => {
+              : pagedData.length === 0 ? <TableRow><TableCell colSpan={entityId ? 8 : 9} className="text-center py-8 text-muted-foreground">No stock data</TableCell></TableRow>
+              : pagedData.map((s, i) => {
                 const available = s.quantity - s.bookedQty
                 return (
                 <TableRow key={i} className={`hover:bg-muted/30 ${s.bookedQty > 0 ? 'bg-amber-50/40' : ''}`}>
@@ -3569,6 +3582,40 @@ export default function Home() {
             </TableBody>
           </Table>
         </div>
+
+        {/* ★ Pagination controls */}
+        {stkTotalItems > 0 && (
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {stkStart + 1}–{stkEnd} of {stkTotalItems}
+              </p>
+              <Select value={stkPageSize === 999999 ? 'all' : stkPageSize.toString()} onValueChange={v => setStkPageSize(v === 'all' ? 999999 : parseInt(v))}>
+                <SelectTrigger className="w-[80px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="all">All</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {stkTotalPages > 1 && (
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" disabled={stkCurrentPage === 1} onClick={() => setStkCurrentPage(p => p - 1)}>Prev</Button>
+                {Array.from({ length: stkTotalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === stkTotalPages || Math.abs(p - stkCurrentPage) <= 1)
+                  .map((p, idx, arr) => (
+                    <React.Fragment key={p}>
+                      {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 py-1 text-sm text-muted-foreground">...</span>}
+                      <Button variant={p === stkCurrentPage ? 'default' : 'outline'} size="sm" onClick={() => setStkCurrentPage(p)}>{p}</Button>
+                    </React.Fragment>
+                  ))}
+                <Button variant="outline" size="sm" disabled={stkCurrentPage === stkTotalPages} onClick={() => setStkCurrentPage(p => p + 1)}>Next</Button>
+              </div>
+            )}
+          </div>
+        )}
 
         {/* Upload Dialog */}
         <Dialog open={uploadOpen} onOpenChange={setUploadOpen}>
