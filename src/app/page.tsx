@@ -6875,30 +6875,50 @@ export default function Home() {
     const handleBarcodeScan = () => {
       const bc = deliveryBarcodeInput.trim()
       if (!bc) return
-      // Find a picked item matching this barcode (or itemCode or itemName) that still has remaining qty
-      const match = deliveryPickedItems.find((p: any) =>
-        ((p.barcode && p.barcode.toLowerCase() === bc.toLowerCase()) ||
-         (p.itemCode && p.itemCode.toLowerCase() === bc.toLowerCase()) ||
-         (p.itemName && p.itemName.toLowerCase() === bc.toLowerCase()))
-        && (p.remainingQty || (p.orderedQty - (p.alreadyDeliveredQty || 0))) > 0
-      )
+      const bcLower = bc.toLowerCase()
+
+      // ★ Try multiple matching strategies:
+      // 1. Exact match on barcode
+      // 2. Exact match on itemCode
+      // 3. Exact match on itemName
+      // 4. Barcode "contains" match (for partial scans)
+      // 5. ItemCode "contains" match
+      const findMatch = (includeRemaining: boolean) => {
+        return deliveryPickedItems.find((p: any) => {
+          const remaining = p.remainingQty || (p.orderedQty - (p.alreadyDeliveredQty || 0))
+          if (includeRemaining && remaining <= 0) return false
+
+          // Exact matches
+          if (p.barcode && p.barcode.toLowerCase() === bcLower) return true
+          if (p.itemCode && p.itemCode.toLowerCase() === bcLower) return true
+          if (p.itemName && p.itemName.toLowerCase() === bcLower) return true
+
+          // Contains matches (partial barcode scan)
+          if (p.barcode && p.barcode.toLowerCase().includes(bcLower)) return true
+          if (bcLower.length >= 4 && p.barcode && p.barcode.toLowerCase().includes(bcLower)) return true
+          if (p.itemCode && p.itemCode.toLowerCase().includes(bcLower)) return true
+
+          return false
+        })
+      }
+
+      // First try with remaining > 0
+      const match = findMatch(true)
+
       if (!match) {
-        // Check if the item matches but is fully delivered
-        const fullMatch = deliveryPickedItems.find((p: any) =>
-          (p.barcode && p.barcode.toLowerCase() === bc.toLowerCase()) ||
-          (p.itemCode && p.itemCode.toLowerCase() === bc.toLowerCase()) ||
-          (p.itemName && p.itemName.toLowerCase() === bc.toLowerCase())
-        )
+        // Check if item matches but is fully delivered
+        const fullMatch = findMatch(false)
         if (fullMatch) {
           toast({ title: 'Already fully delivered', description: `${fullMatch.itemName} has no remaining quantity to deliver.`, variant: 'destructive' })
         } else {
-          toast({ title: 'Not found', description: `No item in this sales order matches "${bc}".`, variant: 'destructive' })
+          toast({ title: 'Not found', description: `No item in this sales order matches "${bc}". Check the barcode and try again.`, variant: 'destructive' })
         }
         setDeliveryBarcodeInput('')
         return
       }
+
       // Increment the deliverQty for this item (capped at remaining)
-      const currentQty = parseInt(match.deliverQty) || 0
+      const currentQty = parseFloat(match.deliverQty) || 0
       const remaining = match.remainingQty || (match.orderedQty - (match.alreadyDeliveredQty || 0))
       if (currentQty >= remaining) {
         toast({ title: 'Max reached', description: `${match.itemName}: already at max ${remaining} for this delivery.`, variant: 'destructive' })
@@ -6907,7 +6927,7 @@ export default function Home() {
       }
       setDeliveryPickedItems(items =>
         items.map((p: any) => p.itemId === match.itemId
-          ? { ...p, deliverQty: String((parseInt(p.deliverQty) || 0) + 1) }
+          ? { ...p, deliverQty: String((parseFloat(p.deliverQty) || 0) + 1) }
           : p
         )
       )
@@ -6918,7 +6938,7 @@ export default function Home() {
     // Submit delivery — calls POST /api/sales-orders/[id]/deliver
     const handleSubmitDelivery = async () => {
       if (!deliverySelectedOrder) return
-      const itemsToDeliver = deliveryPickedItems.filter(p => parseInt(p.deliverQty) > 0)
+      const itemsToDeliver = deliveryPickedItems.filter(p => parseFloat(p.deliverQty) > 0)
       if (itemsToDeliver.length === 0) {
         toast({ title: 'Error', description: 'Scan at least one barcode to deliver items.', variant: 'destructive' })
         return
@@ -6938,7 +6958,7 @@ export default function Home() {
             items: itemsToDeliver.map(p => ({
               salesOrderItemId: p.salesOrderItemId,
               itemId: p.itemId,
-              quantity: parseInt(p.deliverQty),
+              quantity: parseFloat(p.deliverQty),
             })),
             deliveryPerson,
             deliveryNotes,
@@ -7050,7 +7070,7 @@ export default function Home() {
                   </thead>
                   <tbody>
                     {deliveryPickedItems.map((p: any, i) => {
-                      const qty = parseInt(p.deliverQty) || 0
+                      const qty = parseFloat(p.deliverQty) || 0
                       const isPicked = qty > 0
                       const isComplete = (p.alreadyDeliveredQty || 0) + qty >= p.orderedQty
                       const already = p.alreadyDeliveredQty || 0
@@ -7058,7 +7078,11 @@ export default function Home() {
                       return (
                         <tr key={p.itemId} className={`border-t ${isComplete ? 'bg-green-50/50' : isPicked ? 'bg-blue-50/40' : already > 0 ? 'bg-amber-50/30' : ''}`}>
                           <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
-                          <td className="px-2 py-2 font-medium">{p.itemName}</td>
+                          <td className="px-2 py-2 font-medium">
+                            {p.itemName}
+                            {p.barcode && <div className="text-[10px] font-mono text-muted-foreground">BC: {p.barcode}</div>}
+                            {p.itemCode && p.itemCode !== p.itemName && <div className="text-[10px] font-mono text-muted-foreground">IC: {p.itemCode}</div>}
+                          </td>
                           <td className="px-2 py-2 font-mono text-xs">{p.barcode || p.itemCode || '—'}</td>
                           <td className="px-2 py-2 text-right">{p.orderedQty}</td>
                           <td className="px-2 py-2 text-right text-blue-700">{already}</td>
@@ -7066,6 +7090,7 @@ export default function Home() {
                           <td className="px-2 py-2 text-right">
                             <Input
                               type="number"
+                              step="0.01"
                               min="0"
                               max={remaining}
                               value={p.deliverQty}
@@ -7138,12 +7163,12 @@ export default function Home() {
               {/* Summary + submit */}
               <div className="flex items-center justify-between pt-4 border-t">
                 <div className="text-sm text-muted-foreground">
-                  {deliveryPickedItems.filter(p => parseInt(p.deliverQty) > 0).length} of {deliveryPickedItems.length} item(s) picked •
-                  Total units: {deliveryPickedItems.reduce((s, p) => s + (parseInt(p.deliverQty) || 0), 0)}
+                  {deliveryPickedItems.filter(p => parseFloat(p.deliverQty) > 0).length} of {deliveryPickedItems.length} item(s) picked •
+                  Total units: {deliveryPickedItems.reduce((s, p) => s + (parseFloat(p.deliverQty) || 0), 0)}
                 </div>
                 <Button
                   onClick={handleSubmitDelivery}
-                  disabled={delivering || deliveryPickedItems.filter(p => parseInt(p.deliverQty) > 0).length === 0}
+                  disabled={delivering || deliveryPickedItems.filter(p => parseFloat(p.deliverQty) > 0).length === 0}
                   size="lg"
                 >
                   {delivering ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Delivering...</> : <><CheckCircle2 className="w-4 h-4 mr-2" />Confirm Delivery</>}

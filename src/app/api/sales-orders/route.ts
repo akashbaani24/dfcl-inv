@@ -33,11 +33,12 @@ export async function GET(request: NextRequest) {
             itemId: true,
             quantity: true,
             unitPrice: true,
-            item: { select: { itemName: true } },
+            item: { select: { itemName: true, barcode: true, itemCode: true, uom: true } },
             makingEntries: { select: { id: true, name: true, unitPrice: true, quantity: true } },
           },
         },
         payments: { select: { id: true, amount: true, paymentType: true, paymentMode: true, receiptNo: true, paymentDate: true, chequeNo: true, bankName: true } },
+        deliveries: { include: { items: { select: { salesOrderItemId: true, quantity: true } } } },
         // ★ Skip tailorPayments + deliveries in list view — load them only when viewing detail
       },
     });
