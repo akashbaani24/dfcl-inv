@@ -7,19 +7,29 @@ import { getCurrentUser } from '@/lib/auth';
 // Manual stock entry — admin or any user with canMenu(user, 'myEntityStock', 'create')
 // can add stock by typing barcode + item name + qty.
 //
+// ★ LOGIC (per user's explicit mental model):
+//   "ITEM THAKLE TOH PROBLEM NAI, BARCODE EXIST KORLE PROBLEM,
+//    EK E ITEM E ONEK BARCODE HOTEY PAREY."
+//
+//   • One Item (identified by itemName) can have MANY barcodes.
+//   • If the typed ITEM NAME matches an existing item → NOT a problem.
+//     Just attach the new barcode to that existing item + add stock.
+//   • If the typed BARCODE matches an existing barcode (in Item.barcode primary
+//     OR in ItemBarcode table for any entity) → PROBLEM. Return 409 with
+//     duplicate:true so the frontend can signal it.
+//   • If both barcode and itemName are new → create a new Item.
+//
 // Body:
 //   {
-//     barcode:   string  — REQUIRED. Must be unique across all Items.
-//                          If it matches an existing Item.barcode, we use that item
-//                          (and ignore the itemName field — we trust the existing item).
-//                          If it doesn't match, we create a new Item with this barcode.
-//     itemName:  string  — REQUIRED. Used only when creating a new Item.
-//                          If the barcode matches an existing item, this field is ignored
-//                          (the existing item's name is preserved).
+//     barcode:   string  — REQUIRED. Must NOT exist anywhere (Item.barcode OR ItemBarcode).
+//     itemName:  string  — REQUIRED. If it matches an existing item, we attach this
+//                          new barcode to that item instead of creating a new item.
 //     quantity:  number  — REQUIRED. Must be > 0.
 //     entityId:  string  — REQUIRED. The entity (outlet/warehouse) whose stock we're adding to.
-//     uom?:      string  — optional, defaults to 'PCS'. Only used when creating a new Item.
-//     price?:    number  — optional, defaults to 0. Only used when creating a new Item.
+//     uom?:      string  — optional, defaults to 'PCS'. Used when creating a new Item
+//                          (existing items keep their own UoM).
+//     price?:    number  — optional, defaults to 0. Used when creating a new Item
+//                          (existing items keep their own price).
 //     mode?:     'add' | 'set'  — optional, defaults to 'add'.
 //                          'add' = increment existing stock by qty (typical "adding new stock")
 //                          'set' = overwrite the stock row's qty with this exact value
@@ -93,54 +103,124 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ---- Duplicate detection — user assumes their barcode is unique.
-    //    If the typed barcode ALREADY exists for another item → BLOCK with a clear
-    //    signal. User must use a different barcode (the "Add Stock" feature is for
-    //    brand-new items; to top up an existing item's stock, use the existing
-    //    item-update flow or upload-stock CSV).
-    let item = await db.item.findUnique({ where: { barcode: barcode.trim() } });
-    if (item) {
-      return NextResponse.json({
-        error: `This barcode "${barcode.trim()}" already exists for item "${item.itemName}". Use a different barcode — Add Stock is for new items only.`,
-        duplicate: true,
-        existingItemId: item.id,
-        existingItemName: item.itemName,
-      }, { status: 409 });
-    }
+    const cleanBarcode = barcode.trim();
+    const cleanItemName = itemName.trim();
 
-    // Also check itemName uniqueness — Item has @@unique([itemName]).
-    const existingByName = await db.item.findUnique({ where: { itemName: itemName.trim() } });
-    if (existingByName) {
-      return NextResponse.json({
-        error: `An item named "${itemName.trim()}" already exists with a different barcode (${existingByName.barcode || 'no barcode'}). Use a different name, or scan that existing item's barcode instead.`,
-        duplicate: true,
-        existingItemId: existingByName.id,
-        existingBarcode: existingByName.barcode,
-      }, { status: 409 });
-    }
-
-    // ---- Create the new Item ----
-    // year/lcNo/group/subGroup are non-optional in the schema — default to empty string.
-    // Admin can edit them later via the Item Information form.
-    item = await db.item.create({
-      data: {
-        barcode: barcode.trim(),
-        itemName: itemName.trim(),
-        year: '',
-        lcNo: '',
-        group: '',
-        subGroup: '',
-        price: typeof price === 'number' ? price : 0,
-        uom: uom || 'PCS',
-        createdBy: currentUser.id,
-        updatedBy: currentUser.id,
-      },
+    // ============================================================
+    // ★ STEP 1: DUPLICATE BARCODE CHECK (across ALL items, ALL entities)
+    // ============================================================
+    // A barcode is GLOBALLY unique — it cannot exist on any other item
+    // (neither as Item.barcode primary, nor as an ItemBarcode row anywhere).
+    // If it does → signal back to the user. This is the ONLY error case.
+    const existingItemWithPrimaryBarcode = await db.item.findUnique({
+      where: { barcode: cleanBarcode },
+      select: { id: true, itemName: true, barcode: true },
     });
-    const createdNewItem = true;
+    if (existingItemWithPrimaryBarcode) {
+      return NextResponse.json({
+        error: `Barcode "${cleanBarcode}" already exists for item "${existingItemWithPrimaryBarcode.itemName}". Use a different barcode.`,
+        duplicate: true,
+        duplicateType: 'barcode',
+        existingItemId: existingItemWithPrimaryBarcode.id,
+        existingItemName: existingItemWithPrimaryBarcode.itemName,
+      }, { status: 409 });
+    }
 
-    // ---- Upsert the Stock row ----
-    // 'add' mode = increment existing qty (typical "I just received new stock")
-    // 'set' mode = overwrite with exact qty (typical "after physical count, set correct qty")
+    // Also check ItemBarcode table — same barcode could be attached as an
+    // additional barcode to an item that has a different primary barcode.
+    const existingItemBarcodeRow = await (db as any).itemBarcode.findFirst({
+      where: { barcode: cleanBarcode },
+      select: { id: true, itemId: true, entityId: true },
+    });
+    if (existingItemBarcodeRow) {
+      // Fetch the parent item's name for a helpful message
+      const parentItem = await db.item.findUnique({
+        where: { id: existingItemBarcodeRow.itemId },
+        select: { itemName: true },
+      });
+      return NextResponse.json({
+        error: `Barcode "${cleanBarcode}" is already attached to item "${parentItem?.itemName || existingItemBarcodeRow.itemId}". Use a different barcode.`,
+        duplicate: true,
+        duplicateType: 'barcode',
+        existingItemId: existingItemBarcodeRow.itemId,
+        existingItemName: parentItem?.itemName,
+      }, { status: 409 });
+    }
+
+    // ============================================================
+    // ★ STEP 2: FIND OR CREATE THE ITEM BY NAME
+    // ============================================================
+    // Item name match is NOT a problem — it means "this is the same item, just
+    // add another barcode to it". One item can have many barcodes.
+    let item = await db.item.findUnique({
+      where: { itemName: cleanItemName },
+    });
+
+    let createdNewItem = false;
+    let attachedToExistingItem = false;
+
+    if (!item) {
+      // ---- Create a new Item with this barcode as primary ----
+      // year/lcNo/group/subGroup are non-optional in the schema — default to ''.
+      // Admin can edit them later via the Item Information form.
+      item = await db.item.create({
+        data: {
+          barcode: cleanBarcode,
+          itemName: cleanItemName,
+          year: '',
+          lcNo: '',
+          group: '',
+          subGroup: '',
+          price: typeof price === 'number' ? price : 0,
+          uom: uom || 'PCS',
+          createdBy: currentUser.id,
+          updatedBy: currentUser.id,
+        },
+      });
+      createdNewItem = true;
+    } else {
+      // ---- Existing item — attach this new barcode to it ----
+      // If the item has no primary barcode yet → set it as primary.
+      // Otherwise → record it as an additional barcode via ItemBarcode (per-entity).
+      if (!item.barcode) {
+        item = await db.item.update({
+          where: { id: item.id },
+          data: { barcode: cleanBarcode },
+        });
+      } else {
+        // Item already has a primary barcode; this new barcode becomes an
+        // additional barcode. We track per-entity qty on ItemBarcode — store
+        // the qty there too so delivery scans against this barcode work.
+        // Try upsert on (barcode, entityId) unique key.
+        try {
+          await (db as any).itemBarcode.upsert({
+            where: { barcode_entityId: { barcode: cleanBarcode, entityId } },
+            update: mode === 'add'
+              ? { quantity: { increment: qty } }
+              : { quantity: qty },
+            create: {
+              itemId: item.id,
+              barcode: cleanBarcode,
+              entityId,
+              quantity: qty,
+            },
+          });
+        } catch (e) {
+          // If ItemBarcode table doesn't exist on this DB yet, fall back gracefully
+          // (migrate-schema endpoint will create it). The Stock row below is the
+          // primary record anyway.
+          console.error('ItemBarcode upsert failed (table may not exist yet):', e);
+        }
+      }
+      attachedToExistingItem = true;
+    }
+
+    // ============================================================
+    // ★ STEP 3: UPSERT THE STOCK ROW
+    // ============================================================
+    // Stock is the primary stock tracker (per item × entity).
+    // 'add' = increment existing qty (typical "I just received new stock")
+    // 'set' = overwrite with exact qty (typical "after physical count, set correct qty")
     const stock = await db.stock.upsert({
       where: { itemId_entityId: { itemId: item.id, entityId } },
       update: mode === 'add'
@@ -149,24 +229,36 @@ export async function POST(request: NextRequest) {
       create: {
         itemId: item.id,
         entityId,
-        quantity: mode === 'add' ? Math.round(qty) : Math.round(qty),
+        quantity: Math.round(qty),
       },
       include: { item: true },
     });
+
+    // ============================================================
+    // ★ STEP 4: BUILD RESPONSE MESSAGE
+    // ============================================================
+    let message: string;
+    if (createdNewItem) {
+      message = `Created new item "${item.itemName}" with barcode ${cleanBarcode}. Stock set to ${stock.quantity} ${item.uom}.`;
+    } else if (attachedToExistingItem) {
+      message = `Attached new barcode ${cleanBarcode} to existing item "${item.itemName}". ${mode === 'add' ? `Added ${qty}` : `Set qty to ${qty}`}. New total: ${stock.quantity} ${item.uom}.`;
+    } else {
+      message = mode === 'add'
+        ? `Added ${qty} to item "${item.itemName}". New total: ${stock.quantity} ${item.uom}.`
+        : `Set stock for "${item.itemName}" to ${stock.quantity} ${item.uom}.`;
+    }
 
     return NextResponse.json({
       success: true,
       stock,
       item: { id: item.id, itemName: item.itemName, barcode: item.barcode, uom: item.uom },
       createdNewItem,
+      attachedToExistingItem,
+      addedBarcode: cleanBarcode,
       mode,
       addedQty: qty,
       newTotal: stock.quantity,
-      message: createdNewItem
-        ? `Created new item "${item.itemName}" (barcode: ${item.barcode}) and set stock to ${stock.quantity} ${item.uom}.`
-        : mode === 'add'
-          ? `Added ${qty} to existing item "${item.itemName}". New total: ${stock.quantity} ${item.uom}.`
-          : `Set stock for "${item.itemName}" to ${stock.quantity} ${item.uom}.`,
+      message,
     });
   } catch (error: any) {
     console.error('Add stock error:', error);
@@ -174,13 +266,7 @@ export async function POST(request: NextRequest) {
     // Prisma unique-constraint violation (P2002) — barcode already in use
     if (error?.code === 'P2002' && error?.meta?.target?.includes('barcode')) {
       return NextResponse.json(
-        { error: 'This barcode is already in use by another item. Use a unique barcode.' },
-        { status: 409 }
-      );
-    }
-    if (error?.code === 'P2002' && error?.meta?.target?.includes('itemName')) {
-      return NextResponse.json(
-        { error: 'An item with this name already exists. Use a different name or scan the existing item\'s barcode.' },
+        { error: 'This barcode is already in use. Use a unique barcode.', duplicate: true, duplicateType: 'barcode' },
         { status: 409 }
       );
     }

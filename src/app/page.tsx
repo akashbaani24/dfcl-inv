@@ -3846,9 +3846,9 @@ export default function Home() {
               {/* Info banner explaining behavior */}
               <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
                 <p className="font-semibold">How it works:</p>
-                <p>• Type a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong> for a brand-new item.</p>
-                <p>• On submit: if barcode or item name already exists → you'll get an error signal with the existing item's name.</p>
-                <p>• To top up stock on an existing item, use Item Information page or Upload Stock CSV instead.</p>
+                <p>• Type a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong>.</p>
+                <p>• If <strong>item name</strong> already exists → no problem. The new barcode attaches to that item (one item can have many barcodes).</p>
+                <p>• If <strong>barcode</strong> already exists anywhere → you'll get an error signal naming the existing item.</p>
                 <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty.</p>
               </div>
 
