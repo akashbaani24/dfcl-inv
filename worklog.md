@@ -373,3 +373,36 @@ Stage Summary:
     curl 'https://dfcl-inv.vercel.app/api/cron/backup?token=DFCL_BACKUP_2026'
   and looking for 'drive.uploaded: true' in the response.
 - Until env vars are set, the route still works — just falls back to DB-only backup and reports 'drive.uploaded: false' with reason.
+
+---
+Task ID: 14
+Agent: main
+Task: User request: "my entity stock e jeno admin manually stock entry kortey pare type kore. stock entry korar jonno Unique Barcode lagbe, Item Name, Qty Lagbe. sathe eta user rights e add kore dio."
+
+Work Log:
+- Used Explore subagent to map out: StockTable component (line 3502), stock API routes, Item/Stock/ItemBarcode Prisma models, auth permission system, user management form.
+- Found that the `canCreate` flag already exists on `UserMenuAccess` for the `myEntityStock` menu key — no schema migration needed.
+- Created new endpoint: POST /api/stock/add
+  * Auth: admin/manager always pass; regular users need canMenu(user, 'myEntityStock', 'create')
+  * Required body: barcode, itemName, quantity, entityId
+  * Optional: uom, price, mode ('add'|'set', default 'add')
+  * Behavior: find-or-create Item by barcode; upsert Stock with increment (add) or overwrite (set)
+  * Validates entity exists + user has entityAccess for non-privileged users
+  * Returns 409 with helpful message on barcode/itemName conflict
+- Modified StockTable component in page.tsx:
+  * Added state: addStockOpen, addStockSaving, addStockForm, addStockLookup
+  * Added useEffect with debounced barcode lookup — searches /api/items for exact barcode match, auto-fills itemName/uom/price when found
+  * Added handleAddStockSubmit — calls /api/stock/add, refreshes stock list on success
+  * Added '+ Add Stock' button in toolbar, gated on the same permission check the backend uses
+  * Added Add Stock dialog with: Barcode (with live lookup), Item Name, Qty, UoM, Price (optional), Mode toggle (Add/Set)
+- Verified TS compiles cleanly (no new errors; pre-existing errors about {} types still ignored by next.config.ts).
+- Committed as e9f6d77 v60-fix31.
+- Pushed to GitHub.
+
+Stage Summary:
+- Manual Add Stock feature now live:
+  * Admin/manager always see the button
+  * Regular users see it only if admin ticks the 'Create' checkbox on the 'My Entity Stock' row in User Management form
+  * Dialog supports: Barcode (required, live lookup), Item Name (required), Qty (required), UoM, Price (optional), Mode (Add/Set)
+  * On submit: find-or-create item by barcode → upsert stock → toast + auto-refresh
+- User needs to wait 2-3 min for Vercel deploy, then refresh the My Entity Stock page to see the new button.
