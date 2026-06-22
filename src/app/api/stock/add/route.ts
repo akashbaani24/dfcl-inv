@@ -93,44 +93,50 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // ---- Find or create the Item by barcode ----
-    // Try to find by Item.barcode (single primary barcode).
-    // If not found, create a new Item with sensible defaults for the non-optional columns.
+    // ---- Duplicate detection — user assumes their barcode is unique.
+    //    If the typed barcode ALREADY exists for another item → BLOCK with a clear
+    //    signal. User must use a different barcode (the "Add Stock" feature is for
+    //    brand-new items; to top up an existing item's stock, use the existing
+    //    item-update flow or upload-stock CSV).
     let item = await db.item.findUnique({ where: { barcode: barcode.trim() } });
-
-    let createdNewItem = false;
-    if (!item) {
-      // Verify itemName uniqueness too (Item has @@unique([itemName])).
-      const existingByName = await db.item.findUnique({ where: { itemName: itemName.trim() } });
-      if (existingByName) {
-        // An item with this name already exists but with a different barcode.
-        // Rather than silently swapping barcodes, return a clear error.
-        return NextResponse.json({
-          error: `An item named "${itemName.trim()}" already exists with a different barcode. Either scan that item's barcode instead, or use a different item name.`,
-          existingItemId: existingByName.id,
-          existingBarcode: existingByName.barcode,
-        }, { status: 409 });
-      }
-
-      // Create the new item with minimal required fields filled in.
-      // year/lcNo/group/subGroup are non-optional in the schema — default to empty string.
-      // Admin can edit them later via the Item Information form.
-      item = await db.item.create({
-        data: {
-          barcode: barcode.trim(),
-          itemName: itemName.trim(),
-          year: '',
-          lcNo: '',
-          group: '',
-          subGroup: '',
-          price: typeof price === 'number' ? price : 0,
-          uom: uom || 'PCS',
-          createdBy: currentUser.id,
-          updatedBy: currentUser.id,
-        },
-      });
-      createdNewItem = true;
+    if (item) {
+      return NextResponse.json({
+        error: `This barcode "${barcode.trim()}" already exists for item "${item.itemName}". Use a different barcode — Add Stock is for new items only.`,
+        duplicate: true,
+        existingItemId: item.id,
+        existingItemName: item.itemName,
+      }, { status: 409 });
     }
+
+    // Also check itemName uniqueness — Item has @@unique([itemName]).
+    const existingByName = await db.item.findUnique({ where: { itemName: itemName.trim() } });
+    if (existingByName) {
+      return NextResponse.json({
+        error: `An item named "${itemName.trim()}" already exists with a different barcode (${existingByName.barcode || 'no barcode'}). Use a different name, or scan that existing item's barcode instead.`,
+        duplicate: true,
+        existingItemId: existingByName.id,
+        existingBarcode: existingByName.barcode,
+      }, { status: 409 });
+    }
+
+    // ---- Create the new Item ----
+    // year/lcNo/group/subGroup are non-optional in the schema — default to empty string.
+    // Admin can edit them later via the Item Information form.
+    item = await db.item.create({
+      data: {
+        barcode: barcode.trim(),
+        itemName: itemName.trim(),
+        year: '',
+        lcNo: '',
+        group: '',
+        subGroup: '',
+        price: typeof price === 'number' ? price : 0,
+        uom: uom || 'PCS',
+        createdBy: currentUser.id,
+        updatedBy: currentUser.id,
+      },
+    });
+    const createdNewItem = true;
 
     // ---- Upsert the Stock row ----
     // 'add' mode = increment existing qty (typical "I just received new stock")

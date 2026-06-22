@@ -3522,72 +3522,19 @@ export default function Home() {
       price: '',
       mode: 'add' as 'add' | 'set',
     })
-    const [addStockLookup, setAddStockLookup] = useState<{ loading: boolean; found: any | null; error: string | null }>({ loading: false, found: null, error: null })
 
     const resetAddStockForm = () => {
       setAddStockForm({ barcode: '', itemName: '', quantity: '', uom: 'PCS', price: '', mode: 'add' })
-      setAddStockLookup({ loading: false, found: null, error: null })
     }
 
-    // ★ When the user types a barcode, debounce-check if the item already exists.
-    //    If found → show its current itemName + uom + current stock so the user knows they're adding to an existing item.
-    //    If not found → show "New item will be created" hint.
-    //
-    //    Uses the FAST /api/items/lookup-by-barcode endpoint (exact match on indexed
-    //    unique column → ~5ms). Do NOT use /api/items?search=... — that LIKE-searches
-    //    22k items across 9 columns and freezes the UI.
-    //    AbortController cancels in-flight requests when the user types more chars.
-    const lookupAbortRef = useRef<AbortController | null>(null)
-    useEffect(() => {
-      const bc = addStockForm.barcode.trim()
-      if (!bc) {
-        setAddStockLookup({ loading: false, found: null, error: null })
-        return
-      }
-      // Cancel any previous in-flight lookup
-      if (lookupAbortRef.current) {
-        lookupAbortRef.current.abort()
-      }
-      const controller = new AbortController()
-      lookupAbortRef.current = controller
-
-      setAddStockLookup({ loading: true, found: null, error: null })
-      const timer = setTimeout(async () => {
-        try {
-          const res = await fetch(`/api/items/lookup-by-barcode?barcode=${encodeURIComponent(bc)}`, {
-            signal: controller.signal,
-            headers: { Cookie: document.cookie },
-          })
-          if (!res.ok) {
-            if (controller.signal.aborted) return
-            setAddStockLookup({ loading: false, found: null, error: null })
-            return
-          }
-          const data = await res.json()
-          if (controller.signal.aborted) return
-          if (data.item) {
-            setAddStockLookup({ loading: false, found: data.item, error: null })
-            // Auto-fill itemName + uom + price from the matched item (only if user hasn't typed in those fields)
-            setAddStockForm(f => ({
-              ...f,
-              itemName: f.itemName || data.item.itemName,
-              uom: f.uom === 'PCS' ? (data.item.uom || 'PCS') : f.uom,
-              price: f.price === '' ? String(data.item.price ?? 0) : f.price,
-            }))
-          } else {
-            setAddStockLookup({ loading: false, found: null, error: null })
-          }
-        } catch (err: any) {
-          if (controller.signal.aborted || err?.name === 'AbortError') return
-          setAddStockLookup({ loading: false, found: null, error: null })
-        }
-      }, 400)
-      return () => {
-        clearTimeout(timer)
-        controller.abort()
-      }
-    }, [addStockForm.barcode])
-
+    // ★ NO live lookup on barcode typing.
+    //    User explicitly said: "type kore new barcode jhokhon type korbo, tokhon
+    //    system e taar check korar kichu nai. karon user je barcode type korbe
+    //    ta ekdom unique. jodi match kore tokhon add stock button e click korar
+    //    por ta signal dibe, je duplicate or already barcode exist kore."
+    //    → Duplicate detection happens ONLY at submit time on the backend.
+    //    → If duplicate, backend returns 409 with `duplicate: true` and we surface
+    //      the message via toast.
     const handleAddStockSubmit = async (e: React.FormEvent) => {
       e.preventDefault()
       if (!entityId) {
@@ -3634,7 +3581,14 @@ export default function Home() {
             })))
           }
         } else {
-          toast({ title: 'Failed', description: data.error || 'Could not add stock', variant: 'destructive' })
+          // ★ Duplicate barcode/name → backend returns 409 with `duplicate: true`.
+          //    Surface as a prominent error toast so the user gets a clear signal.
+          const isDuplicate = data.duplicate === true
+          toast({
+            title: isDuplicate ? '⚠️ Duplicate — already exists' : 'Failed',
+            description: data.error || 'Could not add stock',
+            variant: 'destructive',
+          })
         }
       } catch (err) {
         toast({ title: 'Failed', description: String(err), variant: 'destructive' })
@@ -3892,34 +3846,24 @@ export default function Home() {
               {/* Info banner explaining behavior */}
               <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
                 <p className="font-semibold">How it works:</p>
-                <p>• Enter a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong>.</p>
-                <p>• If the barcode matches an existing item → we add to that item's stock.</p>
-                <p>• If the barcode is new → a new item is created (you can fill in details later via Item Information).</p>
-                <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty (for physical count corrections).</p>
+                <p>• Type a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong> for a brand-new item.</p>
+                <p>• On submit: if barcode or item name already exists → you'll get an error signal with the existing item's name.</p>
+                <p>• To top up stock on an existing item, use Item Information page or Upload Stock CSV instead.</p>
+                <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty.</p>
               </div>
 
-              {/* Barcode */}
+              {/* Barcode — NO live lookup. User assumes their barcode is unique.
+                  Duplicate check happens at submit time on the backend; if it finds
+                  a match, the error toast signals it back. */}
               <div className="space-y-1">
                 <Label className="text-xs">Barcode <span className="text-destructive">*</span></Label>
                 <Input
-                  placeholder="Scan or type barcode..."
+                  placeholder="Type a unique barcode..."
                   value={addStockForm.barcode}
                   onChange={e => setAddStockForm(f => ({ ...f, barcode: e.target.value }))}
                   autoFocus
                   required
                 />
-                {/* ★ Only show feedback when an EXISTING item matches.
-                    New barcodes stay silent — no spinner, no "not found" warning.
-                    The user said: "type kore new barcode jhokhon type korbo, tokhon
-                    system e taar check korar kichu nai" — i.e. for new barcodes,
-                    don't bother showing any lookup status. */}
-                {addStockLookup.found && (
-                  <p className="text-[11px] text-green-700 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Existing item: <strong>{addStockLookup.found.itemName}</strong>
-                    {addStockLookup.found.uom && ` (${addStockLookup.found.uom})`}
-                    {addStockLookup.found.price != null && ` · ৳${addStockLookup.found.price}`}
-                  </p>
-                )}
               </div>
 
               {/* Item Name */}
@@ -3931,9 +3875,6 @@ export default function Home() {
                   onChange={e => setAddStockForm(f => ({ ...f, itemName: e.target.value }))}
                   required
                 />
-                {addStockLookup.found && (
-                  <p className="text-[11px] text-muted-foreground">Existing item — name shown for reference. Your typed value is ignored when barcode matches.</p>
-                )}
               </div>
 
               {/* Qty + UoM (side by side) */}
