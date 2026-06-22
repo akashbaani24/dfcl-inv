@@ -184,7 +184,7 @@ type ViewType =
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
   | 'groups' | 'subGroups'
   | 'bookingReasons'
-  | 'stockDetail' | 'stockEntry' | 'stockUpload'
+  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock'
   | 'settings'
 
 const ALL_COLUMNS = [
@@ -417,6 +417,82 @@ export default function Home() {
   const [delivering, setDelivering] = useState(false)
   const [showSalesDetailDialog, setShowSalesDetailDialog] = useState(false)
   const [selectedSalesOrder, setSelectedSalesOrder] = useState<any>(null)
+
+  // ★ Add Stock page state (was previously a popup dialog inside StockTable).
+  //    Now it's a dedicated full-page view (ViewType = 'addStock') with the
+  //    same logic — barcode uniqueness check at submit time, item name match
+  //    is OK (one item can have many barcodes).
+  const [addStockSaving, setAddStockSaving] = useState(false)
+  const [addStockForm, setAddStockForm] = useState({
+    barcode: '',
+    itemName: '',
+    quantity: '',
+    uom: 'PCS',
+    price: '',
+    mode: 'add' as 'add' | 'set',
+  })
+  const [addStockTargetEntity, setAddStockTargetEntity] = useState<{ id: string; name: string } | null>(null)
+  const [addStockReturnView, setAddStockReturnView] = useState<ViewType>('myEntityStock')
+
+  const resetAddStockForm = () => {
+    setAddStockForm({ barcode: '', itemName: '', quantity: '', uom: 'PCS', price: '', mode: 'add' })
+  }
+
+  const openAddStockPage = (entity: { id: string; name: string }, returnView: ViewType = 'myEntityStock') => {
+    setAddStockTargetEntity(entity)
+    setAddStockReturnView(returnView)
+    resetAddStockForm()
+    setCurrentView('addStock')
+  }
+
+  const handleAddStockSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!addStockTargetEntity) {
+      toast({ title: 'No entity selected', variant: 'destructive' })
+      return
+    }
+    if (!addStockForm.barcode.trim() || !addStockForm.itemName.trim() || !addStockForm.quantity) {
+      toast({ title: 'Barcode, Item Name, and Qty are all required', variant: 'destructive' })
+      return
+    }
+    setAddStockSaving(true)
+    try {
+      const res = await authFetch('/api/stock/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          barcode: addStockForm.barcode.trim(),
+          itemName: addStockForm.itemName.trim(),
+          quantity: parseFloat(addStockForm.quantity),
+          entityId: addStockTargetEntity.id,
+          uom: addStockForm.uom || 'PCS',
+          price: addStockForm.price ? parseFloat(addStockForm.price) : 0,
+          mode: addStockForm.mode,
+        }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({
+          title: 'Stock added',
+          description: data.message || `Stock updated for ${data.item?.itemName || 'item'}`,
+        })
+        resetAddStockForm()
+        setCurrentView(addStockReturnView)
+      } else {
+        const isDuplicate = data.duplicate === true
+        toast({
+          title: isDuplicate ? '⚠️ Duplicate barcode — already exists' : 'Failed',
+          description: data.error || 'Could not add stock',
+          variant: 'destructive',
+        })
+      }
+    } catch (err) {
+      toast({ title: 'Failed', description: String(err), variant: 'destructive' })
+    } finally {
+      setAddStockSaving(false)
+    }
+  }
+
   const [addPaymentForm, setAddPaymentForm] = useState({ amount: '', paymentType: 'cash', paymentMode: 'collection', paymentDate: new Date().toISOString().split('T')[0], chequeNo: '', bankName: '', notes: '' })
   const [showAddPaymentDialog, setShowAddPaymentDialog] = useState(false)
 
@@ -3482,6 +3558,178 @@ export default function Home() {
     </div>
   )
 
+  // ★ Dedicated full-page "Add Stock" form (was previously a popup dialog).
+  //    Same logic as the old dialog: barcode uniqueness check at submit time;
+  //    item-name match is OK (one item can have many barcodes).
+  const renderAddStockPage = () => {
+    // Default to workingEntity if addStockTargetEntity hasn't been set yet
+    // (e.g. user navigated here directly without clicking the button).
+    const targetEntity = addStockTargetEntity
+      || (workingEntity ? { id: workingEntity.id, name: workingEntity.name } : null)
+
+    return (
+      <div className="space-y-4 max-w-2xl mx-auto">
+        {/* Header with back button */}
+        <div className="flex items-center gap-3">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              resetAddStockForm()
+              setCurrentView(addStockReturnView)
+            }}
+            disabled={addStockSaving}
+          >
+            <ArrowLeft className="w-4 h-4 mr-2" />Back
+          </Button>
+          <div>
+            <h2 className="text-xl font-semibold">
+              Add Stock{targetEntity ? ` — ${targetEntity.name}` : ''}
+            </h2>
+            <p className="text-sm text-muted-foreground">
+              Type a unique barcode + item name + qty to add brand-new stock.
+            </p>
+          </div>
+        </div>
+
+        {!targetEntity ? (
+          <Card>
+            <CardContent className="text-center py-8">
+              <AlertTriangle className="w-10 h-10 text-yellow-500 mx-auto mb-3" />
+              <p className="font-medium mb-1">No entity selected</p>
+              <p className="text-sm text-muted-foreground mb-4">
+                Please go back to a stock page first so we know which entity to add stock to.
+              </p>
+              <Button onClick={() => setCurrentView('myEntityStock')}>
+                <ArrowLeft className="w-4 h-4 mr-2" />Go to My Entity Stock
+              </Button>
+            </CardContent>
+          </Card>
+        ) : (
+          <Card>
+            <CardContent className="pt-6">
+              <form onSubmit={handleAddStockSubmit} className="space-y-4">
+                {/* Info banner explaining behavior */}
+                <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
+                  <p className="font-semibold">How it works:</p>
+                  <p>• Type a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong>.</p>
+                  <p>• If <strong>item name</strong> already exists → no problem. The new barcode attaches to that item (one item can have many barcodes).</p>
+                  <p>• If <strong>barcode</strong> already exists anywhere → you'll get an error signal naming the existing item.</p>
+                  <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty.</p>
+                </div>
+
+                {/* Barcode — no live lookup; uniqueness is checked at submit time on the backend. */}
+                <div className="space-y-1">
+                  <Label className="text-sm">Barcode <span className="text-destructive">*</span></Label>
+                  <Input
+                    placeholder="Type a unique barcode..."
+                    value={addStockForm.barcode}
+                    onChange={e => setAddStockForm(f => ({ ...f, barcode: e.target.value }))}
+                    autoFocus
+                    required
+                    className="h-10"
+                  />
+                </div>
+
+                {/* Item Name */}
+                <div className="space-y-1">
+                  <Label className="text-sm">Item Name <span className="text-destructive">*</span></Label>
+                  <Input
+                    placeholder="e.g. AN-2005-22X22X4 Cushion"
+                    value={addStockForm.itemName}
+                    onChange={e => setAddStockForm(f => ({ ...f, itemName: e.target.value }))}
+                    required
+                    className="h-10"
+                  />
+                  <p className="text-[11px] text-muted-foreground">
+                    If this name matches an existing item, the new barcode will attach to that item — no separate new item created.
+                  </p>
+                </div>
+
+                {/* Qty + UoM (side by side) */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="space-y-1 col-span-2">
+                    <Label className="text-sm">Quantity <span className="text-destructive">*</span></Label>
+                    <Input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      placeholder="e.g. 10"
+                      value={addStockForm.quantity}
+                      onChange={e => setAddStockForm(f => ({ ...f, quantity: e.target.value }))}
+                      required
+                      className="h-10"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label className="text-sm">UoM</Label>
+                    <Input
+                      placeholder="PCS"
+                      value={addStockForm.uom}
+                      onChange={e => setAddStockForm(f => ({ ...f, uom: e.target.value }))}
+                      className="h-10"
+                    />
+                  </div>
+                </div>
+
+                {/* Price (optional, only used for new items) */}
+                <div className="space-y-1">
+                  <Label className="text-sm">Price (optional, only used for new items)</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="0.00"
+                    value={addStockForm.price}
+                    onChange={e => setAddStockForm(f => ({ ...f, price: e.target.value }))}
+                    className="h-10"
+                  />
+                </div>
+
+                {/* Mode toggle */}
+                <div className="space-y-1">
+                  <Label className="text-sm">Mode</Label>
+                  <Select value={addStockForm.mode} onValueChange={v => setAddStockForm(f => ({ ...f, mode: v as 'add' | 'set' }))}>
+                    <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="add">Add — increment existing stock (typical)</SelectItem>
+                      <SelectItem value="set">Set — overwrite with exact qty (corrections)</SelectItem>
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                {/* Action buttons */}
+                <div className="flex gap-2 pt-2 border-t">
+                  <Button
+                    type="button"
+                    variant="outline"
+                    onClick={() => {
+                      resetAddStockForm()
+                      setCurrentView(addStockReturnView)
+                    }}
+                    disabled={addStockSaving}
+                    className="flex-1"
+                  >
+                    <X className="w-4 h-4 mr-2" />Cancel
+                  </Button>
+                  <Button
+                    type="submit"
+                    disabled={addStockSaving || !addStockForm.barcode.trim() || !addStockForm.itemName.trim() || !addStockForm.quantity}
+                    className="flex-1"
+                  >
+                    {addStockSaving
+                      ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+                      : <><Plus className="w-4 h-4 mr-2" />Add Stock</>}
+                  </Button>
+                </div>
+              </form>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
+
   const renderAllEntityStockPage = () => (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
@@ -3511,91 +3759,8 @@ export default function Home() {
     const [stkPageSize, setStkPageSize] = useState<number>(20)
     const [stkCurrentPage, setStkCurrentPage] = useState(1)
 
-    // ★ Manual "Add Stock" dialog state
-    const [addStockOpen, setAddStockOpen] = useState(false)
-    const [addStockSaving, setAddStockSaving] = useState(false)
-    const [addStockForm, setAddStockForm] = useState({
-      barcode: '',
-      itemName: '',
-      quantity: '',
-      uom: 'PCS',
-      price: '',
-      mode: 'add' as 'add' | 'set',
-    })
-
-    const resetAddStockForm = () => {
-      setAddStockForm({ barcode: '', itemName: '', quantity: '', uom: 'PCS', price: '', mode: 'add' })
-    }
-
-    // ★ NO live lookup on barcode typing.
-    //    User explicitly said: "type kore new barcode jhokhon type korbo, tokhon
-    //    system e taar check korar kichu nai. karon user je barcode type korbe
-    //    ta ekdom unique. jodi match kore tokhon add stock button e click korar
-    //    por ta signal dibe, je duplicate or already barcode exist kore."
-    //    → Duplicate detection happens ONLY at submit time on the backend.
-    //    → If duplicate, backend returns 409 with `duplicate: true` and we surface
-    //      the message via toast.
-    const handleAddStockSubmit = async (e: React.FormEvent) => {
-      e.preventDefault()
-      if (!entityId) {
-        toast({ title: 'No entity selected', variant: 'destructive' })
-        return
-      }
-      if (!addStockForm.barcode.trim() || !addStockForm.itemName.trim() || !addStockForm.quantity) {
-        toast({ title: 'Barcode, Item Name, and Qty are all required', variant: 'destructive' })
-        return
-      }
-      setAddStockSaving(true)
-      try {
-        const res = await authFetch('/api/stock/add', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            barcode: addStockForm.barcode.trim(),
-            itemName: addStockForm.itemName.trim(),
-            quantity: parseFloat(addStockForm.quantity),
-            entityId,
-            uom: addStockForm.uom || 'PCS',
-            price: addStockForm.price ? parseFloat(addStockForm.price) : 0,
-            mode: addStockForm.mode,
-          }),
-        })
-        const data = await res.json()
-        if (res.ok) {
-          toast({
-            title: 'Stock added',
-            description: data.message || `Stock updated for ${data.item?.itemName || 'item'}`,
-          })
-          setAddStockOpen(false)
-          resetAddStockForm()
-          // Refresh stock list
-          const params = new URLSearchParams()
-          if (entityId) params.set('entityId', entityId)
-          const refetch = await authFetch(`/api/stock/by-entity?${params}`)
-          if (refetch.ok) {
-            const r = await refetch.json()
-            setStockData((r.stocks || []).map((s: any) => ({
-              itemId: s.itemId, itemName: s.item?.itemName || '', barcode: s.item?.barcode || null, itemCode: s.item?.itemCode || null,
-              group: s.item?.group || '', subGroup: s.item?.subGroup || '', uom: s.item?.uom || 'PCS',
-              entityName: s.entityName || '', quantity: s.quantity, bookedQty: s.bookedQty || 0, bookings: s.bookings || [],
-            })))
-          }
-        } else {
-          // ★ Duplicate barcode/name → backend returns 409 with `duplicate: true`.
-          //    Surface as a prominent error toast so the user gets a clear signal.
-          const isDuplicate = data.duplicate === true
-          toast({
-            title: isDuplicate ? '⚠️ Duplicate — already exists' : 'Failed',
-            description: data.error || 'Could not add stock',
-            variant: 'destructive',
-          })
-        }
-      } catch (err) {
-        toast({ title: 'Failed', description: String(err), variant: 'destructive' })
-      } finally {
-        setAddStockSaving(false)
-      }
-    }
+    // ★ No local Add Stock state here anymore — the form lives on a dedicated
+    //    page (ViewType='addStock'). The button below just navigates to that page.
 
     useEffect(() => {
       const fetchStock = async () => {
@@ -3701,9 +3866,10 @@ export default function Home() {
           <Input placeholder="Search by item name, barcode..." value={stkSearch} onChange={e => setStkSearch(e.target.value)} className="w-72" />
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={downloadFormat} title="Download CSV format for stock upload"><Download className="w-4 h-4 mr-1.5" />Format</Button>
-            {/* ★ Manual Add Stock — gated on canMenu(user, 'myEntityStock', 'create') */}
+            {/* ★ Manual Add Stock — gated on canMenu(user, 'myEntityStock', 'create').
+                Opens a dedicated page (not a popup) at ViewType='addStock'. */}
             {(user.role === 'admin' || user.role === 'manager' || (user.menuAccess?.find(m => m.menuKey === 'myEntityStock' && m.visible && (m.canCreate ?? user.canCreateItem)))) && (
-              <Button size="sm" onClick={() => { resetAddStockForm(); setAddStockOpen(true) }} title="Add stock by typing barcode + item name + qty">
+              <Button size="sm" onClick={() => openAddStockPage({ id: entityId, name: entityLabel }, entityId ? 'myEntityStock' : 'allEntityStock')} title="Add stock by typing barcode + item name + qty">
                 <Plus className="w-4 h-4 mr-1.5" />Add Stock
               </Button>
             )}
@@ -3833,110 +3999,6 @@ export default function Home() {
                 </div>
               )}
             </div>
-          </DialogContent>
-        </Dialog>
-
-        {/* ★ Manual Add Stock Dialog */}
-        <Dialog open={addStockOpen} onOpenChange={(o) => { setAddStockOpen(o); if (!o) resetAddStockForm() }}>
-          <DialogContent className="max-w-lg">
-            <DialogHeader>
-              <DialogTitle>Add Stock — {entityLabel}</DialogTitle>
-            </DialogHeader>
-            <form onSubmit={handleAddStockSubmit} className="space-y-3">
-              {/* Info banner explaining behavior */}
-              <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
-                <p className="font-semibold">How it works:</p>
-                <p>• Type a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong>.</p>
-                <p>• If <strong>item name</strong> already exists → no problem. The new barcode attaches to that item (one item can have many barcodes).</p>
-                <p>• If <strong>barcode</strong> already exists anywhere → you'll get an error signal naming the existing item.</p>
-                <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty.</p>
-              </div>
-
-              {/* Barcode — NO live lookup. User assumes their barcode is unique.
-                  Duplicate check happens at submit time on the backend; if it finds
-                  a match, the error toast signals it back. */}
-              <div className="space-y-1">
-                <Label className="text-xs">Barcode <span className="text-destructive">*</span></Label>
-                <Input
-                  placeholder="Type a unique barcode..."
-                  value={addStockForm.barcode}
-                  onChange={e => setAddStockForm(f => ({ ...f, barcode: e.target.value }))}
-                  autoFocus
-                  required
-                />
-              </div>
-
-              {/* Item Name */}
-              <div className="space-y-1">
-                <Label className="text-xs">Item Name <span className="text-destructive">*</span></Label>
-                <Input
-                  placeholder="e.g. AN-2005-22X22X4 Cushion"
-                  value={addStockForm.itemName}
-                  onChange={e => setAddStockForm(f => ({ ...f, itemName: e.target.value }))}
-                  required
-                />
-              </div>
-
-              {/* Qty + UoM (side by side) */}
-              <div className="grid grid-cols-3 gap-2">
-                <div className="space-y-1 col-span-2">
-                  <Label className="text-xs">Quantity <span className="text-destructive">*</span></Label>
-                  <Input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    placeholder="e.g. 10"
-                    value={addStockForm.quantity}
-                    onChange={e => setAddStockForm(f => ({ ...f, quantity: e.target.value }))}
-                    required
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label className="text-xs">UoM</Label>
-                  <Input
-                    placeholder="PCS"
-                    value={addStockForm.uom}
-                    onChange={e => setAddStockForm(f => ({ ...f, uom: e.target.value }))}
-                  />
-                </div>
-              </div>
-
-              {/* Price (optional, only used for new items) */}
-              <div className="space-y-1">
-                <Label className="text-xs">Price (optional, only used for new items)</Label>
-                <Input
-                  type="number"
-                  step="0.01"
-                  min="0"
-                  placeholder="0.00"
-                  value={addStockForm.price}
-                  onChange={e => setAddStockForm(f => ({ ...f, price: e.target.value }))}
-                />
-              </div>
-
-              {/* Mode toggle */}
-              <div className="space-y-1">
-                <Label className="text-xs">Mode</Label>
-                <Select value={addStockForm.mode} onValueChange={v => setAddStockForm(f => ({ ...f, mode: v as 'add' | 'set' }))}>
-                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="add">Add — increment existing stock (typical)</SelectItem>
-                    <SelectItem value="set">Set — overwrite with exact qty (corrections)</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <DialogFooter>
-                <Button type="button" variant="outline" onClick={() => { setAddStockOpen(false); resetAddStockForm() }} disabled={addStockSaving}>
-                  <X className="w-4 h-4 mr-2" />Cancel
-                </Button>
-                <Button type="submit" disabled={addStockSaving || !addStockForm.barcode.trim() || !addStockForm.itemName.trim() || !addStockForm.quantity}>
-                  {addStockSaving
-                    ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Saving...</>
-                    : <><Plus className="w-4 h-4 mr-2" />Add Stock</>}
-                </Button>
-              </DialogFooter>
-            </form>
           </DialogContent>
         </Dialog>
       </div>
@@ -9337,6 +9399,7 @@ export default function Home() {
       case 'itemPrice': return renderItemPricePage()
       case 'myEntityStock': return renderMyEntityStockPage()
       case 'allEntityStock': return renderAllEntityStockPage()
+      case 'addStock': return renderAddStockPage()
       case 'itemAdjustment': return renderItemAdjustmentPage()
       case 'newAdjustment': return renderNewAdjustmentPage()
       case 'transfer': return renderTransferPage()
