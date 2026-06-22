@@ -41,6 +41,13 @@ export async function GET(request: NextRequest) {
       stockWhere.entityId = { in: userEntityIds };
     }
 
+    // ★ Hide zero-or-negative stock rows — user request:
+    //    "kono barcode e jodi stock zero hoye jay, ta stock e jeno show na kore."
+    //    Rows where quantity <= 0 are filtered out at the DB level (faster + cleaner).
+    //    The row itself stays in the DB (so we can re-add stock later); it's just
+    //    not displayed in the list.
+    stockWhere.quantity = { gt: 0 };
+
     if (search.trim()) {
       stockWhere.item = {
         OR: [
