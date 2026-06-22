@@ -3532,40 +3532,60 @@ export default function Home() {
     // ★ When the user types a barcode, debounce-check if the item already exists.
     //    If found → show its current itemName + uom + current stock so the user knows they're adding to an existing item.
     //    If not found → show "New item will be created" hint.
+    //
+    //    Uses the FAST /api/items/lookup-by-barcode endpoint (exact match on indexed
+    //    unique column → ~5ms). Do NOT use /api/items?search=... — that LIKE-searches
+    //    22k items across 9 columns and freezes the UI.
+    //    AbortController cancels in-flight requests when the user types more chars.
+    const lookupAbortRef = useRef<AbortController | null>(null)
     useEffect(() => {
       const bc = addStockForm.barcode.trim()
       if (!bc) {
         setAddStockLookup({ loading: false, found: null, error: null })
         return
       }
+      // Cancel any previous in-flight lookup
+      if (lookupAbortRef.current) {
+        lookupAbortRef.current.abort()
+      }
+      const controller = new AbortController()
+      lookupAbortRef.current = controller
+
       setAddStockLookup({ loading: true, found: null, error: null })
       const timer = setTimeout(async () => {
         try {
-          const res = await authFetch(`/api/items?search=${encodeURIComponent(bc)}&pageSize=5`)
-          if (res.ok) {
-            const data = await res.json()
-            // Try exact barcode match first
-            const exact = (data.items || []).find((it: any) => it.barcode === bc)
-            if (exact) {
-              setAddStockLookup({ loading: false, found: exact, error: null })
-              // Auto-fill itemName + uom if user hasn't typed anything yet
-              setAddStockForm(f => ({
-                ...f,
-                itemName: f.itemName || exact.itemName,
-                uom: f.uom === 'PCS' ? (exact.uom || 'PCS') : f.uom,
-                price: f.price === '' ? String(exact.price ?? 0) : f.price,
-              }))
-            } else {
-              setAddStockLookup({ loading: false, found: null, error: null })
-            }
+          const res = await fetch(`/api/items/lookup-by-barcode?barcode=${encodeURIComponent(bc)}`, {
+            signal: controller.signal,
+            headers: { Cookie: document.cookie },
+          })
+          if (!res.ok) {
+            if (controller.signal.aborted) return
+            setAddStockLookup({ loading: false, found: null, error: null })
+            return
+          }
+          const data = await res.json()
+          if (controller.signal.aborted) return
+          if (data.item) {
+            setAddStockLookup({ loading: false, found: data.item, error: null })
+            // Auto-fill itemName + uom + price from the matched item (only if user hasn't typed in those fields)
+            setAddStockForm(f => ({
+              ...f,
+              itemName: f.itemName || data.item.itemName,
+              uom: f.uom === 'PCS' ? (data.item.uom || 'PCS') : f.uom,
+              price: f.price === '' ? String(data.item.price ?? 0) : f.price,
+            }))
           } else {
             setAddStockLookup({ loading: false, found: null, error: null })
           }
-        } catch {
+        } catch (err: any) {
+          if (controller.signal.aborted || err?.name === 'AbortError') return
           setAddStockLookup({ loading: false, found: null, error: null })
         }
-      }, 350)
-      return () => clearTimeout(timer)
+      }, 400)
+      return () => {
+        clearTimeout(timer)
+        controller.abort()
+      }
     }, [addStockForm.barcode])
 
     const handleAddStockSubmit = async (e: React.FormEvent) => {
