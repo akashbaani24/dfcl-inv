@@ -3511,6 +3511,118 @@ export default function Home() {
     const [stkPageSize, setStkPageSize] = useState<number>(20)
     const [stkCurrentPage, setStkCurrentPage] = useState(1)
 
+    // ★ Manual "Add Stock" dialog state
+    const [addStockOpen, setAddStockOpen] = useState(false)
+    const [addStockSaving, setAddStockSaving] = useState(false)
+    const [addStockForm, setAddStockForm] = useState({
+      barcode: '',
+      itemName: '',
+      quantity: '',
+      uom: 'PCS',
+      price: '',
+      mode: 'add' as 'add' | 'set',
+    })
+    const [addStockLookup, setAddStockLookup] = useState<{ loading: boolean; found: any | null; error: string | null }>({ loading: false, found: null, error: null })
+
+    const resetAddStockForm = () => {
+      setAddStockForm({ barcode: '', itemName: '', quantity: '', uom: 'PCS', price: '', mode: 'add' })
+      setAddStockLookup({ loading: false, found: null, error: null })
+    }
+
+    // ★ When the user types a barcode, debounce-check if the item already exists.
+    //    If found → show its current itemName + uom + current stock so the user knows they're adding to an existing item.
+    //    If not found → show "New item will be created" hint.
+    useEffect(() => {
+      const bc = addStockForm.barcode.trim()
+      if (!bc) {
+        setAddStockLookup({ loading: false, found: null, error: null })
+        return
+      }
+      setAddStockLookup({ loading: true, found: null, error: null })
+      const timer = setTimeout(async () => {
+        try {
+          const res = await authFetch(`/api/items?search=${encodeURIComponent(bc)}&pageSize=5`)
+          if (res.ok) {
+            const data = await res.json()
+            // Try exact barcode match first
+            const exact = (data.items || []).find((it: any) => it.barcode === bc)
+            if (exact) {
+              setAddStockLookup({ loading: false, found: exact, error: null })
+              // Auto-fill itemName + uom if user hasn't typed anything yet
+              setAddStockForm(f => ({
+                ...f,
+                itemName: f.itemName || exact.itemName,
+                uom: f.uom === 'PCS' ? (exact.uom || 'PCS') : f.uom,
+                price: f.price === '' ? String(exact.price ?? 0) : f.price,
+              }))
+            } else {
+              setAddStockLookup({ loading: false, found: null, error: null })
+            }
+          } else {
+            setAddStockLookup({ loading: false, found: null, error: null })
+          }
+        } catch {
+          setAddStockLookup({ loading: false, found: null, error: null })
+        }
+      }, 350)
+      return () => clearTimeout(timer)
+    }, [addStockForm.barcode])
+
+    const handleAddStockSubmit = async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (!entityId) {
+        toast({ title: 'No entity selected', variant: 'destructive' })
+        return
+      }
+      if (!addStockForm.barcode.trim() || !addStockForm.itemName.trim() || !addStockForm.quantity) {
+        toast({ title: 'Barcode, Item Name, and Qty are all required', variant: 'destructive' })
+        return
+      }
+      setAddStockSaving(true)
+      try {
+        const res = await authFetch('/api/stock/add', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            barcode: addStockForm.barcode.trim(),
+            itemName: addStockForm.itemName.trim(),
+            quantity: parseFloat(addStockForm.quantity),
+            entityId,
+            uom: addStockForm.uom || 'PCS',
+            price: addStockForm.price ? parseFloat(addStockForm.price) : 0,
+            mode: addStockForm.mode,
+          }),
+        })
+        const data = await res.json()
+        if (res.ok) {
+          toast({
+            title: 'Stock added',
+            description: data.message || `Stock updated for ${data.item?.itemName || 'item'}`,
+          })
+          setAddStockOpen(false)
+          resetAddStockForm()
+          // Refresh stock list
+          const params = new URLSearchParams()
+          if (entityId) params.set('entityId', entityId)
+          const refetch = await authFetch(`/api/stock/by-entity?${params}`)
+          if (refetch.ok) {
+            const r = await refetch.json()
+            setStockData((r.stocks || []).map((s: any) => ({
+              itemId: s.itemId, itemName: s.item?.itemName || '', barcode: s.item?.barcode || null, itemCode: s.item?.itemCode || null,
+              group: s.item?.group || '', subGroup: s.item?.subGroup || '', uom: s.item?.uom || 'PCS',
+              entityName: s.entityName || '', quantity: s.quantity, bookedQty: s.bookedQty || 0, bookings: s.bookings || [],
+            })))
+          }
+        } else {
+          toast({ title: 'Failed', description: data.error || 'Could not add stock', variant: 'destructive' })
+        }
+      } catch (err) {
+        toast({ title: 'Failed', description: String(err), variant: 'destructive' })
+      } finally {
+        setAddStockSaving(false)
+      }
+    }
+
     useEffect(() => {
       const fetchStock = async () => {
         setStkLoading(true)
@@ -3615,6 +3727,12 @@ export default function Home() {
           <Input placeholder="Search by item name, barcode..." value={stkSearch} onChange={e => setStkSearch(e.target.value)} className="w-72" />
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={downloadFormat} title="Download CSV format for stock upload"><Download className="w-4 h-4 mr-1.5" />Format</Button>
+            {/* ★ Manual Add Stock — gated on canMenu(user, 'myEntityStock', 'create') */}
+            {(user.role === 'admin' || user.role === 'manager' || (user.menuAccess?.find(m => m.menuKey === 'myEntityStock' && m.visible && (m.canCreate ?? user.canCreateItem)))) && (
+              <Button size="sm" onClick={() => { resetAddStockForm(); setAddStockOpen(true) }} title="Add stock by typing barcode + item name + qty">
+                <Plus className="w-4 h-4 mr-1.5" />Add Stock
+              </Button>
+            )}
             {(user.role === 'admin' || user.role === 'manager') && (
               <Button size="sm" onClick={() => setUploadOpen(true)}><Upload className="w-4 h-4 mr-1.5" />Upload Stock</Button>
             )}
@@ -3741,6 +3859,128 @@ export default function Home() {
                 </div>
               )}
             </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ★ Manual Add Stock Dialog */}
+        <Dialog open={addStockOpen} onOpenChange={(o) => { setAddStockOpen(o); if (!o) resetAddStockForm() }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Add Stock — {entityLabel}</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleAddStockSubmit} className="space-y-3">
+              {/* Info banner explaining behavior */}
+              <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
+                <p className="font-semibold">How it works:</p>
+                <p>• Enter a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong>.</p>
+                <p>• If the barcode matches an existing item → we add to that item's stock.</p>
+                <p>• If the barcode is new → a new item is created (you can fill in details later via Item Information).</p>
+                <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty (for physical count corrections).</p>
+              </div>
+
+              {/* Barcode */}
+              <div className="space-y-1">
+                <Label className="text-xs">Barcode <span className="text-destructive">*</span></Label>
+                <Input
+                  placeholder="Scan or type barcode..."
+                  value={addStockForm.barcode}
+                  onChange={e => setAddStockForm(f => ({ ...f, barcode: e.target.value }))}
+                  autoFocus
+                  required
+                />
+                {addStockLookup.loading && (
+                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
+                    <RefreshCw className="w-3 h-3 animate-spin" /> Checking barcode...
+                  </p>
+                )}
+                {!addStockLookup.loading && addStockForm.barcode.trim() && addStockLookup.found && (
+                  <p className="text-[11px] text-green-700 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Existing item: <strong>{addStockLookup.found.itemName}</strong>
+                    {addStockLookup.found.uom && ` (${addStockLookup.found.uom})`}
+                    {addStockLookup.found.price != null && ` · ৳${addStockLookup.found.price}`}
+                  </p>
+                )}
+                {!addStockLookup.loading && addStockForm.barcode.trim() && !addStockLookup.found && (
+                  <p className="text-[11px] text-amber-700 flex items-center gap-1">
+                    <AlertTriangle className="w-3 h-3" /> Barcode not found — a new item will be created.
+                  </p>
+                )}
+              </div>
+
+              {/* Item Name */}
+              <div className="space-y-1">
+                <Label className="text-xs">Item Name <span className="text-destructive">*</span></Label>
+                <Input
+                  placeholder="e.g. AN-2005-22X22X4 Cushion"
+                  value={addStockForm.itemName}
+                  onChange={e => setAddStockForm(f => ({ ...f, itemName: e.target.value }))}
+                  required
+                />
+                {addStockLookup.found && (
+                  <p className="text-[11px] text-muted-foreground">Existing item — name shown for reference. Your typed value is ignored when barcode matches.</p>
+                )}
+              </div>
+
+              {/* Qty + UoM (side by side) */}
+              <div className="grid grid-cols-3 gap-2">
+                <div className="space-y-1 col-span-2">
+                  <Label className="text-xs">Quantity <span className="text-destructive">*</span></Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    min="0"
+                    placeholder="e.g. 10"
+                    value={addStockForm.quantity}
+                    onChange={e => setAddStockForm(f => ({ ...f, quantity: e.target.value }))}
+                    required
+                  />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs">UoM</Label>
+                  <Input
+                    placeholder="PCS"
+                    value={addStockForm.uom}
+                    onChange={e => setAddStockForm(f => ({ ...f, uom: e.target.value }))}
+                  />
+                </div>
+              </div>
+
+              {/* Price (optional, only used for new items) */}
+              <div className="space-y-1">
+                <Label className="text-xs">Price (optional, only used for new items)</Label>
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="0.00"
+                  value={addStockForm.price}
+                  onChange={e => setAddStockForm(f => ({ ...f, price: e.target.value }))}
+                />
+              </div>
+
+              {/* Mode toggle */}
+              <div className="space-y-1">
+                <Label className="text-xs">Mode</Label>
+                <Select value={addStockForm.mode} onValueChange={v => setAddStockForm(f => ({ ...f, mode: v as 'add' | 'set' }))}>
+                  <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="add">Add — increment existing stock (typical)</SelectItem>
+                    <SelectItem value="set">Set — overwrite with exact qty (corrections)</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => { setAddStockOpen(false); resetAddStockForm() }} disabled={addStockSaving}>
+                  <X className="w-4 h-4 mr-2" />Cancel
+                </Button>
+                <Button type="submit" disabled={addStockSaving || !addStockForm.barcode.trim() || !addStockForm.itemName.trim() || !addStockForm.quantity}>
+                  {addStockSaving
+                    ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Saving...</>
+                    : <><Plus className="w-4 h-4 mr-2" />Add Stock</>}
+                </Button>
+              </DialogFooter>
+            </form>
           </DialogContent>
         </Dialog>
       </div>
