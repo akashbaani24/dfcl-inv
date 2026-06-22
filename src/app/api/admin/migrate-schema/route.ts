@@ -956,6 +956,53 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "Stock_entityId_idx" ON "Stock"("entityId")',
     description: 'Recreate index on Stock.entityId',
   },
+  // v64: Convert DeliveryItem.quantity from INTEGER to REAL so decimal
+  //      delivery quantities (e.g. 0.5 cushions) are preserved exactly.
+  //      Same table-recreate pattern as Stock above.
+  {
+    id: '2026_06_22_deliveryitem_qty_float_create_new',
+    sql: `CREATE TABLE IF NOT EXISTS "DeliveryItem_new" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "deliveryId" TEXT NOT NULL,
+      "salesOrderItemId" TEXT NOT NULL,
+      "itemId" TEXT NOT NULL,
+      "quantity" REAL NOT NULL,
+      "uom" TEXT,
+      CONSTRAINT "DeliveryItem_deliveryId_fkey_new" FOREIGN KEY ("deliveryId") REFERENCES "Delivery" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    )`,
+    description: 'Create new DeliveryItem table with quantity REAL',
+  },
+  {
+    id: '2026_06_22_deliveryitem_qty_float_copy_data',
+    sql: `INSERT OR IGNORE INTO "DeliveryItem_new" ("id", "deliveryId", "salesOrderItemId", "itemId", "quantity", "uom")
+          SELECT "id", "deliveryId", "salesOrderItemId", "itemId", CAST("quantity" AS REAL), "uom" FROM "DeliveryItem"`,
+    description: 'Copy existing DeliveryItem data to new table (integer → float)',
+  },
+  {
+    id: '2026_06_22_deliveryitem_qty_float_drop_old',
+    sql: 'DROP TABLE IF EXISTS "DeliveryItem"',
+    description: 'Drop old DeliveryItem table',
+  },
+  {
+    id: '2026_06_22_deliveryitem_qty_float_rename',
+    sql: 'ALTER TABLE "DeliveryItem_new" RENAME TO "DeliveryItem"',
+    description: 'Rename new DeliveryItem table to DeliveryItem',
+  },
+  {
+    id: '2026_06_22_deliveryitem_qty_float_recreate_idx_delivery',
+    sql: 'CREATE INDEX IF NOT EXISTS "DeliveryItem_deliveryId_idx" ON "DeliveryItem"("deliveryId")',
+    description: 'Recreate index on DeliveryItem.deliveryId',
+  },
+  {
+    id: '2026_06_22_deliveryitem_qty_float_recreate_idx_soitem',
+    sql: 'CREATE INDEX IF NOT EXISTS "DeliveryItem_salesOrderItemId_idx" ON "DeliveryItem"("salesOrderItemId")',
+    description: 'Recreate index on DeliveryItem.salesOrderItemId',
+  },
+  {
+    id: '2026_06_22_deliveryitem_qty_float_recreate_idx_item',
+    sql: 'CREATE INDEX IF NOT EXISTS "DeliveryItem_itemId_idx" ON "DeliveryItem"("itemId")',
+    description: 'Recreate index on DeliveryItem.itemId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

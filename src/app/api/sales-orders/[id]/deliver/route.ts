@@ -65,7 +65,7 @@ export async function POST(
       if (!soItem) {
         return NextResponse.json({ error: `Sales order item ${di.salesOrderItemId} not found` }, { status: 400 });
       }
-      const requested = parseInt(di.quantity) || 0;
+      const requested = parseFloat(di.quantity) || 0;
       if (requested <= 0) {
         return NextResponse.json({ error: `Quantity must be greater than 0 for "${soItem.item?.itemName || 'item'}"` }, { status: 400 });
       }
@@ -84,7 +84,7 @@ export async function POST(
     const aggregated = new Map<string, number>();
     for (const di of items as any[]) {
       const key = di.itemId;
-      aggregated.set(key, (aggregated.get(key) || 0) + (parseInt(di.quantity) || 0));
+      aggregated.set(key, (aggregated.get(key) || 0) + (parseFloat(di.quantity) || 0));
     }
     for (const [itemId, totalQty] of aggregated.entries()) {
       const current = await db.stock.findUnique({
@@ -125,7 +125,7 @@ export async function POST(
             create: (items as any[]).map(di => ({
               salesOrderItemId: di.salesOrderItemId,
               itemId: di.itemId,
-              quantity: parseInt(di.quantity) || 0,
+              quantity: parseFloat(di.quantity) || 0,
               uom: di.uom || null,
             })),
           },
@@ -137,7 +137,7 @@ export async function POST(
 
       // Decrement stock for each delivered item (atomic with stock guard)
       for (const di of items as any[]) {
-        const qty = parseInt(di.quantity) || 0;
+        const qty = parseFloat(di.quantity) || 0;
         if (qty <= 0) continue;
         try {
           await decrementStock(tx, di.itemId, salesOrder.entityId, qty);

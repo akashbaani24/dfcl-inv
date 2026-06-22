@@ -404,7 +404,7 @@ model DeliveryItem {
   deliveryId       String
   salesOrderItemId String
   itemId           String
-  quantity         Int
+  quantity         Float
   uom              String?
 
   delivery Delivery @relation(fields: [deliveryId], references: [id], onDelete: Cascade)
