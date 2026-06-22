@@ -3908,21 +3908,16 @@ export default function Home() {
                   autoFocus
                   required
                 />
-                {addStockLookup.loading && (
-                  <p className="text-[11px] text-muted-foreground flex items-center gap-1">
-                    <RefreshCw className="w-3 h-3 animate-spin" /> Checking barcode...
-                  </p>
-                )}
-                {!addStockLookup.loading && addStockForm.barcode.trim() && addStockLookup.found && (
+                {/* ★ Only show feedback when an EXISTING item matches.
+                    New barcodes stay silent — no spinner, no "not found" warning.
+                    The user said: "type kore new barcode jhokhon type korbo, tokhon
+                    system e taar check korar kichu nai" — i.e. for new barcodes,
+                    don't bother showing any lookup status. */}
+                {addStockLookup.found && (
                   <p className="text-[11px] text-green-700 flex items-center gap-1">
                     <CheckCircle2 className="w-3 h-3" /> Existing item: <strong>{addStockLookup.found.itemName}</strong>
                     {addStockLookup.found.uom && ` (${addStockLookup.found.uom})`}
                     {addStockLookup.found.price != null && ` · ৳${addStockLookup.found.price}`}
-                  </p>
-                )}
-                {!addStockLookup.loading && addStockForm.barcode.trim() && !addStockLookup.found && (
-                  <p className="text-[11px] text-amber-700 flex items-center gap-1">
-                    <AlertTriangle className="w-3 h-3" /> Barcode not found — a new item will be created.
                   </p>
                 )}
               </div>
