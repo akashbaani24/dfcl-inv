@@ -221,15 +221,17 @@ export async function POST(request: NextRequest) {
     // Stock is the primary stock tracker (per item × entity).
     // 'add' = increment existing qty (typical "I just received new stock")
     // 'set' = overwrite with exact qty (typical "after physical count, set correct qty")
+    // ★ NOTE: quantity is now Float (was Int) so decimal stock like 0.50 is
+    //   preserved exactly. Do NOT use Math.round() — it would lose precision.
     const stock = await db.stock.upsert({
       where: { itemId_entityId: { itemId: item.id, entityId } },
       update: mode === 'add'
         ? { quantity: { increment: qty } }
-        : { quantity: Math.round(qty) },
+        : { quantity: qty },
       create: {
         itemId: item.id,
         entityId,
-        quantity: Math.round(qty),
+        quantity: qty,
       },
       include: { item: true },
     });

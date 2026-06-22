@@ -269,7 +269,7 @@ model Stock {
   id       String @id @default(cuid())
   itemId   String
   entityId String
-  quantity Int    @default(0)
+  quantity Float  @default(0)
 
   item   Item   @relation(fields: [itemId], references: [id], onDelete: Cascade)
   entity Entity @relation(fields: [entityId], references: [id], onDelete: Cascade)

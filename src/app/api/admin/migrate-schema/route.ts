@@ -909,6 +909,53 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE Entity ADD COLUMN logo TEXT',
     description: 'Add logo column to Entity (base64 data URL)',
   },
+  // v63: Convert Stock.quantity from INTEGER to REAL (Float) so decimal stock
+  //      like 0.50 is preserved exactly. SQLite doesn't support ALTER COLUMN
+  //      type directly, so we use the table-recreate pattern:
+  //      1. Create new table with REAL type
+  //      2. Copy data (existing integer values are converted to floats)
+  //      3. Drop old table
+  //      4. Rename new table
+  //      5. Recreate the unique index + entityId index
+  //      All steps are idempotent — running them again is safe.
+  {
+    id: '2026_06_22_stock_qty_float_create_new',
+    sql: `CREATE TABLE IF NOT EXISTS "Stock_new" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "itemId" TEXT NOT NULL,
+      "entityId" TEXT NOT NULL,
+      "quantity" REAL NOT NULL DEFAULT 0,
+      CONSTRAINT "Stock_itemId_fkey_new" FOREIGN KEY ("itemId") REFERENCES "Item" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT "Stock_entityId_fkey_new" FOREIGN KEY ("entityId") REFERENCES "Entity" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    )`,
+    description: 'Create new Stock table with quantity REAL',
+  },
+  {
+    id: '2026_06_22_stock_qty_float_copy_data',
+    sql: `INSERT OR IGNORE INTO "Stock_new" ("id", "itemId", "entityId", "quantity")
+          SELECT "id", "itemId", "entityId", CAST("quantity" AS REAL) FROM "Stock"`,
+    description: 'Copy existing Stock data to new table (integer → float)',
+  },
+  {
+    id: '2026_06_22_stock_qty_float_drop_old',
+    sql: 'DROP TABLE IF EXISTS "Stock"',
+    description: 'Drop old Stock table',
+  },
+  {
+    id: '2026_06_22_stock_qty_float_rename',
+    sql: 'ALTER TABLE "Stock_new" RENAME TO "Stock"',
+    description: 'Rename new Stock table to Stock',
+  },
+  {
+    id: '2026_06_22_stock_qty_float_recreate_unique_idx',
+    sql: 'CREATE UNIQUE INDEX IF NOT EXISTS "Stock_itemId_entityId_key" ON "Stock"("itemId", "entityId")',
+    description: 'Recreate unique index on Stock(itemId, entityId)',
+  },
+  {
+    id: '2026_06_22_stock_qty_float_recreate_entity_idx',
+    sql: 'CREATE INDEX IF NOT EXISTS "Stock_entityId_idx" ON "Stock"("entityId")',
+    description: 'Recreate index on Stock.entityId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -159,8 +159,8 @@ export async function POST(request: NextRequest) {
       where: {
         itemId_entityId: { itemId, entityId },
       },
-      update: { quantity: parseInt(quantity) },
-      create: { itemId, entityId, quantity: parseInt(quantity) },
+      update: { quantity: parseFloat(quantity) },
+      create: { itemId, entityId, quantity: parseFloat(quantity) },
     });
 
     return NextResponse.json({ stock });
