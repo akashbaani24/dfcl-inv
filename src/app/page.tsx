@@ -541,6 +541,51 @@ export default function Home() {
   const [bookingDateTo, setBookingDateTo] = useState('')
   const [selectedBookingId, setSelectedBookingId] = useState<string | null>(null)
 
+  // ★ Booking Excel upload state — bulk import existing bookings from xlsx
+  const [bookingUploadOpen, setBookingUploadOpen] = useState(false)
+  const [bookingUploadBusy, setBookingUploadBusy] = useState(false)
+  const [bookingUploadResult, setBookingUploadResult] = useState<any>(null)
+  const bookingUploadFileRef = useRef<HTMLInputElement | null>(null)
+
+  const handleBookingUpload = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const file = bookingUploadFileRef.current?.files?.[0]
+    if (!file) {
+      toast({ title: 'No file selected', variant: 'destructive' })
+      return
+    }
+    setBookingUploadBusy(true)
+    setBookingUploadResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await authFetch('/api/bookings/upload', { method: 'POST', body: formData })
+      const data = await res.json()
+      if (res.ok) {
+        setBookingUploadResult(data)
+        toast({
+          title: 'Upload complete',
+          description: data.message || `Created ${data.created} booking(s).`,
+        })
+        // Refresh bookings list
+        fetchBookings()
+      } else {
+        toast({ title: 'Upload failed', description: data.error || 'Unknown error', variant: 'destructive' })
+        setBookingUploadResult({ error: data.error || 'Upload failed' })
+      }
+    } catch (err) {
+      toast({ title: 'Upload failed', description: String(err), variant: 'destructive' })
+      setBookingUploadResult({ error: String(err) })
+    } finally {
+      setBookingUploadBusy(false)
+    }
+  }
+
+  const handleDownloadBookingTemplate = () => {
+    // Trigger download of the template .xlsx from /api/bookings/template
+    window.open('/api/bookings/template', '_blank')
+  }
+
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number; view: ViewType } | null>(null)
   // Item search for transaction forms
   const [txItemSearch, setTxItemSearch] = useState('')
@@ -6590,6 +6635,12 @@ export default function Home() {
           <Button variant="outline" size="sm" onClick={handleExportBookings} disabled={exporting} style={{ display: hasPermission('menu', 'booking', 'export') ? '' : 'none' }}>
             {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}Excel
           </Button>
+          {/* ★ Bulk upload existing bookings from Excel — gated on booking 'Create' permission */}
+          {(user.role === 'admin' || user.role === 'manager' || (user.menuAccess?.find(m => m.menuKey === 'booking' && m.visible && (m.canCreate ?? user.canCreateItem)))) && (
+            <Button variant="outline" size="sm" onClick={() => { setBookingUploadResult(null); if (bookingUploadFileRef.current) bookingUploadFileRef.current.value = ''; setBookingUploadOpen(true) }} title="Bulk upload bookings from Excel">
+              <Upload className="w-4 h-4 mr-2" />Upload Excel
+            </Button>
+          )}
           <Button onClick={() => { resetBookingForm(); fetchCustomers(); setCurrentView('newBooking') }} className="gap-2"><Plus className="w-4 h-4" />New Booking</Button>
         </div>
       </div>
@@ -6652,6 +6703,106 @@ export default function Home() {
         </Table>
       </div>
       {/* Booking form is now a full page — see renderNewBookingPage() */}
+
+      {/* ★ Booking Excel Upload Dialog */}
+      <Dialog open={bookingUploadOpen} onOpenChange={setBookingUploadOpen}>
+        <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2"><Upload className="w-5 h-5" />Upload Bookings from Excel</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {/* Step 1: Download template */}
+            <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1.5">
+              <p className="font-semibold">📋 Step 1: Download the template (recommended)</p>
+              <p>The template shows the exact column format. Fill it with your existing booking data.</p>
+              <p>• One row per booking item.</p>
+              <p>• To put multiple items in one booking, give those rows the same <strong>bookingNo</strong> (or leave bookingNo blank — rows with same <strong>forEntity + customer + bookingDate + reason</strong> will auto-group).</p>
+              <p>• <strong>forEntity</strong> = outlet/customer-facing entity. <strong>fromEntity</strong> = source warehouse.</p>
+              <Button type="button" variant="outline" size="sm" onClick={handleDownloadBookingTemplate} className="mt-2">
+                <Download className="w-4 h-4 mr-1.5" />Download Template (.xlsx)
+              </Button>
+            </div>
+
+            {/* Step 2: Upload file */}
+            <div className="rounded-md border border-green-200 bg-green-50/50 p-3 text-xs text-green-900 space-y-1.5">
+              <p className="font-semibold">📋 Step 2: Upload your filled Excel</p>
+              <p>Accepted formats: .xlsx, .xls, .csv. Maximum size: ~10 MB.</p>
+            </div>
+
+            <form onSubmit={handleBookingUpload} className="space-y-3">
+              <div>
+                <Label className="text-xs">Excel File</Label>
+                <Input
+                  type="file"
+                  accept=".xlsx,.xls,.csv"
+                  ref={bookingUploadFileRef}
+                  required
+                />
+              </div>
+              <Button type="submit" disabled={bookingUploadBusy} className="w-full">
+                {bookingUploadBusy
+                  ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Uploading & Processing...</>
+                  : <><Upload className="w-4 h-4 mr-2" />Upload & Create Bookings</>}
+              </Button>
+            </form>
+
+            {/* Result */}
+            {bookingUploadResult && (
+              <div className={`rounded-md border p-3 text-xs ${bookingUploadResult.error ? 'bg-red-50 border-red-200 text-red-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+                {bookingUploadResult.error ? (
+                  <p>❌ {bookingUploadResult.error}</p>
+                ) : (
+                  <div className="space-y-2">
+                    <p className="font-semibold">✅ {bookingUploadResult.message}</p>
+                    <div className="grid grid-cols-3 gap-2 text-center">
+                      <div className="bg-white rounded p-2 border"><div className="text-lg font-bold text-green-700">{bookingUploadResult.created}</div><div className="text-[10px]">Created</div></div>
+                      <div className="bg-white rounded p-2 border"><div className="text-lg font-bold text-amber-700">{bookingUploadResult.skipped}</div><div className="text-[10px]">Skipped (duplicate)</div></div>
+                      <div className="bg-white rounded p-2 border"><div className="text-lg font-bold text-red-700">{bookingUploadResult.errors}</div><div className="text-[10px]">Errors</div></div>
+                    </div>
+
+                    {/* Created bookings */}
+                    {bookingUploadResult.bookings?.length > 0 && (
+                      <details className="mt-2" open>
+                        <summary className="cursor-pointer font-medium">Created bookings ({bookingUploadResult.bookings.length})</summary>
+                        <div className="mt-1 max-h-32 overflow-y-auto bg-white rounded border">
+                          <table className="w-full text-[11px]">
+                            <thead className="bg-muted/30"><tr><th className="text-left px-2 py-1">Booking No</th><th className="text-left px-2 py-1">Entity</th><th className="text-left px-2 py-1">Customer</th><th className="px-2 py-1">Items</th><th className="text-left px-2 py-1">Status</th></tr></thead>
+                            <tbody>
+                              {bookingUploadResult.bookings.map((b: any, i: number) => (
+                                <tr key={i} className="border-t"><td className="px-2 py-1 font-mono">{b.bookingNo}</td><td className="px-2 py-1">{b.entity}</td><td className="px-2 py-1">{b.customer || '—'}</td><td className="px-2 py-1 text-center">{b.itemCount}</td><td className="px-2 py-1 capitalize">{b.status}</td></tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </details>
+                    )}
+
+                    {/* Skipped bookings */}
+                    {bookingUploadResult.skippedDetails?.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer font-medium text-amber-800">Skipped ({bookingUploadResult.skippedDetails.length}) — click to see</summary>
+                        <ul className="list-disc list-inside mt-1 space-y-0.5">
+                          {bookingUploadResult.skippedDetails.map((s: any, i: number) => <li key={i}>Row {s.row}: {s.message}</li>)}
+                        </ul>
+                      </details>
+                    )}
+
+                    {/* Errors */}
+                    {bookingUploadResult.errorDetails?.length > 0 && (
+                      <details className="mt-2">
+                        <summary className="cursor-pointer font-medium text-red-800">Errors ({bookingUploadResult.errorDetails.length}) — click to see</summary>
+                        <ul className="list-disc list-inside mt-1 space-y-0.5 max-h-40 overflow-y-auto">
+                          {bookingUploadResult.errorDetails.map((e: any, i: number) => <li key={i}>Row {e.row}: {e.message}</li>)}
+                        </ul>
+                      </details>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
     )
   }
