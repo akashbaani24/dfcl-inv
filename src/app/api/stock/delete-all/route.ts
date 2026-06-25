@@ -25,10 +25,11 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // Permission: admin/manager only — this is a destructive operation.
-    if (currentUser.role !== 'admin' && currentUser.role !== 'manager') {
+    // Permission: ADMIN ONLY — this is a highly destructive operation.
+    // Per user's explicit request: "kebol admin" (only admin).
+    if (currentUser.role !== 'admin') {
       return NextResponse.json(
-        { error: 'Only admin or manager can delete all stock.' },
+        { error: 'Only admin can delete all stock.' },
         { status: 403 }
       );
     }

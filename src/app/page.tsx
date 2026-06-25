@@ -719,6 +719,54 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
     }
   }
 
+  // ★ Delete ALL stock across ALL entities (admin only).
+  // Two-step confirmation to prevent accidental wipes.
+  const [sfaDeleteAllBusy, setSfaDeleteAllBusy] = useState(false)
+  const handleSfaDeleteAllStock = async () => {
+    // Step 1: First confirmation dialog
+    const step1 = window.prompt(
+      '⚠️ DELETE ALL STOCK\n\n' +
+      'This will delete ALL stock rows across ALL entities.\n\n' +
+      'Items, entities, sales orders, deliveries, etc. will NOT be affected — only the Stock table.\n\n' +
+      'Type DELETE to confirm:'
+    )
+    if (step1 !== 'DELETE') {
+      if (step1 !== null) {
+        toast({ title: 'Cancelled', description: 'You must type DELETE to confirm. No changes made.' })
+      }
+      return
+    }
+    // Step 2: Second confirmation
+    if (!window.confirm(
+      '⚠️ FINAL CONFIRMATION\n\n' +
+      'Are you absolutely sure? This will set ALL entities\' stock to zero.\n\n' +
+      'Click OK to proceed, or Cancel to abort.'
+    )) {
+      toast({ title: 'Cancelled', description: 'No changes made.' })
+      return
+    }
+    setSfaDeleteAllBusy(true)
+    try {
+      const res = await authFetch('/api/stock/delete-all?confirm=YES_DELETE_ALL_STOCK', {
+        method: 'POST',
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({
+          title: 'All stock deleted',
+          description: data.message || `Deleted ${data.deleted} stock rows.`,
+        })
+        fetchStockForAll() // refresh the list
+      } else {
+        toast({ title: 'Failed', description: data.error || `HTTP ${res.status}`, variant: 'destructive' })
+      }
+    } catch (err) {
+      toast({ title: 'Failed', description: String(err), variant: 'destructive' })
+    } finally {
+      setSfaDeleteAllBusy(false)
+    }
+  }
+
 
   // Item form state
   const [itemForm, setItemForm] = useState({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' })
@@ -4015,6 +4063,21 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
             {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'create') || hasPermission('menu', 'myEntityStock', 'create')) && (
               <Button size="sm" onClick={() => { setSfaUploadResult(null); setCurrentView('stockUploadPage') }}>
                 <Upload className="w-4 h-4 mr-1.5" />Upload Stock
+              </Button>
+            )}
+            {/* ★ Delete All Stock — ADMIN ONLY (kebol admin per user request).
+                Two-step confirmation prevents accidental wipes. */}
+            {isAdmin && (
+              <Button
+                variant="destructive"
+                size="sm"
+                onClick={handleSfaDeleteAllStock}
+                disabled={sfaDeleteAllBusy}
+                title="Delete ALL stock rows across ALL entities (admin only)"
+              >
+                {sfaDeleteAllBusy
+                  ? <><RefreshCw className="w-4 h-4 mr-1.5 animate-spin" />Deleting...</>
+                  : <><Trash2 className="w-4 h-4 mr-1.5" />Delete All Stock</>}
               </Button>
             )}
           </div>
