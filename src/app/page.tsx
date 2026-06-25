@@ -4046,32 +4046,19 @@ AS Display Centre,720-500-D,0
     const totalPages = data?.totalPages || 0
     const canDelete = isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'delete') || hasPermission('menu', 'myEntityStock', 'delete')
 
-    // ★ Entity color mapper — assigns a pastel background color to each entity
-    //    based on a hash of the entity name. This makes it easy to visually
-    //    distinguish which rows belong to which entity.
-    const ENTITY_COLORS = [
-      { bg: 'bg-blue-50',      text: 'text-blue-700',      dot: 'bg-blue-400' },
-      { bg: 'bg-green-50',     text: 'text-green-700',     dot: 'bg-green-400' },
-      { bg: 'bg-amber-50',     text: 'text-amber-700',     dot: 'bg-amber-400' },
-      { bg: 'bg-purple-50',    text: 'text-purple-700',    dot: 'bg-purple-400' },
-      { bg: 'bg-pink-50',      text: 'text-pink-700',      dot: 'bg-pink-400' },
-      { bg: 'bg-cyan-50',      text: 'text-cyan-700',      dot: 'bg-cyan-400' },
-      { bg: 'bg-orange-50',    text: 'text-orange-700',    dot: 'bg-orange-400' },
-      { bg: 'bg-indigo-50',    text: 'text-indigo-700',    dot: 'bg-indigo-400' },
-      { bg: 'bg-teal-50',      text: 'text-teal-700',      dot: 'bg-teal-400' },
-      { bg: 'bg-rose-50',      text: 'text-rose-700',      dot: 'bg-rose-400' },
-      { bg: 'bg-lime-50',      text: 'text-lime-700',      dot: 'bg-lime-400' },
-      { bg: 'bg-fuchsia-50',   text: 'text-fuchsia-700',   dot: 'bg-fuchsia-400' },
+    // ★ Row color alternator — each row gets a different light color so
+    //    consecutive rows are visually distinct (user request: "Proti ta row
+    //    alada alada color hobe. Entity wise color chai nai")
+    const ROW_COLORS = [
+      'bg-white',
+      'bg-slate-50',
+      'bg-blue-50/30',
+      'bg-green-50/30',
+      'bg-amber-50/30',
+      'bg-purple-50/30',
+      'bg-pink-50/30',
+      'bg-cyan-50/30',
     ]
-    const entityColorCache = new Map<string, typeof ENTITY_COLORS[0]>()
-    const getEntityColor = (name: string) => {
-      if (entityColorCache.has(name)) return entityColorCache.get(name)!
-      let hash = 0
-      for (let i = 0; i < name.length; i++) hash = ((hash << 5) - hash + name.charCodeAt(i)) | 0
-      const color = ENTITY_COLORS[Math.abs(hash) % ENTITY_COLORS.length]
-      entityColorCache.set(name, color)
-      return color
-    }
 
     return (
       <div className="space-y-3 md:space-y-4">
@@ -4215,17 +4202,14 @@ AS Display Centre,720-500-D,0
               {stocks.map((s, i) => {
                 const booked = s.bookedQty || 0
                 const available = s.available || (s.quantity - booked)
-                const ec = getEntityColor(s.entityName)
+                const rowColor = booked > 0 ? 'bg-amber-50/40' : ROW_COLORS[i % ROW_COLORS.length]
                 return (
-                  <div key={s.id} className={`border rounded-lg p-3 space-y-2 ${booked > 0 ? 'bg-amber-50/40' : ec.bg}`}>
-                    {/* Item name + entity badge */}
+                  <div key={s.id} className={`border rounded-lg p-3 space-y-2 ${rowColor}`}>
+                    {/* Item name + entity */}
                     <div className="flex items-start justify-between gap-2">
                       <div className="flex-1 min-w-0">
                         <p className="font-medium text-sm truncate">{s.itemName}</p>
-                        <span className={`inline-flex items-center gap-1 mt-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium ${ec.bg} ${ec.text} border ${ec.dot.replace('bg-', 'border-')}/30`}>
-                          <span className={`w-1.5 h-1.5 rounded-full ${ec.dot}`} />
-                          {s.entityName}
-                        </span>
+                        <p className="text-[10px] text-muted-foreground">{s.entityName}</p>
                       </div>
                       {canDelete && (
                         <Button variant="ghost" size="sm" className="text-destructive h-6 w-6 p-0 shrink-0"
@@ -4294,16 +4278,11 @@ AS Display Centre,720-500-D,0
               ) : stocks.map((s, i) => {
                 const booked = s.bookedQty || 0
                 const available = s.available || (s.quantity - booked)
-                const ec = getEntityColor(s.entityName)
+                const rowColor = booked > 0 ? 'bg-amber-50/40' : ROW_COLORS[i % ROW_COLORS.length]
                 return (
-                <TableRow key={s.id} className={`hover:bg-muted/30 ${booked > 0 ? 'bg-amber-50/40' : ec.bg}`}>
+                <TableRow key={s.id} className={`${rowColor} hover:bg-muted/40`}>
                   <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
-                  <TableCell>
-                    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded text-xs font-medium ${ec.bg} ${ec.text} border ${ec.dot.replace('bg-', 'border-')}/30`}>
-                      <span className={`w-1.5 h-1.5 rounded-full ${ec.dot}`} />
-                      {s.entityName}
-                    </span>
-                  </TableCell>
+                  <TableCell className="font-medium text-sm">{s.entityName}</TableCell>
                   <TableCell className="text-xs">{s.group || '—'}</TableCell>
                   <TableCell className="text-xs">{s.subGroup || '—'}</TableCell>
                   <TableCell className="font-medium">{s.itemName}</TableCell>
