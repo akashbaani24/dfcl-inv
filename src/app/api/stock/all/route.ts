@@ -158,6 +158,35 @@ export async function GET(request: NextRequest) {
       }),
     ]);
 
+    // ── Fetch booking counts for the visible (paginated) stock rows ───────
+    // A booking is "active" if status is pending or processing (not cancelled/delivered)
+    // and tillDate is in the future (or null = no expiry).
+    // Key: `${itemId}|${entityId}` → total booked qty (matches the stock row's itemId + entityId).
+    const bookingMap = new Map<string, number>();
+    if (stocks.length > 0) {
+      const stockKeys = stocks.map(s => `${s.item.id}|${s.entity.id}`);
+      const now = new Date();
+      const bookingItems = await db.bookingItem.findMany({
+        where: {
+          booking: {
+            status: { in: ['pending', 'processing'] },
+            OR: [{ tillDate: null }, { tillDate: { gte: now } }],
+          },
+          // Filter by the (itemId, fromEntityId) pairs we care about.
+          // Prisma can't do composite IN, so we filter by itemId IN [...] only
+          // and then JS-filter by fromEntityId below. ~10 rows max for a page.
+          itemId: { in: stocks.map(s => s.item.id) },
+        },
+        select: { itemId: true, fromEntityId: true, quantity: true },
+      });
+      for (const bi of bookingItems) {
+        const key = `${bi.itemId}|${bi.fromEntityId}`;
+        if (stockKeys.includes(key)) {
+          bookingMap.set(key, (bookingMap.get(key) || 0) + bi.quantity);
+        }
+      }
+    }
+
     // ── Compute totals by entity + grand totals ───────────────────────────
     const byEntity = new Map<string, { entityName: string; totalQty: number; totalValue: number }>();
     let grandTotalQty = 0;
@@ -182,21 +211,27 @@ export async function GET(request: NextRequest) {
 
     // ── Build response ────────────────────────────────────────────────────
     return NextResponse.json({
-      stocks: stocks.map(s => ({
-        id: s.id,
-        entityId: s.entity.id,
-        entityName: s.entity.name,
-        itemId: s.item.id,
-        itemName: s.item.itemName,
-        itemCode: s.item.itemCode || '',
-        barcode: s.item.barcode || '',
-        group: s.item.group || '',
-        subGroup: s.item.subGroup || '',
-        uom: s.item.uom || 'PCS',
-        unitPrice: s.item.price || 0,
-        quantity: s.quantity,
-        stockValue: s.quantity * (s.item.price || 0),
-      })),
+      stocks: stocks.map(s => {
+        const bookingKey = `${s.item.id}|${s.entity.id}`;
+        const bookedQty = bookingMap.get(bookingKey) || 0;
+        return {
+          id: s.id,
+          entityId: s.entity.id,
+          entityName: s.entity.name,
+          itemId: s.item.id,
+          itemName: s.item.itemName,
+          itemCode: s.item.itemCode || '',
+          barcode: s.item.barcode || '',
+          group: s.item.group || '',
+          subGroup: s.item.subGroup || '',
+          uom: s.item.uom || 'PCS',
+          unitPrice: s.item.price || 0,
+          quantity: s.quantity,
+          bookedQty,
+          available: s.quantity - bookedQty,
+          stockValue: s.quantity * (s.item.price || 0),
+        };
+      }),
       total,
       page,
       pageSize,

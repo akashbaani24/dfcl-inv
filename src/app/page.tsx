@@ -3987,18 +3987,14 @@ export default function Home() {
         {/* Totals panel — always visible */}
         {data && (
           <div className="bg-card rounded-lg border p-4 space-y-3">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-              <div className="rounded-md border bg-muted/30 p-3">
+            <div className="grid grid-cols-2 gap-3">
+              <div className="rounded-md border bg-blue-50 border-blue-200 p-3">
                 <p className="text-xs text-muted-foreground">Grand Total Qty</p>
-                <p className="text-xl font-bold text-primary">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+                <p className="text-xl font-bold text-blue-700">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
               </div>
-              <div className="rounded-md border bg-muted/30 p-3">
-                <p className="text-xs text-muted-foreground">Grand Total Value</p>
-                <p className="text-xl font-bold text-primary">৳ {data.grandTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
-              </div>
-              <div className="rounded-md border bg-muted/30 p-3">
+              <div className="rounded-md border bg-green-50 border-green-200 p-3">
                 <p className="text-xs text-muted-foreground">Distinct Entities</p>
-                <p className="text-xl font-bold text-primary">{data.totalsByEntity.length}</p>
+                <p className="text-xl font-bold text-green-700">{data.totalsByEntity.length}</p>
               </div>
             </div>
             {data.totalsByEntity.length > 0 && (
@@ -4044,33 +4040,49 @@ export default function Home() {
                 <TableHead className="font-semibold">Sub Group</TableHead>
                 <TableHead className="font-semibold">Item Name</TableHead>
                 <TableHead className="font-semibold text-right">Qty</TableHead>
+                <TableHead className="font-semibold text-right">Booked</TableHead>
+                <TableHead className="font-semibold text-right">Available</TableHead>
                 <TableHead className="font-semibold">UoM</TableHead>
                 <TableHead className="font-semibold text-right">Unit Price</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sfaLoading ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
               ) : stocks.length === 0 ? (
-                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
-              ) : stocks.map((s, i) => (
-                <TableRow key={s.id} className="hover:bg-muted/30">
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
+              ) : stocks.map((s, i) => {
+                const booked = s.bookedQty || 0
+                const available = s.available || (s.quantity - booked)
+                return (
+                <TableRow key={s.id} className={`hover:bg-muted/30 ${booked > 0 ? 'bg-amber-50/40' : ''}`}>
                   <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
                   <TableCell className="font-medium">{s.entityName}</TableCell>
                   <TableCell className="text-xs">{s.group || '—'}</TableCell>
                   <TableCell className="text-xs">{s.subGroup || '—'}</TableCell>
                   <TableCell className="font-medium">{s.itemName}</TableCell>
                   <TableCell className="text-right font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell className="text-right">
+                    {booked > 0 ? (
+                      <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium">
+                        <Receipt className="w-3 h-3" />{booked}
+                      </span>
+                    ) : <span className="text-muted-foreground">0</span>}
+                  </TableCell>
+                  <TableCell className={`text-right font-bold ${available < 0 ? 'text-red-600' : available === 0 ? 'text-amber-600' : 'text-green-700'}`}>{available.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-xs">{s.uom}</TableCell>
                   <TableCell className="text-right font-mono">৳ {(s.unitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
-              ))}
+                )
+              })}
             </TableBody>
             {!sfaLoading && stocks.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 bg-muted/40 font-semibold">
                   <td colSpan={5} className="px-3 py-2 text-right">Page Total:</td>
                   <td className="px-3 py-2 text-right font-mono">{stocks.reduce((s, r) => s + r.quantity, 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                  <td className="px-3 py-2 text-right font-mono">{stocks.reduce((s, r) => s + (r.bookedQty || 0), 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                  <td className="px-3 py-2 text-right font-mono">{stocks.reduce((s, r) => s + (r.available || (r.quantity - (r.bookedQty || 0))), 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
                   <td colSpan={2}></td>
                 </tr>
               </tfoot>
