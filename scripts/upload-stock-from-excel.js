@@ -37,6 +37,7 @@ const ENTITY_CODE_MAP = {
   'DMB':  'Dynasty Furnishings Centre Ltd. (Elephant Road Branch)', // Movi Bazar = Elephant Road area
   'DU':   'Dynasty Furnishings Centre Ltd. (Uttara Branch)',
   'DM':   'Dynasty Furnishings Centre Ltd (Mirpur Branch)',
+  'DS':   'Dynasty Furnishings Centre Ltd (Sylhet Branch)',
   'DC':   'Dynasty Furnishings Centre Ltd (Chattogram Branch)',
   'DCM':  'Dynasty Furnishings Centre Ltd (Cumilla Branch)',
   'DR':   'Dynasty Furnishings Centre Ltd (Rajshahi Branch)',
