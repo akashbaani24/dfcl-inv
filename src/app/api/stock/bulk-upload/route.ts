@@ -101,7 +101,7 @@ export async function POST(request: NextRequest) {
 
     // Pre-load all items (by itemName). 22k items = ~3MB, acceptable.
     const allItems = await db.item.findMany({
-      select: { id: true, itemName: true, barcode: true, itemCode: true },
+      select: { id: true, itemName: true },
     });
     const itemByName = new Map<string, any>();
     for (const it of allItems) {
@@ -144,15 +144,10 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Find existing item by name
-      let item = itemByName.get(itemName.toLowerCase());
-      if (!item) {
-        // Try by barcode if provided
-        const barcode = getCell(row, 'barcode');
-        if (barcode) {
-          item = allItems.find(it => it.barcode === barcode);
-        }
-      }
+      // Find existing item by name (no barcode lookup — barcode is not used
+      // in Stock for All. User explicitly said: "stock for all e barcode er
+      // kono kaaz nai, ekhane kebol item er maddhome stock jana hobe")
+      const item = itemByName.get(itemName.toLowerCase());
       if (!item) {
         skipped++;
         notFoundList.push(`Row ${rowNo}: item "${itemName}" not found. To create new items, use the Add Stock page or Item Information upload.`);

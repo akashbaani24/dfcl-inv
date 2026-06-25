@@ -7,11 +7,11 @@ import { Prisma } from '@prisma/client';
 //
 // Returns a flat list of (item × entity) stock rows with:
 //   - entity name
-//   - item name + itemCode + barcode + group + subGroup + uom + price
+//   - item name + itemCode + group + subGroup + uom + price
 //   - quantity (Float — supports decimals like 0.5)
 //
 // Filters:
-//   search   — LIKE search across itemName, itemCode, barcode
+//   search   — LIKE search across itemName ONLY (barcode is NOT used)
 //   group    — exact match on item.group
 //   subGroup — exact match on item.subGroup
 //   entityId — restrict to one entity (optional)
@@ -74,18 +74,10 @@ export async function GET(request: NextRequest) {
 
     const itemFilters: Prisma.ItemWhereInput[] = [];
     if (search) {
-      // LIKE search across multiple columns — combined as OR (any one match is enough).
-      // ★ Note: Prisma's SQLite adapter does NOT support 'mode: insensitive'
-      //   (only PostgreSQL does). SQLite's LIKE is case-insensitive for ASCII
-      //   by default, so 'item' will match 'Item' / 'ITEM' automatically
-      //   for English text. Bangla text doesn't have case so no issue there.
-      itemFilters.push({
-        OR: [
-          { itemName: { contains: search } },
-          { itemCode: { contains: search } },
-          { barcode: { contains: search } },
-        ],
-      });
+      // LIKE search by itemName only — barcode is NOT used in Stock for All.
+      // User explicitly said: "stock for all e barcode er kono kaaz nai,
+      // ekhane kebol item er maddhome stock jana hobe"
+      itemFilters.push({ itemName: { contains: search } });
     }
     if (group) itemFilters.push({ group: { equals: group } });
     if (subGroup) itemFilters.push({ subGroup: { equals: subGroup } });
@@ -114,7 +106,6 @@ export async function GET(request: NextRequest) {
               id: true,
               itemName: true,
               itemCode: true,
-              barcode: true,
               group: true,
               subGroup: true,
               uom: true,
@@ -221,7 +212,6 @@ export async function GET(request: NextRequest) {
           itemId: s.item.id,
           itemName: s.item.itemName,
           itemCode: s.item.itemCode || '',
-          barcode: s.item.barcode || '',
           group: s.item.group || '',
           subGroup: s.item.subGroup || '',
           uom: s.item.uom || 'PCS',
@@ -229,7 +219,6 @@ export async function GET(request: NextRequest) {
           quantity: s.quantity,
           bookedQty,
           available: s.quantity - bookedQty,
-          stockValue: s.quantity * (s.item.price || 0),
         };
       }),
       total,
