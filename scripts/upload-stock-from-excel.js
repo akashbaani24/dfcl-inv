@@ -142,11 +142,10 @@ async function main() {
     const qty = parseFloat(qtyStr);
     if (!itemName || isNaN(qty)) { skippedRows++; continue; }
 
-    const barcode = String(r.barcode || '').trim();
     // CSV-escape: wrap values containing commas in double quotes
     const esc = (s) => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 
-    const csvLines.push([
+    csvLines.push([
       esc(entityName),
       esc(itemName),
       qty,
