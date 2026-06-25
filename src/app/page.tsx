@@ -681,11 +681,11 @@ export default function Home() {
   }
 
   const downloadSfaUploadTemplate = () => {
-    const csv = `entityName,itemName,quantity,barcode
-DEWS,720-500-A,10,OFF-DEWS-26061200
-DEWS,720-500-B,5,OFF-DEWS-26061197
-AS Display Centre,720-500-C,8,OFF-DEWS-26061199
-AS Display Centre,720-500-D,0,OFF-DEWS-26061198
+    const csv = `entityName,itemName,quantity
+DEWS,720-500-A,10
+DEWS,720-500-B,5
+AS Display Centre,720-500-C,8
+AS Display Centre,720-500-D,0
 `
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -4332,11 +4332,11 @@ AS Display Centre,720-500-D,0,OFF-DEWS-26061198
             <div className="rounded-md border border-blue-200 bg-blue-50/50 p-4 text-sm text-blue-900 space-y-3">
               <p className="font-semibold text-base">📋 CSV / Excel Format</p>
               <p className="text-xs">Header row required (row 1). Data starts from row 2.</p>
-              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,barcode
-DEWS,720-500-A,10,OFF-DEWS-26061200
-DEWS,720-500-B,5,OFF-DEWS-26061197
-AS Display Centre,720-500-C,8,OFF-DEWS-26061199
-AS Display Centre,720-500-D,0,OFF-DEWS-26061198</pre>
+              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity
+DEWS,720-500-A,10
+DEWS,720-500-B,5
+AS Display Centre,720-500-C,8
+AS Display Centre,720-500-D,0</pre>
             </div>
 
             {/* Column documentation */}
@@ -4369,11 +4369,11 @@ AS Display Centre,720-500-D,0,OFF-DEWS-26061198</pre>
                     <td className="px-3 py-2">Number (decimal supported like 0.5). In "Set" mode, qty=0 deletes the stock row entirely.</td>
                     <td className="px-3 py-2 font-mono">10</td>
                   </tr>
-                  <tr className="border-t">
-                    <td className="px-3 py-2 font-mono">barcode</td>
-                    <td className="px-3 py-2 text-muted-foreground">Optional</td>
-                    <td className="px-3 py-2">Item barcode (used to find existing item if itemName doesn't match).</td>
-                    <td className="px-3 py-2 font-mono">OFF-DEWS-26061200</td>
+                  <tr className="border-t bg-muted/20">
+                    <td className="px-3 py-2 font-mono text-muted-foreground">barcode</td>
+                    <td className="px-3 py-2 text-muted-foreground">Removed</td>
+                    <td className="px-3 py-2 text-muted-foreground">★ Auto-detected from Item Information — no need to include this column.</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground">—</td>
                   </tr>
                   <tr className="border-t bg-muted/20">
                     <td className="px-3 py-2 font-mono text-muted-foreground">itemCode</td>
@@ -4465,14 +4465,13 @@ AS Display Centre,720-500-D,0,OFF-DEWS-26061198</pre>
             {/* Format documentation */}
             <div className="rounded-md border border-blue-200 bg-blue-50/50 p-4 text-sm text-blue-900 space-y-2">
               <p className="font-semibold text-base">📋 CSV / Excel Format (header row required):</p>
-              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,barcode
-DEWS,720-500-A,10,OFF-DEWS-26061200
-DEWS,720-500-B,5,OFF-DEWS-26061197</pre>
+              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity
+DEWS,720-500-A,10
+DEWS,720-500-B,5</pre>
               <p className="text-xs">• <strong>entityName</strong> — must match an existing entity (e.g. "DEWS", "AS Display Centre").</p>
               <p className="text-xs">• <strong>itemName</strong> — must match an existing item in master table. Items not found are skipped.</p>
               <p className="text-xs">• <strong>quantity</strong> — number (decimal supported like 0.5).</p>
-              <p className="text-xs">• <strong>barcode</strong> — optional (used to find existing item if itemName doesn't match).</p>
-              <p className="text-xs">• <strong>itemCode, UoM, Group, Sub Group</strong> — all auto-detected from Item Information. No need to include these columns.</p>
+              <p className="text-xs">• <strong>barcode, itemCode, UoM, Group, Sub Group</strong> — all auto-detected from Item Information. No need to include these columns.</p>
               <p className="text-xs mt-2">
                 Need full format docs?
                 <Button variant="link" className="h-auto p-0 ml-1 align-baseline text-xs" onClick={() => setCurrentView('stockUploadFormat')}>

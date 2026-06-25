@@ -129,7 +129,7 @@ async function main() {
   console.log('');
   console.log('📝 Building CSV for upload...');
 
-  const csvLines = ['entityName,itemName,quantity,barcode'];
+  const csvLines = ['entityName,itemName,quantity'];
   let totalValidRows = 0;
   let skippedRows = 0;
   for (const r of rows) {
@@ -150,7 +150,6 @@ async function main() {
       esc(entityName),
       esc(itemName),
       qty,
-      esc(barcode),
     ].join(','));
     totalValidRows++;
   }
