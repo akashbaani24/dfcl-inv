@@ -178,6 +178,7 @@ export const MENU_ITEMS = [
   { key: 'itemPrice', label: 'Item Price', group: 'Function' },
   { key: 'myEntityStock', label: 'My Entity Stock', group: 'Stock View' },
   { key: 'allEntityStock', label: 'All Entity Stock', group: 'Stock View' },
+  { key: 'stockForAll', label: 'Stock for All', group: 'Stock View' },
   { key: 'itemAdjustment', label: 'Item Adjustment', group: 'Function' },
   { key: 'transfer', label: 'Transfer', group: 'Function' },
   { key: 'receive', label: 'Receive', group: 'Function' },

@@ -184,7 +184,7 @@ type ViewType =
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
   | 'groups' | 'subGroups'
   | 'bookingReasons'
-  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock'
+  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock' | 'stockForAll'
   | 'settings'
 
 const ALL_COLUMNS = [
@@ -209,6 +209,7 @@ const ALL_MENU_ITEMS = [
   { key: 'itemPrice', label: 'Item Price', group: 'Function' },
   { key: 'myEntityStock', label: 'My Entity Stock', group: 'Stock View' },
   { key: 'allEntityStock', label: 'All Entity Stock', group: 'Stock View' },
+  { key: 'stockForAll', label: 'Stock for All', group: 'Stock View' },
   { key: 'itemAdjustment', label: 'Item Adjustment', group: 'Function' },
   { key: 'transfer', label: 'Transfer', group: 'Function' },
   { key: 'receive', label: 'Receive', group: 'Function' },
@@ -621,6 +622,21 @@ export default function Home() {
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
+  // ★ Stock for All page state — declared here (values set later via
+  //    fetchStockForAll, after the toast/useCallback hooks are defined).
+  //    The actual fetch + state setter live below the toast declaration.
+  const [sfaLoading, setSfaLoading] = useState(false)
+  const [sfaSearch, setSfaSearch] = useState('')
+  const [sfaGroup, setSfaGroup] = useState('')
+  const [sfaSubGroup, setSfaSubGroup] = useState('')
+  const [sfaEntityId, setSfaEntityId] = useState('')
+  const [sfaData, setSfaData] = useState<any>(null)
+  const [sfaPage, setSfaPage] = useState(1)
+  const [sfaPageSize, setSfaPageSize] = useState(50)
+  const [sfaShowTotals, setSfaShowTotals] = useState(false)
+  const [sfaDebouncedSearch, setSfaDebouncedSearch] = useState('')
+
+
   // Item form state
   const [itemForm, setItemForm] = useState({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' })
   const [editingItemId, setEditingItemId] = useState<string | null>(null)
@@ -769,6 +785,46 @@ export default function Home() {
   const [showTickerSettings, setShowTickerSettings] = useState(false)
 
   const { toast } = useToast()
+
+  // ★ Stock for All — debounced search + fetch effect.
+  //    Declared AFTER toast so we can use it in error handlers.
+  useEffect(() => {
+    const t = setTimeout(() => { setSfaDebouncedSearch(sfaSearch); setSfaPage(1) }, 400)
+    return () => clearTimeout(t)
+  }, [sfaSearch])
+
+  const fetchStockForAll = useCallback(async () => {
+    setSfaLoading(true)
+    try {
+      const params = new URLSearchParams({
+        page: String(sfaPage),
+        pageSize: String(sfaPageSize),
+      })
+      if (sfaDebouncedSearch) params.set('search', sfaDebouncedSearch)
+      if (sfaGroup) params.set('group', sfaGroup)
+      if (sfaSubGroup) params.set('subGroup', sfaSubGroup)
+      if (sfaEntityId) params.set('entityId', sfaEntityId)
+      const res = await authFetch(`/api/stock/all?${params}`)
+      if (res.ok) {
+        setSfaData(await res.json())
+      } else {
+        const err = await res.json().catch(() => ({}))
+        toast({ title: 'Failed to load stock', description: err.error || `HTTP ${res.status}`, variant: 'destructive' })
+        setSfaData(null)
+      }
+    } catch (e) {
+      toast({ title: 'Failed to load stock', description: String(e), variant: 'destructive' })
+    } finally {
+      setSfaLoading(false)
+    }
+  }, [sfaPage, sfaPageSize, sfaDebouncedSearch, sfaGroup, sfaSubGroup, sfaEntityId, toast])
+
+  useEffect(() => {
+    if (currentView === 'stockForAll') {
+      fetchStockForAll()
+    }
+  }, [currentView, sfaPage, sfaPageSize, sfaDebouncedSearch, sfaGroup, sfaSubGroup, sfaEntityId, fetchStockForAll])
+
 
   // ★ Persist currentView + workingEntity in localStorage so refresh keeps the same page
   const setCurrentView = (view: ViewType) => {
@@ -3295,6 +3351,7 @@ export default function Home() {
     { key: 'itemPrice' as ViewType, label: 'Item Price', bnLabel: 'আইটেম মূল্য', icon: TrendingUp },
     { key: 'myEntityStock' as ViewType, label: 'My Entity Stock', bnLabel: 'আমার স্টক', icon: Warehouse },
     { key: 'allEntityStock' as ViewType, label: 'All Entity Stock', bnLabel: 'সব স্টক', icon: BarChart3 },
+    { key: 'stockForAll' as ViewType, label: 'Stock for All', bnLabel: 'সব কোম্পানির স্টক', icon: Database },
     { key: 'itemAdjustment' as ViewType, label: 'Item Adjustment', bnLabel: 'আইটেম সমন্বয়', icon: Settings2 },
     { key: 'transfer' as ViewType, label: 'Transfer', bnLabel: 'ট্রান্সফার', icon: ArrowRightLeft },
     { key: 'receive' as ViewType, label: 'Receive', bnLabel: 'গ্রহণ', icon: ArrowDownToLine },
@@ -3822,6 +3879,227 @@ export default function Home() {
       <StockTable entityId={selectedEntityId === 'all' ? '' : selectedEntityId} entityLabel="All Entities" />
     </div>
   )
+
+  // ★ Stock for All — company-wide stock view with filters + grand totals.
+  //    User request: 'ekta menu koro Stock for All, ekhane kebol item code,
+  //    all company stock, kon entity te kon item ki poriman ache, unit price
+  //    soho dekha jay. filter wise jeno total stock ta show kore.'
+  const renderStockForAllPage = () => {
+    const data = sfaData
+    const stocks = data?.stocks || []
+    const totalPages = data?.totalPages || 0
+
+    return (
+      <div className="space-y-4">
+        {/* Header */}
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-xl font-semibold">Stock for All</h2>
+            <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
+          </div>
+          <Button variant={sfaShowTotals ? 'default' : 'outline'} size="sm" onClick={() => setSfaShowTotals(!sfaShowTotals)}>
+            <BarChart3 className="w-4 h-4 mr-2" />{sfaShowTotals ? 'Hide' : 'Show'} Total Stock
+          </Button>
+        </div>
+
+        {/* Filters */}
+        <div className="bg-card rounded-lg border p-3 space-y-3">
+          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
+            {/* Search */}
+            <div className="space-y-1">
+              <Label className="text-xs">Filter (Item Code / Name / Barcode)</Label>
+              <Input
+                placeholder="Search..."
+                value={sfaSearch}
+                onChange={e => setSfaSearch(e.target.value)}
+              />
+            </div>
+            {/* Group dropdown */}
+            <div className="space-y-1">
+              <Label className="text-xs">Group</Label>
+              <Select value={sfaGroup || '__all__'} onValueChange={v => { setSfaGroup(v === '__all__' ? '' : v); setSfaSubGroup(''); setSfaPage(1) }}>
+                <SelectTrigger><SelectValue placeholder="All Groups" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Groups</SelectItem>
+                  {(data?.groups || []).map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* SubGroup dropdown */}
+            <div className="space-y-1">
+              <Label className="text-xs">Sub Group</Label>
+              <Select value={sfaSubGroup || '__all__'} onValueChange={v => { setSfaSubGroup(v === '__all__' ? '' : v); setSfaPage(1) }}>
+                <SelectTrigger><SelectValue placeholder="All Sub Groups" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Sub Groups</SelectItem>
+                  {(data?.subGroups || []).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+            {/* Entity dropdown */}
+            <div className="space-y-1">
+              <Label className="text-xs">Entity</Label>
+              <Select value={sfaEntityId || '__all__'} onValueChange={v => { setSfaEntityId(v === '__all__' ? '' : v); setSfaPage(1) }}>
+                <SelectTrigger><SelectValue placeholder="All Entities" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__all__">All Entities</SelectItem>
+                  {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
+                </SelectContent>
+              </Select>
+            </div>
+          </div>
+          {/* Clear filters */}
+          {(sfaSearch || sfaGroup || sfaSubGroup || sfaEntityId) && (
+            <div className="flex items-center justify-between text-xs">
+              <p className="text-muted-foreground">
+                Showing {data?.total || 0} stock rows
+                {sfaGroup && ` · Group: ${sfaGroup}`}
+                {sfaSubGroup && ` · Sub Group: ${sfaSubGroup}`}
+                {sfaEntityId && ` · Entity: ${entities.find(e => e.id === sfaEntityId)?.name || ''}`}
+              </p>
+              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSfaSearch(''); setSfaGroup(''); setSfaSubGroup(''); setSfaEntityId(''); setSfaPage(1) }}>
+                <X className="w-3 h-3 mr-1" />Clear Filters
+              </Button>
+            </div>
+          )}
+        </div>
+
+        {/* Totals panel (collapsible) */}
+        {sfaShowTotals && data && (
+          <div className="bg-card rounded-lg border p-4 space-y-3">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">Grand Total Qty</p>
+                <p className="text-xl font-bold text-primary">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">Grand Total Value</p>
+                <p className="text-xl font-bold text-primary">৳ {data.grandTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</p>
+              </div>
+              <div className="rounded-md border bg-muted/30 p-3">
+                <p className="text-xs text-muted-foreground">Distinct Entities</p>
+                <p className="text-xl font-bold text-primary">{data.totalsByEntity.length}</p>
+              </div>
+            </div>
+            {data.totalsByEntity.length > 0 && (
+              <div className="overflow-x-auto rounded-md border">
+                <table className="w-full text-xs">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="text-left px-3 py-2 font-semibold">Entity</th>
+                      <th className="text-right px-3 py-2 font-semibold">Total Qty</th>
+                      <th className="text-right px-3 py-2 font-semibold">Total Value (৳)</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.totalsByEntity.map((t, i) => (
+                      <tr key={i} className="border-t hover:bg-muted/30">
+                        <td className="px-3 py-2 font-medium">{t.entityName}</td>
+                        <td className="px-3 py-2 text-right font-mono">{t.totalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                        <td className="px-3 py-2 text-right font-mono">{t.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t-2 bg-muted/30 font-semibold">
+                      <td className="px-3 py-2">Grand Total</td>
+                      <td className="px-3 py-2 text-right font-mono">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-2 text-right font-mono">৳ {data.grandTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Stock table */}
+        <div className="border rounded-lg overflow-hidden">
+          <Table>
+            <TableHeader>
+              <TableRow className="bg-muted/50">
+                <TableHead className="font-semibold">Sl</TableHead>
+                <TableHead className="font-semibold">Entity</TableHead>
+                <TableHead className="font-semibold">Group</TableHead>
+                <TableHead className="font-semibold">Sub Group</TableHead>
+                <TableHead className="font-semibold">Item Code</TableHead>
+                <TableHead className="font-semibold">Item Name</TableHead>
+                <TableHead className="font-semibold text-right">Qty</TableHead>
+                <TableHead className="font-semibold">UoM</TableHead>
+                <TableHead className="font-semibold text-right">Unit Price</TableHead>
+                <TableHead className="font-semibold text-right">Stock Value</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {sfaLoading ? (
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+              ) : stocks.length === 0 ? (
+                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
+              ) : stocks.map((s, i) => (
+                <TableRow key={s.id} className="hover:bg-muted/30">
+                  <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
+                  <TableCell className="font-medium">{s.entityName}</TableCell>
+                  <TableCell className="text-xs">{s.group || '—'}</TableCell>
+                  <TableCell className="text-xs">{s.subGroup || '—'}</TableCell>
+                  <TableCell className="text-xs font-mono">{s.itemCode || '—'}</TableCell>
+                  <TableCell className="font-medium">{s.itemName}</TableCell>
+                  <TableCell className="text-right font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell className="text-xs">{s.uom}</TableCell>
+                  <TableCell className="text-right font-mono">৳ {(s.unitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell className="text-right font-mono font-semibold">৳ {(s.stockValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+            {!sfaLoading && stocks.length > 0 && (
+              <tfoot>
+                <tr className="border-t-2 bg-muted/40 font-semibold">
+                  <td colSpan={6} className="px-3 py-2 text-right">Page Total:</td>
+                  <td className="px-3 py-2 text-right font-mono">{stocks.reduce((s, r) => s + r.quantity, 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                  <td colSpan={2}></td>
+                  <td className="px-3 py-2 text-right font-mono">৳ {stocks.reduce((s, r) => s + (r.stockValue || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                </tr>
+              </tfoot>
+            )}
+          </Table>
+        </div>
+
+        {/* Pagination */}
+        {data && data.total > 0 && (
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-2">
+              <p className="text-sm text-muted-foreground">
+                Showing {(sfaPage - 1) * sfaPageSize + 1}–{Math.min(sfaPage * sfaPageSize, data.total)} of {data.total}
+              </p>
+              <Select value={String(sfaPageSize)} onValueChange={v => { setSfaPageSize(parseInt(v)); setSfaPage(1) }}>
+                <SelectTrigger className="w-[80px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="20">20</SelectItem>
+                  <SelectItem value="50">50</SelectItem>
+                  <SelectItem value="100">100</SelectItem>
+                  <SelectItem value="200">200</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+            {totalPages > 1 && (
+              <div className="flex gap-1">
+                <Button variant="outline" size="sm" disabled={sfaPage === 1} onClick={() => setSfaPage(p => p - 1)}>Prev</Button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1)
+                  .filter(p => p === 1 || p === totalPages || Math.abs(p - sfaPage) <= 1)
+                  .map((p, idx, arr) => (
+                    <React.Fragment key={p}>
+                      {idx > 0 && arr[idx - 1] !== p - 1 && <span className="px-1 py-1 text-sm text-muted-foreground">...</span>}
+                      <Button variant={p === sfaPage ? 'default' : 'outline'} size="sm" onClick={() => setSfaPage(p)}>{p}</Button>
+                    </React.Fragment>
+                  ))}
+                <Button variant="outline" size="sm" disabled={sfaPage === totalPages} onClick={() => setSfaPage(p => p + 1)}>Next</Button>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    )
+  }
+
 
   // Reusable stock table component
   const StockTable = ({ entityId, entityLabel }: { entityId: string; entityLabel: string }) => {
@@ -9583,6 +9861,7 @@ export default function Home() {
       case 'myEntityStock': return renderMyEntityStockPage()
       case 'allEntityStock': return renderAllEntityStockPage()
       case 'addStock': return renderAddStockPage()
+      case 'stockForAll': return renderStockForAllPage()
       case 'itemAdjustment': return renderItemAdjustmentPage()
       case 'newAdjustment': return renderNewAdjustmentPage()
       case 'transfer': return renderTransferPage()
