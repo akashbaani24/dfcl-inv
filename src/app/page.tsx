@@ -3324,7 +3324,20 @@ export default function Home() {
     if (isManagerOrAdmin) return true
     const list = scope === 'menu' ? user.menuAccess : user.masterDataAccess
     const entry = (list as any[])?.find((m: any) => (scope === 'menu' ? m.menuKey : m.masterDataKey) === key)
-    if (!entry || !entry.visible) return false
+
+    // ★ If NO entry exists for this key (legacy user, or admin never opened
+    //    this user's permission matrix), fall back to global toggles — matches
+    //    the backend canMenu/canMasterData behavior.
+    if (!entry) {
+      if (action === 'create' || action === 'upload') return !!user.canCreateItem
+      if (action === 'edit' || action === 'delete') return !!user.canModifyItem
+      if (action === 'export') return true  // default allow
+      if (action === 'approve') return false
+      return false
+    }
+    // Entry exists but hidden → no permissions
+    if (!entry.visible) return false
+
     const flag = entry[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`]
     if (flag === undefined) {
       // back-compat: fall back to legacy global toggles

@@ -251,26 +251,62 @@ function isPrivileged(user: AnyUser): boolean {
 export function canMenu(user: AnyUser, menuKey: string, action: 'create' | 'edit' | 'delete' | 'upload' | 'export' | 'approve'): boolean {
   if (isPrivileged(user)) return true;
   const ma = user.menuAccess?.find(m => m.menuKey === menuKey);
-  if (!ma || !ma.visible) return false;
+
+  // ★ If the user has NO menuAccess entry for this key at all (e.g. a legacy
+  //    user created before the per-menu permission matrix was introduced),
+  //    fall back to global flags so they don't lose access they had.
+  if (!ma) {
+    switch (action) {
+      case 'create': return !!user.canCreateItem;
+      case 'edit':   return !!user.canModifyItem;
+      case 'delete': return !!user.canModifyItem;
+      case 'upload': return !!user.canCreateItem;
+      case 'export': return true;  // export default-allow
+      case 'approve': return false;
+    }
+  }
+
+  // ★ Entry exists but hidden → no permissions.
+  if (!ma!.visible) return false;
+
   switch (action) {
-    case 'create': return !!(ma.canCreate ?? user.canCreateItem ?? false);
-    case 'edit':   return !!(ma.canEdit   ?? user.canModifyItem ?? false);
-    case 'delete': return !!(ma.canDelete ?? user.canModifyItem ?? false);
-    case 'upload': return !!(ma.canUpload ?? user.canCreateItem ?? false);
-    case 'export': return !!(ma.canExport ?? true);  // default allow export for backward compat
-    case 'approve': return !!((ma as any).canApprove ?? false);  // ★ v59: approval permission
+    case 'create': return !!(ma!.canCreate ?? user.canCreateItem ?? false);
+    case 'edit':   return !!(ma!.canEdit   ?? user.canModifyItem ?? false);
+    case 'delete': return !!(ma!.canDelete ?? user.canModifyItem ?? false);
+    case 'upload': return !!(ma!.canUpload ?? user.canCreateItem ?? false);
+    case 'export': return !!(ma!.canExport ?? true);  // default allow export for backward compat
+    case 'approve': return !!((ma! as any).canApprove ?? false);  // ★ v59: approval permission
   }
 }
 
 export function canMasterData(user: AnyUser, masterDataKey: string, action: 'create' | 'edit' | 'delete' | 'upload' | 'export'): boolean {
   if (isPrivileged(user)) return true;
   const mda = user.masterDataAccess?.find(m => m.masterDataKey === masterDataKey);
-  if (!mda || !mda.visible) return false;
+
+  // ★ If the user has NO masterDataAccess entry for this key at all (e.g. a
+  //    legacy user created before the per-master-data permission matrix was
+  //    introduced), fall back to the user's global flags so they don't lose
+  //    access they previously had. This matches the historical behavior.
+  if (!mda) {
+    switch (action) {
+      case 'create': return !!user.canCreateItem;
+      case 'edit':   return !!user.canModifyItem;
+      case 'delete': return !!user.canModifyItem;
+      case 'upload': return !!user.canCreateItem;
+      case 'export': return true;  // export default-allow for backward compat
+    }
+  }
+
+  // ★ If an entry exists but is hidden, no permissions at all.
+  if (!mda!.visible) return false;
+
+  // ★ Entry exists + visible — check the per-action flag, falling back to
+  //    global flags then to a sensible default.
   switch (action) {
-    case 'create': return !!(mda.canCreate ?? user.canCreateItem ?? false);
-    case 'edit':   return !!(mda.canEdit   ?? user.canModifyItem ?? false);
-    case 'delete': return !!(mda.canDelete ?? user.canModifyItem ?? false);
-    case 'upload': return !!(mda.canUpload ?? user.canCreateItem ?? false);
-    case 'export': return !!(mda.canExport ?? true);
+    case 'create': return !!(mda!.canCreate ?? user.canCreateItem ?? false);
+    case 'edit':   return !!(mda!.canEdit   ?? user.canModifyItem ?? false);
+    case 'delete': return !!(mda!.canDelete ?? user.canModifyItem ?? false);
+    case 'upload': return !!(mda!.canUpload ?? user.canCreateItem ?? false);
+    case 'export': return !!(mda!.canExport ?? true);  // default allow export
   }
 }
