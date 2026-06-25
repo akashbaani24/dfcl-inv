@@ -1,8 +1,14 @@
 {
+  "regions": ["bom1"],
   "crons": [
     {
       "path": "/api/cron/backup?token=DFCL_BACKUP_2026",
       "schedule": "30 12 * * *"
     }
-  ]
+  ],
+  "functions": {
+    "src/app/api/**/route.ts": {
+      "maxDuration": 30
+    }
+  }
 }

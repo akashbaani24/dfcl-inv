@@ -1003,6 +1003,107 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "DeliveryItem_itemId_idx" ON "DeliveryItem"("itemId")',
     description: 'Recreate index on DeliveryItem.itemId',
   },
+  // v65: Performance composite indexes — these are the most-used query patterns.
+  //      Composite indexes let SQLite satisfy a query with ONE index lookup instead
+  //      of two, which can be 5-10x faster on 22k+ item tables.
+  //
+  //      Pattern: WHERE entityId = ? AND status = ? ORDER BY createdAt DESC
+  {
+    id: '2026_06_23_perf_idx_salesorder_entity_status_created',
+    sql: 'CREATE INDEX IF NOT EXISTS "SalesOrder_entityId_status_createdAt_idx" ON "SalesOrder"("entityId", "status", "createdAt")',
+    description: 'Composite index: list sales orders by entity + status + recent first',
+  },
+  // Pattern: WHERE entityId = ? AND entryDate >= ? (reports filter by entity + date range)
+  {
+    id: '2026_06_23_perf_idx_accounts_entity_date',
+    sql: 'CREATE INDEX IF NOT EXISTS "AccountsEntry_entityId_entryDate_idx" ON "AccountsEntry"("entityId", "entryDate")',
+    description: 'Composite index: accounts reports by entity + date range',
+  },
+  // Pattern: WHERE fromEntityId = ? AND status = ? (transfer outbox)
+  {
+    id: '2026_06_23_perf_idx_transfer_from_status',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_fromEntityId_status_idx" ON "Transfer"("fromEntityId", "status")',
+    description: 'Composite index: transfer outbox by from-entity + status',
+  },
+  // Pattern: WHERE toEntityId = ? AND status = ? (transfer inbox)
+  {
+    id: '2026_06_23_perf_idx_transfer_to_status',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_toEntityId_status_idx" ON "Transfer"("toEntityId", "status")',
+    description: 'Composite index: transfer inbox by to-entity + status',
+  },
+  // Pattern: WHERE entityId = ? AND deliveryDate >= ? (delivery list by entity + recent)
+  {
+    id: '2026_06_23_perf_idx_delivery_entity_date',
+    sql: 'CREATE INDEX IF NOT EXISTS "Delivery_entityId_deliveryDate_idx" ON "Delivery"("entityId", "deliveryDate")',
+    description: 'Composite index: deliveries by entity + delivery date',
+  },
+  // Pattern: WHERE entityId = ? AND status = ? (purchase list by entity + status)
+  {
+    id: '2026_06_23_perf_idx_purchase_entity_status',
+    sql: 'CREATE INDEX IF NOT EXISTS "Purchase_entityId_status_idx" ON "Purchase"("entityId", "status")',
+    description: 'Composite index: purchases by entity + status',
+  },
+  // Pattern: WHERE bookingId IN (...) (booking detail page loads all items)
+  // (BookingItem already has bookingId index, but composite with fromEntityId helps
+  //  with "show all items booked FROM entity X")
+  {
+    id: '2026_06_23_perf_idx_bookingitem_from',
+    sql: 'CREATE INDEX IF NOT EXISTS "BookingItem_fromEntityId_itemId_idx" ON "BookingItem"("fromEntityId", "itemId")',
+    description: 'Composite index: booking items grouped by from-entity + item',
+  },
+  // Pattern: WHERE status IN ('pending','processing') AND bookingDate >= ?
+  //          (active bookings list — used in stock page to show "Booked" count)
+  {
+    id: '2026_06_23_perf_idx_booking_status_date',
+    sql: 'CREATE INDEX IF NOT EXISTS "Booking_status_bookingDate_idx" ON "Booking"("status", "bookingDate")',
+    description: 'Composite index: active bookings by status + booking date',
+  },
+  // Pattern: WHERE entityId = ? AND createdAt >= ? (recent sales orders for dashboard)
+  {
+    id: '2026_06_23_perf_idx_salesorder_entity_created',
+    sql: 'CREATE INDEX IF NOT EXISTS "SalesOrder_entityId_createdAt_idx" ON "SalesOrder"("entityId", "createdAt")',
+    description: 'Composite index: recent sales orders per entity (dashboard)',
+  },
+  // Pattern: WHERE salesOrderId = ? (sales order detail page — loads all items + payments + deliveries)
+  // SalesOrderItem already has salesOrderId index, but adding one on SalesPayment too (already there)
+  // and one on SalesMakingEntry (already there). Just add composite for the "sales detail" query.
+  {
+    id: '2026_06_23_perf_idx_stock_entity_item',
+    sql: 'CREATE INDEX IF NOT EXISTS "Stock_entityId_itemId_idx" ON "Stock"("entityId", "itemId")',
+    description: 'Composite index: stock by entity + item (fast per-entity stock view)',
+  },
+  // v66: Add missing base indexes on Transfer + ItemAdjustment (these models
+  //      previously had NO indexes — every query was a full table scan)
+  {
+    id: '2026_06_23_perf_idx_transfer_from',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_fromEntityId_idx" ON "Transfer"("fromEntityId")',
+    description: 'Index: transfers by from-entity',
+  },
+  {
+    id: '2026_06_23_perf_idx_transfer_to',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_toEntityId_idx" ON "Transfer"("toEntityId")',
+    description: 'Index: transfers by to-entity',
+  },
+  {
+    id: '2026_06_23_perf_idx_transfer_created',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_createdAt_idx" ON "Transfer"("createdAt")',
+    description: 'Index: transfers by creation date',
+  },
+  {
+    id: '2026_06_23_perf_idx_itemadj_entity',
+    sql: 'CREATE INDEX IF NOT EXISTS "ItemAdjustment_entityId_idx" ON "ItemAdjustment"("entityId")',
+    description: 'Index: item adjustments by entity',
+  },
+  {
+    id: '2026_06_23_perf_idx_itemadj_item',
+    sql: 'CREATE INDEX IF NOT EXISTS "ItemAdjustment_itemId_idx" ON "ItemAdjustment"("itemId")',
+    description: 'Index: item adjustments by item',
+  },
+  {
+    id: '2026_06_23_perf_idx_itemadj_created',
+    sql: 'CREATE INDEX IF NOT EXISTS "ItemAdjustment_createdAt_idx" ON "ItemAdjustment"("createdAt")',
+    description: 'Index: item adjustments by creation date',
+  },
 ];
 
 export async function POST(request: NextRequest) {

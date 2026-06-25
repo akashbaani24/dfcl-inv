@@ -19,15 +19,17 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // ★ Cache DISABLED — was causing stale empty responses on some serverless
-    //   instances when the cache got populated with [] from a transient failure
-    //   (despite the `length > 0` guard, Vercel's serverless instance reuse
-    //   pattern meant a stale cache could persist). For 31 entities the query
-    //   is fast enough to skip caching entirely.
-    // const cached = getEntitiesCache();
-    // if (cached) {
-    //   return NextResponse.json({ entities: cached, source: 'cache' });
-    // }
+    // ★ Cache RE-ENABLED with safer behavior (was disabled in v60-fix27):
+    //   - TTL reduced from 5 min → 60 sec (less stale data risk)
+    //   - Only cache NON-EMPTY results (empty list = either transient failure
+    //     or user with no entity access — both cases skip cache so the next
+    //     request hits DB fresh)
+    //   - The original bug (logo column missing → empty list cached) is now
+    //     permanently fixed via migration, so this is safe again.
+    const cached = getEntitiesCache();
+    if (cached) {
+      return NextResponse.json({ entities: cached, source: 'cache' });
+    }
 
     // Optimized: skip _count (was causing slow COUNT subqueries on 22k+ items)
     let entities;
@@ -41,10 +43,10 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'DB query failed', detail: String(dbErr) }, { status: 500 });
     }
 
-    // Cache for next call (only if non-empty to avoid caching transient failures)
-    // if (entities && entities.length > 0) {
-    //   setEntitiesCache(entities);
-    // }
+    // Cache for next call — ONLY if non-empty (so empty results always re-query DB)
+    if (entities && entities.length > 0) {
+      setEntitiesCache(entities);
+    }
 
     return NextResponse.json({ entities, source: 'db', count: entities?.length ?? 0 });
   } catch (error) {
