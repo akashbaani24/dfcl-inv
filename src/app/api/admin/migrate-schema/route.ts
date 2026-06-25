@@ -1104,6 +1104,12 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "ItemAdjustment_createdAt_idx" ON "ItemAdjustment"("createdAt")',
     description: 'Index: item adjustments by creation date',
   },
+  // v67: Add shortCode column to Entity for short code identification
+  {
+    id: '2026_06_25_entity_shortcode',
+    sql: 'ALTER TABLE Entity ADD COLUMN shortCode TEXT',
+    description: 'Add shortCode column to Entity (e.g. DS for Dynasty Sylhet)',
+  },
 ];
 
 export async function POST(request: NextRequest) {

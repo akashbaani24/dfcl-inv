@@ -36,7 +36,7 @@ export async function GET(request: NextRequest) {
     try {
       entities = await db.entity.findMany({
         orderBy: { name: 'asc' },
-        select: { id: true, name: true, description: true, entityType: true, logo: true, createdAt: true, updatedAt: true },
+        select: { id: true, name: true, description: true, entityType: true, shortCode: true, logo: true, createdAt: true, updatedAt: true },
       });
     } catch (dbErr) {
       console.error('db.entity.findMany error in /api/entities:', dbErr);
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
     }
 
-    const { name, description, entityType, logo } = await request.json();
+    const { name, description, entityType, shortCode, logo } = await request.json();
 
     if (!name) {
       return NextResponse.json({ error: 'Entity name is required' }, { status: 400 });
@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
     }
 
     const entity = await db.entity.create({
-      data: { name, description: description || null, entityType: entityType || 'outlet', logo: logo || null },
+      data: { name, description: description || null, entityType: entityType || 'outlet', shortCode: shortCode || null, logo: logo || null },
     });
 
     // Invalidate cache so the new entity shows up immediately

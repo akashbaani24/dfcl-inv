@@ -618,7 +618,7 @@ export default function Home() {
   // Entity state
   const [entities, setEntities] = useState<EntityData[]>([])
   const [entitiesLoading, setEntitiesLoading] = useState(false)
-  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', logo: '' })
+  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' })
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
@@ -2958,7 +2958,7 @@ AS Display Centre,720-500-D,0
     try {
       const res = await authFetch('/api/entities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', logo: '' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' }); setShowEntityDialog(false); fetchEntities() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create entity', variant: 'destructive' }) }
   }
@@ -2968,7 +2968,7 @@ AS Display Centre,720-500-D,0
     if (!editingEntityId) return
     try {
       const res = await authFetch(`/api/entities/${editingEntityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
-      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', logo: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
       else { const data = await res.json(); toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update entity', variant: 'destructive' }) }
   }
@@ -2994,11 +2994,11 @@ AS Display Centre,720-500-D,0
   }
 
   const openEditEntityDialog = (entity: EntityData) => {
-    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet' }); setShowEntityDialog(true)
+    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet', shortCode: (entity as any).shortCode || '', logo: '' }); setShowEntityDialog(true)
   }
 
   const openNewEntityDialog = () => {
-    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet' }); setShowEntityDialog(true)
+    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' }); setShowEntityDialog(true)
   }
 
   // User handlers
@@ -9893,7 +9893,10 @@ DEWS,720-500-B,5</pre>
           <DialogContent className="max-w-md">
             <DialogHeader><DialogTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" />{editingEntityId ? 'Edit Entity' : 'Create New Entity'}</DialogTitle></DialogHeader>
             <form onSubmit={editingEntityId ? handleUpdateEntity : handleCreateEntity} className="space-y-4">
-              <div className="space-y-2"><Label>Entity Name *</Label><Input placeholder="e.g. Dhaka Main Warehouse" value={entityForm.name} onChange={e => setEntityForm({ ...entityForm, name: e.target.value })} required /></div>
+              <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2 col-span-2"><Label>Entity Name *</Label><Input placeholder="e.g. Dhaka Main Warehouse" value={entityForm.name} onChange={e => setEntityForm({ ...entityForm, name: e.target.value })} required /></div>
+                <div className="space-y-2"><Label>Short Code</Label><Input placeholder="e.g. DS" value={(entityForm as any).shortCode || ''} onChange={e => setEntityForm({ ...entityForm, shortCode: e.target.value } as any)} maxLength={10} className="uppercase" /></div>
+              </div>
               <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
               <div className="space-y-2">
                 <Label>Entity Type</Label>
@@ -10843,7 +10846,10 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
         <DialogContent className="max-w-md">
           <DialogHeader><DialogTitle className="flex items-center gap-2"><Building2 className="w-5 h-5" />{editingEntityId ? 'Edit Entity' : 'Create New Entity'}</DialogTitle></DialogHeader>
           <form onSubmit={editingEntityId ? handleUpdateEntity : handleCreateEntity} className="space-y-4">
-            <div className="space-y-2"><Label>Entity Name *</Label><Input placeholder="e.g. Dhaka Main Warehouse" value={entityForm.name} onChange={e => setEntityForm({ ...entityForm, name: e.target.value })} required /></div>
+            <div className="grid grid-cols-3 gap-3">
+              <div className="space-y-2 col-span-2"><Label>Entity Name *</Label><Input placeholder="e.g. Dhaka Main Warehouse" value={entityForm.name} onChange={e => setEntityForm({ ...entityForm, name: e.target.value })} required /></div>
+              <div className="space-y-2"><Label>Short Code</Label><Input placeholder="e.g. DS" value={(entityForm as any).shortCode || ''} onChange={e => setEntityForm({ ...entityForm, shortCode: e.target.value } as any)} maxLength={10} className="uppercase" /></div>
+            </div>
             <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
             <div className="space-y-2">
               <Label>Entity Type</Label>

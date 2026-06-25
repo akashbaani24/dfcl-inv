@@ -116,6 +116,9 @@ model Entity {
   //   - head_office → use headOfficeCommission
   //   - warehouse → use headOfficeCommission (falls under "Head Office and others")
   entityType  String   @default("outlet")
+  // ★ Short code for the entity (e.g. "DS" for Dynasty Sylhet, "AS" for AS Display Centre)
+  //    Used in Excel uploads and quick identification.
+  shortCode   String?
   // ★ Company logo — base64 data URL stored in DB (no file upload needed)
   logo        String?
   createdAt   DateTime @default(now())
