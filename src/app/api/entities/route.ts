@@ -19,17 +19,14 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // ★ Cache RE-ENABLED with safer behavior (was disabled in v60-fix27):
-    //   - TTL reduced from 5 min → 60 sec (less stale data risk)
-    //   - Only cache NON-EMPTY results (empty list = either transient failure
-    //     or user with no entity access — both cases skip cache so the next
-    //     request hits DB fresh)
-    //   - The original bug (logo column missing → empty list cached) is now
-    //     permanently fixed via migration, so this is safe again.
-    const cached = getEntitiesCache();
-    if (cached) {
-      return NextResponse.json({ entities: cached, source: 'cache' });
-    }
+    // ★ Cache DISABLED again — shortCode column was just added and the
+    //   cache may still hold stale results from before the migration.
+    //   Keep it disabled until we're sure all Vercel instances have
+    //   restarted with the new schema.
+    // const cached = getEntitiesCache();
+    // if (cached) {
+    //   return NextResponse.json({ entities: cached, source: 'cache' });
+    // }
 
     // Optimized: skip _count (was causing slow COUNT subqueries on 22k+ items)
     let entities;
@@ -40,13 +37,21 @@ export async function GET(request: NextRequest) {
       });
     } catch (dbErr) {
       console.error('db.entity.findMany error in /api/entities:', dbErr);
-      return NextResponse.json({ error: 'DB query failed', detail: String(dbErr) }, { status: 500 });
+      // ★ If the error is about shortCode column missing, try without it
+      try {
+        entities = await db.entity.findMany({
+          orderBy: { name: 'asc' },
+          select: { id: true, name: true, description: true, entityType: true, logo: true, createdAt: true, updatedAt: true },
+        });
+      } catch (dbErr2) {
+        return NextResponse.json({ error: 'DB query failed', detail: String(dbErr2) }, { status: 500 });
+      }
     }
 
     // Cache for next call — ONLY if non-empty (so empty results always re-query DB)
-    if (entities && entities.length > 0) {
-      setEntitiesCache(entities);
-    }
+    // if (entities && entities.length > 0) {
+    //   setEntitiesCache(entities);
+    // }
 
     return NextResponse.json({ entities, source: 'db', count: entities?.length ?? 0 });
   } catch (error) {
