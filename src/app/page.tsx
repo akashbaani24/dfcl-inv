@@ -4042,7 +4042,6 @@ export default function Home() {
                 <TableHead className="font-semibold">Entity</TableHead>
                 <TableHead className="font-semibold">Group</TableHead>
                 <TableHead className="font-semibold">Sub Group</TableHead>
-                <TableHead className="font-semibold">Item Code</TableHead>
                 <TableHead className="font-semibold">Item Name</TableHead>
                 <TableHead className="font-semibold text-right">Qty</TableHead>
                 <TableHead className="font-semibold">UoM</TableHead>
@@ -4051,16 +4050,15 @@ export default function Home() {
             </TableHeader>
             <TableBody>
               {sfaLoading ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
               ) : stocks.length === 0 ? (
-                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
               ) : stocks.map((s, i) => (
                 <TableRow key={s.id} className="hover:bg-muted/30">
                   <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
                   <TableCell className="font-medium">{s.entityName}</TableCell>
                   <TableCell className="text-xs">{s.group || '—'}</TableCell>
                   <TableCell className="text-xs">{s.subGroup || '—'}</TableCell>
-                  <TableCell className="text-xs font-mono">{s.itemCode || '—'}</TableCell>
                   <TableCell className="font-medium">{s.itemName}</TableCell>
                   <TableCell className="text-right font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-xs">{s.uom}</TableCell>
@@ -4071,7 +4069,7 @@ export default function Home() {
             {!sfaLoading && stocks.length > 0 && (
               <tfoot>
                 <tr className="border-t-2 bg-muted/40 font-semibold">
-                  <td colSpan={6} className="px-3 py-2 text-right">Page Total:</td>
+                  <td colSpan={5} className="px-3 py-2 text-right">Page Total:</td>
                   <td className="px-3 py-2 text-right font-mono">{stocks.reduce((s, r) => s + r.quantity, 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
                   <td colSpan={2}></td>
                 </tr>

@@ -74,14 +74,16 @@ export async function GET(request: NextRequest) {
 
     const itemFilters: Prisma.ItemWhereInput[] = [];
     if (search) {
-      // LIKE search across multiple columns — combined as OR (any one match is enough)
-      // ★ Use insensitive mode so 'item' matches 'Item' / 'ITEM' (Prisma's
-      //    SQLite adapter supports 'mode: insensitive' since Prisma 5+).
+      // LIKE search across multiple columns — combined as OR (any one match is enough).
+      // ★ Note: Prisma's SQLite adapter does NOT support 'mode: insensitive'
+      //   (only PostgreSQL does). SQLite's LIKE is case-insensitive for ASCII
+      //   by default, so 'item' will match 'Item' / 'ITEM' automatically
+      //   for English text. Bangla text doesn't have case so no issue there.
       itemFilters.push({
         OR: [
-          { itemName: { contains: search, mode: 'insensitive' } },
-          { itemCode: { contains: search, mode: 'insensitive' } },
-          { barcode: { contains: search, mode: 'insensitive' } },
+          { itemName: { contains: search } },
+          { itemCode: { contains: search } },
+          { barcode: { contains: search } },
         ],
       });
     }
