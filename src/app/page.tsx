@@ -636,6 +636,68 @@ export default function Home() {
   const [sfaShowTotals, setSfaShowTotals] = useState(true)
   const [sfaDebouncedSearch, setSfaDebouncedSearch] = useState('')
 
+  // ★ Stock for All — bulk upload state
+  const [sfaUploadOpen, setSfaUploadOpen] = useState(false)
+  const [sfaUploadBusy, setSfaUploadBusy] = useState(false)
+  const [sfaUploadMode, setSfaUploadMode] = useState<'set' | 'add'>('set')
+  const [sfaUploadResult, setSfaUploadResult] = useState<any>(null)
+  const sfaUploadFileRef = useRef<HTMLInputElement | null>(null)
+
+  const handleSfaUpload = async (e: React.FormEvent) => {
+    e.preventDefault()
+    const file = sfaUploadFileRef.current?.files?.[0]
+    if (!file) {
+      toast({ title: 'No file selected', variant: 'destructive' })
+      return
+    }
+    setSfaUploadBusy(true)
+    setSfaUploadResult(null)
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+      const res = await authFetch(`/api/stock/bulk-upload?mode=${sfaUploadMode}`, {
+        method: 'POST',
+        body: formData,
+      })
+      const data = await res.json()
+      if (res.ok) {
+        setSfaUploadResult(data)
+        toast({
+          title: 'Upload complete',
+          description: data.summary || `Processed ${data.processed} rows`,
+        })
+        // Refresh stock list
+        fetchStockForAll()
+        if (sfaUploadFileRef.current) sfaUploadFileRef.current.value = ''
+      } else {
+        toast({ title: 'Upload failed', description: data.error || `HTTP ${res.status}`, variant: 'destructive' })
+        setSfaUploadResult({ error: data.error || 'Upload failed' })
+      }
+    } catch (err) {
+      toast({ title: 'Upload failed', description: String(err), variant: 'destructive' })
+    } finally {
+      setSfaUploadBusy(false)
+    }
+  }
+
+  const downloadSfaUploadTemplate = () => {
+    const csv = `entityName,itemName,quantity,uom,barcode,itemCode
+DEWS,720-500-A,10,PCS,OFF-DEWS-26061200,720-500-A
+DEWS,720-500-B,5,PCS,OFF-DEWS-26061197,720-500-B
+AS Display Centre,720-500-C,8,PCS,OFF-DEWS-26061199,720-500-C
+AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
+`
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = 'stock-for-all-upload-template.csv'
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    URL.revokeObjectURL(url)
+  }
+
 
   // Item form state
   const [itemForm, setItemForm] = useState({ year: '', lcNo: '', group: '', subGroup: '', itemName: '', price: '', uom: 'PCS', barcode: '', itemCode: '', color: '', pattern: '', supplierCode: '', dimension: '', description: '' })
@@ -3917,9 +3979,18 @@ export default function Home() {
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div>
-          <h2 className="text-xl font-semibold">Stock for All</h2>
-          <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
+        <div className="flex items-center justify-between flex-wrap gap-2">
+          <div>
+            <h2 className="text-xl font-semibold">Stock for All</h2>
+            <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
+          </div>
+          {/* Upload button — gated on Create permission (admin/manager OR
+              canCreate on stockForAll/myEntityStock menu) */}
+          {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'create') || hasPermission('menu', 'myEntityStock', 'create')) && (
+            <Button size="sm" onClick={() => { setSfaUploadResult(null); setSfaUploadOpen(true) }}>
+              <Upload className="w-4 h-4 mr-1.5" />Upload Stock
+            </Button>
+          )}
         </div>
 
         {/* Filters */}
@@ -4123,6 +4194,114 @@ export default function Home() {
             )}
           </div>
         )}
+
+        {/* ★ Upload Dialog */}
+        <Dialog open={sfaUploadOpen} onOpenChange={(o) => { setSfaUploadOpen(o); if (!o) setSfaUploadResult(null) }}>
+          <DialogContent className="max-w-lg">
+            <DialogHeader>
+              <DialogTitle>Upload Stock (Daily Update)</DialogTitle>
+            </DialogHeader>
+            <div className="space-y-3">
+              {/* Format documentation */}
+              <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1.5">
+                <p className="font-semibold">📋 CSV / Excel Format (header row required):</p>
+                <p className="font-mono">entityName, itemName, quantity, uom, barcode, itemCode</p>
+                <p className="text-[11px] mt-1">• <strong>entityName</strong> — must match an existing entity (e.g. "DEWS", "AS Display Centre").</p>
+                <p className="text-[11px]">• <strong>itemName</strong> — must match an existing item in master table. Items not found are skipped.</p>
+                <p className="text-[11px]">• <strong>quantity</strong> — number (decimal supported like 0.5).</p>
+                <p className="text-[11px]">• <strong>uom, barcode, itemCode</strong> — optional columns (ignored for existing items).</p>
+              </div>
+
+              {/* Mode selector */}
+              <div className="space-y-1">
+                <Label className="text-sm font-semibold">Mode</Label>
+                <p className="text-xs text-muted-foreground mb-2">Choose how to apply the uploaded quantities:</p>
+                <Select value={sfaUploadMode} onValueChange={v => setSfaUploadMode(v as 'set' | 'add')}>
+                  <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="set">
+                      <div className="space-y-0.5">
+                        <div className="font-medium">Set (Daily Stock Count) — RECOMMENDED for daily use</div>
+                        <div className="text-[11px] text-muted-foreground">Overwrites the existing stock with the exact quantity from the file. Use this after a physical count. Quantity = 0 deletes the stock row.</div>
+                      </div>
+                    </SelectItem>
+                    <SelectItem value="add">
+                      <div className="space-y-0.5">
+                        <div className="font-medium">Add (Received New Stock)</div>
+                        <div className="text-[11px] text-muted-foreground">Adds the file's quantity to existing stock. Use this when receiving new stock on top of what's already there.</div>
+                      </div>
+                    </SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {/* Download template */}
+              <Button type="button" variant="outline" size="sm" onClick={downloadSfaUploadTemplate}>
+                <Download className="w-4 h-4 mr-1.5" />Download Template (CSV with sample rows)
+              </Button>
+
+              {/* Upload form */}
+              <form onSubmit={handleSfaUpload} className="space-y-3">
+                <div>
+                  <Label className="text-xs">CSV / Excel File</Label>
+                  <Input
+                    type="file"
+                    accept=".csv,.xlsx,.xls"
+                    ref={sfaUploadFileRef}
+                    required
+                    disabled={sfaUploadBusy}
+                  />
+                </div>
+                <Button type="submit" disabled={sfaUploadBusy} className="w-full">
+                  {sfaUploadBusy
+                    ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Uploading...</>
+                    : <><Upload className="w-4 h-4 mr-2" />Upload & Apply</>}
+                </Button>
+              </form>
+
+              {/* Result panel */}
+              {sfaUploadResult && (
+                <div className={`rounded-md border p-3 text-xs ${sfaUploadResult.error ? 'bg-red-50 border-red-200 text-red-900' : 'bg-green-50 border-green-200 text-green-900'}`}>
+                  {sfaUploadResult.error ? (
+                    <p>❌ {sfaUploadResult.error}</p>
+                  ) : (
+                    <div className="space-y-2">
+                      <p className="font-semibold">✅ {sfaUploadResult.summary}</p>
+                      <div className="grid grid-cols-2 gap-2 text-[11px]">
+                        <div>Total rows: <strong>{sfaUploadResult.totalRows}</strong></div>
+                        <div>Processed: <strong>{sfaUploadResult.processed}</strong></div>
+                        <div>Created: <strong>{sfaUploadResult.created}</strong></div>
+                        <div>Updated: <strong>{sfaUploadResult.updated}</strong></div>
+                        <div>Deleted (qty=0): <strong>{sfaUploadResult.deleted}</strong></div>
+                        <div>Skipped: <strong>{sfaUploadResult.skipped}</strong></div>
+                      </div>
+                      {sfaUploadResult.notFoundList && sfaUploadResult.notFoundList.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-amber-700 font-medium">
+                            Items not found ({sfaUploadResult.notFoundList.length}) — click to expand
+                          </summary>
+                          <ul className="list-disc list-inside mt-1 space-y-0.5 text-[11px]">
+                            {sfaUploadResult.notFoundList.slice(0, 30).map((n: string, i: number) => <li key={i}>{n}</li>)}
+                          </ul>
+                        </details>
+                      )}
+                      {sfaUploadResult.errors && sfaUploadResult.errors.length > 0 && (
+                        <details className="mt-2">
+                          <summary className="cursor-pointer text-red-700 font-medium">
+                            Errors / warnings ({sfaUploadResult.errors.length}) — click to expand
+                          </summary>
+                          <ul className="list-disc list-inside mt-1 space-y-0.5 text-[11px]">
+                            {sfaUploadResult.errors.slice(0, 30).map((e: string, i: number) => <li key={i}>{e}</li>)}
+                          </ul>
+                        </details>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </DialogContent>
+        </Dialog>
       </div>
     )
   }
