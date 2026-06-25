@@ -184,7 +184,7 @@ type ViewType =
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
   | 'groups' | 'subGroups'
   | 'bookingReasons'
-  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock' | 'stockForAll'
+  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock' | 'stockForAll' | 'stockUploadFormat'
   | 'settings'
 
 const ALL_COLUMNS = [
@@ -696,6 +696,27 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(url)
+  }
+
+  // ★ Delete a single stock row by ID (used by per-row trash button).
+  const handleSfaDeleteStock = async (stockId: string, label: string) => {
+    if (!confirm(`Remove this stock row?\n\n${label}\n\nThis will delete the stock entry. The item itself stays in the master table.`)) return
+    try {
+      const res = await authFetch('/api/stock/bulk-delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ stockIds: [stockId] }),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Removed', description: `Stock row deleted (${data.deleted} row).` })
+        fetchStockForAll() // refresh
+      } else {
+        toast({ title: 'Failed', description: data.error || `HTTP ${res.status}`, variant: 'destructive' })
+      }
+    } catch (err) {
+      toast({ title: 'Failed', description: String(err), variant: 'destructive' })
+    }
   }
 
 
@@ -3984,13 +4005,18 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
             <h2 className="text-xl font-semibold">Stock for All</h2>
             <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
           </div>
-          {/* Upload button — gated on Create permission (admin/manager OR
-              canCreate on stockForAll/myEntityStock menu) */}
-          {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'create') || hasPermission('menu', 'myEntityStock', 'create')) && (
-            <Button size="sm" onClick={() => { setSfaUploadResult(null); setSfaUploadOpen(true) }}>
-              <Upload className="w-4 h-4 mr-1.5" />Upload Stock
+          <div className="flex gap-2 flex-wrap">
+            {/* ★ Upload Format — opens a dedicated page (not popup) */}
+            <Button variant="outline" size="sm" onClick={() => setCurrentView('stockUploadFormat')} title="View CSV/Excel format documentation + download template">
+              <FileText className="w-4 h-4 mr-1.5" />Upload Format
             </Button>
-          )}
+            {/* Upload button — gated on Create permission */}
+            {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'create') || hasPermission('menu', 'myEntityStock', 'create')) && (
+              <Button size="sm" onClick={() => { setSfaUploadResult(null); setSfaUploadOpen(true) }}>
+                <Upload className="w-4 h-4 mr-1.5" />Upload Stock
+              </Button>
+            )}
+          </div>
         </div>
 
         {/* Filters */}
@@ -4115,16 +4141,20 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
                 <TableHead className="font-semibold text-right">Available</TableHead>
                 <TableHead className="font-semibold">UoM</TableHead>
                 <TableHead className="font-semibold text-right">Unit Price</TableHead>
+                {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'delete') || hasPermission('menu', 'myEntityStock', 'delete')) && (
+                  <TableHead className="font-semibold text-center">Remove</TableHead>
+                )}
               </TableRow>
             </TableHeader>
             <TableBody>
               {sfaLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
               ) : stocks.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
               ) : stocks.map((s, i) => {
                 const booked = s.bookedQty || 0
                 const available = s.available || (s.quantity - booked)
+                const canDelete = isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'delete') || hasPermission('menu', 'myEntityStock', 'delete')
                 return (
                 <TableRow key={s.id} className={`hover:bg-muted/30 ${booked > 0 ? 'bg-amber-50/40' : ''}`}>
                   <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
@@ -4143,6 +4173,19 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
                   <TableCell className={`text-right font-bold ${available < 0 ? 'text-red-600' : available === 0 ? 'text-amber-600' : 'text-green-700'}`}>{available.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-xs">{s.uom}</TableCell>
                   <TableCell className="text-right font-mono">৳ {(s.unitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                  {canDelete && (
+                    <TableCell className="text-center">
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-destructive hover:text-destructive h-7 w-7 p-0"
+                        title="Remove this stock row"
+                        onClick={() => handleSfaDeleteStock(s.id, `${s.entityName} — ${s.itemName} (qty: ${s.quantity})`)}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </Button>
+                    </TableCell>
+                  )}
                 </TableRow>
                 )
               })}
@@ -4306,6 +4349,132 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
     )
   }
 
+  // ★ Stock Upload Format — dedicated page (not a popup).
+  //    Shows the CSV/Excel format documentation + downloadable template.
+  const renderStockUploadFormatPage = () => {
+    return (
+      <div className="space-y-4 max-w-3xl mx-auto">
+        {/* Header */}
+        <div className="flex items-center gap-3">
+          <Button variant="outline" size="sm" onClick={() => setCurrentView('stockForAll')}>
+            <ArrowLeft className="w-4 h-4 mr-2" />Back to Stock for All
+          </Button>
+          <div>
+            <h2 className="text-xl font-semibold">Upload Format — Stock for All</h2>
+            <p className="text-sm text-muted-foreground">CSV / Excel format for bulk stock upload.</p>
+          </div>
+        </div>
+
+        <Card>
+          <CardContent className="pt-6 space-y-4">
+            {/* Download template button */}
+            <Button onClick={downloadSfaUploadTemplate}>
+              <Download className="w-4 h-4 mr-2" />Download Template (CSV with sample rows)
+            </Button>
+
+            {/* Format documentation */}
+            <div className="rounded-md border border-blue-200 bg-blue-50/50 p-4 text-sm text-blue-900 space-y-3">
+              <p className="font-semibold text-base">📋 CSV / Excel Format</p>
+              <p className="text-xs">Header row required (row 1). Data starts from row 2.</p>
+              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,uom,barcode,itemCode
+DEWS,720-500-A,10,PCS,OFF-DEWS-26061200,720-500-A
+DEWS,720-500-B,5,PCS,OFF-DEWS-26061197,720-500-B
+AS Display Centre,720-500-C,8,PCS,OFF-DEWS-26061199,720-500-C
+AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D</pre>
+            </div>
+
+            {/* Column documentation */}
+            <div className="overflow-x-auto rounded-md border">
+              <table className="w-full text-xs">
+                <thead className="bg-muted/50">
+                  <tr>
+                    <th className="text-left px-3 py-2 font-semibold">Column</th>
+                    <th className="text-left px-3 py-2 font-semibold">Required?</th>
+                    <th className="text-left px-3 py-2 font-semibold">Description</th>
+                    <th className="text-left px-3 py-2 font-semibold">Example</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr className="border-t">
+                    <td className="px-3 py-2 font-mono font-semibold">entityName</td>
+                    <td className="px-3 py-2"><span className="text-red-600">Yes</span></td>
+                    <td className="px-3 py-2">Must match an existing Entity.name (e.g. "DEWS", "AS Display Centre"). Case-insensitive.</td>
+                    <td className="px-3 py-2 font-mono">DEWS</td>
+                  </tr>
+                  <tr className="border-t">
+                    <td className="px-3 py-2 font-mono font-semibold">itemName</td>
+                    <td className="px-3 py-2"><span className="text-red-600">Yes</span></td>
+                    <td className="px-3 py-2">Must match an existing Item.itemName. Items not found are skipped (and reported in the upload result).</td>
+                    <td className="px-3 py-2 font-mono">720-500-A</td>
+                  </tr>
+                  <tr className="border-t">
+                    <td className="px-3 py-2 font-mono font-semibold">quantity</td>
+                    <td className="px-3 py-2"><span className="text-red-600">Yes</span></td>
+                    <td className="px-3 py-2">Number (decimal supported like 0.5). In "Set" mode, qty=0 deletes the stock row entirely.</td>
+                    <td className="px-3 py-2 font-mono">10</td>
+                  </tr>
+                  <tr className="border-t">
+                    <td className="px-3 py-2 font-mono">uom</td>
+                    <td className="px-3 py-2 text-muted-foreground">Optional</td>
+                    <td className="px-3 py-2">Unit of measure (ignored for existing items). Default: PCS</td>
+                    <td className="px-3 py-2 font-mono">PCS</td>
+                  </tr>
+                  <tr className="border-t">
+                    <td className="px-3 py-2 font-mono">barcode</td>
+                    <td className="px-3 py-2 text-muted-foreground">Optional</td>
+                    <td className="px-3 py-2">Item barcode (ignored for existing items, used only if you extend the script to create new items).</td>
+                    <td className="px-3 py-2 font-mono">OFF-DEWS-26061200</td>
+                  </tr>
+                  <tr className="border-t">
+                    <td className="px-3 py-2 font-mono">itemCode</td>
+                    <td className="px-3 py-2 text-muted-foreground">Optional</td>
+                    <td className="px-3 py-2">Item code (ignored for existing items).</td>
+                    <td className="px-3 py-2 font-mono">720-500-A</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* Modes */}
+            <div className="rounded-md border border-amber-200 bg-amber-50/50 p-4 text-sm text-amber-900 space-y-2">
+              <p className="font-semibold text-base">⚡ Upload Modes</p>
+              <div className="space-y-2 text-xs">
+                <div>
+                  <p className="font-medium">1. Set (Daily Stock Count) — recommended for daily use</p>
+                  <p className="ml-4">Overwrites existing stock with the exact quantity from the file. Use this after a physical count. Quantity = 0 deletes the stock row entirely (i.e. removes that item-entity pair).</p>
+                </div>
+                <div>
+                  <p className="font-medium">2. Add (Received New Stock)</p>
+                  <p className="ml-4">Adds the file's quantity to existing stock. Use this when receiving new stock on top of what's already there.</p>
+                </div>
+              </div>
+            </div>
+
+            {/* How to remove stock */}
+            <div className="rounded-md border border-red-200 bg-red-50/50 p-4 text-sm text-red-900 space-y-2">
+              <p className="font-semibold text-base">🗑️ How to Remove Stock</p>
+              <p className="text-xs">There are 3 ways to remove stock:</p>
+              <ol className="list-decimal list-inside text-xs space-y-1">
+                <li><strong>Upload with qty=0 in "Set" mode</strong> — the stock row for that item-entity pair gets deleted.</li>
+                <li><strong>Click the trash icon next to a stock row</strong> in the Stock for All table — deletes that single row.</li>
+                <li><strong>Select multiple rows + click "Remove Selected"</strong> — bulk delete (coming soon, for now use the per-row trash icon).</li>
+              </ol>
+            </div>
+
+            {/* Notes */}
+            <div className="rounded-md border bg-muted/30 p-4 text-xs space-y-1">
+              <p className="font-semibold">ℹ️ Notes</p>
+              <p>• File types accepted: <code className="bg-background px-1 rounded">.csv</code>, <code className="bg-background px-1 rounded">.xlsx</code>, <code className="bg-background px-1 rounded">.xls</code></p>
+              <p>• Header row is required (row 1). Column names are case-insensitive and ignore spaces/underscores.</p>
+              <p>• Decimal quantities supported (e.g. <code className="bg-background px-1 rounded">0.5</code> for half a cushion).</p>
+              <p>• Items not found in the master table are skipped — they will be listed in the upload result under "Items not found".</p>
+              <p>• Non-admin users can only upload stock for entities they have access to.</p>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   // Reusable stock table component
   const StockTable = ({ entityId, entityLabel }: { entityId: string; entityLabel: string }) => {
@@ -10068,6 +10237,7 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
       case 'allEntityStock': return renderAllEntityStockPage()
       case 'addStock': return renderAddStockPage()
       case 'stockForAll': return renderStockForAllPage()
+      case 'stockUploadFormat': return renderStockUploadFormatPage()
       case 'itemAdjustment': return renderItemAdjustmentPage()
       case 'newAdjustment': return renderNewAdjustmentPage()
       case 'transfer': return renderTransferPage()
