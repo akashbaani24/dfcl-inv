@@ -681,11 +681,11 @@ export default function Home() {
   }
 
   const downloadSfaUploadTemplate = () => {
-    const csv = `entityName,itemName,quantity,uom,barcode,itemCode
-DEWS,720-500-A,10,PCS,OFF-DEWS-26061200,720-500-A
-DEWS,720-500-B,5,PCS,OFF-DEWS-26061197,720-500-B
-AS Display Centre,720-500-C,8,PCS,OFF-DEWS-26061199,720-500-C
-AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
+    const csv = `entityName,itemName,quantity,barcode,itemCode
+DEWS,720-500-A,10,OFF-DEWS-26061200,720-500-A
+DEWS,720-500-B,5,OFF-DEWS-26061197,720-500-B
+AS Display Centre,720-500-C,8,OFF-DEWS-26061199,720-500-C
+AS Display Centre,720-500-D,0,OFF-DEWS-26061198,720-500-D
 `
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -4332,11 +4332,11 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D
             <div className="rounded-md border border-blue-200 bg-blue-50/50 p-4 text-sm text-blue-900 space-y-3">
               <p className="font-semibold text-base">📋 CSV / Excel Format</p>
               <p className="text-xs">Header row required (row 1). Data starts from row 2.</p>
-              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,uom,barcode,itemCode
-DEWS,720-500-A,10,PCS,OFF-DEWS-26061200,720-500-A
-DEWS,720-500-B,5,PCS,OFF-DEWS-26061197,720-500-B
-AS Display Centre,720-500-C,8,PCS,OFF-DEWS-26061199,720-500-C
-AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D</pre>
+              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,barcode,itemCode
+DEWS,720-500-A,10,OFF-DEWS-26061200,720-500-A
+DEWS,720-500-B,5,OFF-DEWS-26061197,720-500-B
+AS Display Centre,720-500-C,8,OFF-DEWS-26061199,720-500-C
+AS Display Centre,720-500-D,0,OFF-DEWS-26061198,720-500-D</pre>
             </div>
 
             {/* Column documentation */}
@@ -4370,22 +4370,22 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D</pre>
                     <td className="px-3 py-2 font-mono">10</td>
                   </tr>
                   <tr className="border-t">
-                    <td className="px-3 py-2 font-mono">uom</td>
-                    <td className="px-3 py-2 text-muted-foreground">Optional</td>
-                    <td className="px-3 py-2">Unit of measure (ignored for existing items). Default: PCS</td>
-                    <td className="px-3 py-2 font-mono">PCS</td>
-                  </tr>
-                  <tr className="border-t">
                     <td className="px-3 py-2 font-mono">barcode</td>
                     <td className="px-3 py-2 text-muted-foreground">Optional</td>
-                    <td className="px-3 py-2">Item barcode (ignored for existing items, used only if you extend the script to create new items).</td>
+                    <td className="px-3 py-2">Item barcode (used to find existing item if itemName doesn't match).</td>
                     <td className="px-3 py-2 font-mono">OFF-DEWS-26061200</td>
                   </tr>
                   <tr className="border-t">
                     <td className="px-3 py-2 font-mono">itemCode</td>
                     <td className="px-3 py-2 text-muted-foreground">Optional</td>
-                    <td className="px-3 py-2">Item code (ignored for existing items).</td>
+                    <td className="px-3 py-2">Item code (used to find existing item if itemName + barcode don't match).</td>
                     <td className="px-3 py-2 font-mono">720-500-A</td>
+                  </tr>
+                  <tr className="border-t bg-muted/20">
+                    <td className="px-3 py-2 font-mono text-muted-foreground">uom</td>
+                    <td className="px-3 py-2 text-muted-foreground">Removed</td>
+                    <td className="px-3 py-2 text-muted-foreground">★ UoM is now auto-detected from Item Information — no need to include this column. If present, it will be ignored.</td>
+                    <td className="px-3 py-2 font-mono text-muted-foreground">—</td>
                   </tr>
                 </tbody>
               </table>
@@ -4453,13 +4453,14 @@ AS Display Centre,720-500-D,0,PCS,OFF-DEWS-26061198,720-500-D</pre>
             {/* Format documentation */}
             <div className="rounded-md border border-blue-200 bg-blue-50/50 p-4 text-sm text-blue-900 space-y-2">
               <p className="font-semibold text-base">📋 CSV / Excel Format (header row required):</p>
-              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,uom,barcode,itemCode
-DEWS,720-500-A,10,PCS,OFF-DEWS-26061200,720-500-A
-DEWS,720-500-B,5,PCS,OFF-DEWS-26061197,720-500-B</pre>
+              <pre className="bg-white border rounded p-3 text-xs font-mono overflow-x-auto">entityName,itemName,quantity,barcode,itemCode
+DEWS,720-500-A,10,OFF-DEWS-26061200,720-500-A
+DEWS,720-500-B,5,OFF-DEWS-26061197,720-500-B</pre>
               <p className="text-xs">• <strong>entityName</strong> — must match an existing entity (e.g. "DEWS", "AS Display Centre").</p>
               <p className="text-xs">• <strong>itemName</strong> — must match an existing item in master table. Items not found are skipped.</p>
               <p className="text-xs">• <strong>quantity</strong> — number (decimal supported like 0.5).</p>
-              <p className="text-xs">• <strong>uom, barcode, itemCode</strong> — optional columns (ignored for existing items).</p>
+              <p className="text-xs">• <strong>barcode, itemCode</strong> — optional columns (used to find existing item if itemName doesn't match).</p>
+              <p className="text-xs">• <strong>UoM</strong> — auto-detected from Item Information. No need to include this column.</p>
               <p className="text-xs mt-2">
                 Need full format docs?
                 <Button variant="link" className="h-auto p-0 ml-1 align-baseline text-xs" onClick={() => setCurrentView('stockUploadFormat')}>

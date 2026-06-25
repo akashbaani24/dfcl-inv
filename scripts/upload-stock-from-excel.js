@@ -129,7 +129,7 @@ async function main() {
   console.log('');
   console.log('📝 Building CSV for upload...');
 
-  const csvLines = ['entityName,itemName,quantity,uom,barcode,itemCode'];
+  const csvLines = ['entityName,itemName,quantity,barcode,itemCode'];
   let totalValidRows = 0;
   let skippedRows = 0;
   for (const r of rows) {
@@ -146,11 +146,10 @@ async function main() {
     // CSV-escape: wrap values containing commas in double quotes
     const esc = (s) => /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
 
-    csvLines.push([
+    const csvLines.push([
       esc(entityName),
       esc(itemName),
       qty,
-      'PCS',
       esc(barcode),
       esc(itemName), // itemCode = itemName (so existing items match)
     ].join(','));
