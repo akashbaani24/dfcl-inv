@@ -34,9 +34,9 @@ const XLSX = require('xlsx');
 const ENTITY_CODE_MAP = {
   // Dynasty Furnishings Centre Ltd branches
   'DE':   'Dynasty Furnishings Centre Ltd. (Elephant Road Branch)',
+  'DMB':  'Dynasty Furnishings Centre Ltd. (Elephant Road Branch)', // Movi Bazar = Elephant Road area
   'DU':   'Dynasty Furnishings Centre Ltd. (Uttara Branch)',
   'DM':   'Dynasty Furnishings Centre Ltd (Mirpur Branch)',
-  'DMB':  'Dynasty Furnishings Centre Ltd (Mirpur Branch)', // alternative code
   'DC':   'Dynasty Furnishings Centre Ltd (Chattogram Branch)',
   'DCM':  'Dynasty Furnishings Centre Ltd (Cumilla Branch)',
   'DR':   'Dynasty Furnishings Centre Ltd (Rajshahi Branch)',
