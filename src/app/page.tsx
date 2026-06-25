@@ -3349,6 +3349,18 @@ export default function Home() {
     return !!flag
   }
 
+  // ★ Flexible item-export permission — matches backend /api/items/export.
+  //    Returns true if Export is granted on ANY of:
+  //    Master Data 'items' OR Menu 'itemPrice' / 'myEntityStock' /
+  //    'allEntityStock' / 'stockForAll'.
+  const canExportItems = (): boolean => {
+    return hasPermission('master', 'items', 'export') ||
+      hasPermission('menu', 'itemPrice', 'export') ||
+      hasPermission('menu', 'myEntityStock', 'export') ||
+      hasPermission('menu', 'allEntityStock', 'export') ||
+      hasPermission('menu', 'stockForAll', 'export')
+  }
+
   // Menu access helper: admin/manager always see all menus; user sees only what's granted
   const isMenuVisible = (menuKey: string): boolean => {
     if (isManagerOrAdmin) return true
@@ -3641,7 +3653,7 @@ export default function Home() {
           <Input placeholder="Search items..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="w-64" onKeyDown={e => e.key === 'Enter' && handleSearch()} />
           <Button variant="outline" onClick={handleSearch}><Search className="w-4 h-4" /></Button>
           <Button variant="ghost" onClick={handleSearchReset}><RotateCcw className="w-4 h-4" /></Button>
-          <Button variant="outline" onClick={handleExportItems} disabled={exporting} title="Download as Excel file" style={{ display: hasPermission('master', 'items', 'export') ? '' : 'none' }}>
+          <Button variant="outline" onClick={handleExportItems} disabled={exporting} title="Download as Excel file" style={{ display: canExportItems() ? '' : 'none' }}>
             {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
             {exporting ? 'Exporting...' : 'Excel'}
           </Button>
@@ -10042,7 +10054,7 @@ export default function Home() {
           </Select>
           <Button onClick={handleSearch}><Search className="w-4 h-4 mr-2" />Search</Button>
           <Button variant="outline" onClick={handleSearchReset}><RotateCcw className="w-4 h-4 mr-2" />Reset</Button>
-          <Button variant="outline" onClick={handleExportItems} disabled={exporting} title="Download as Excel file" style={{ display: hasPermission('master', 'items', 'export') ? '' : 'none' }}>
+          <Button variant="outline" onClick={handleExportItems} disabled={exporting} title="Download as Excel file" style={{ display: canExportItems() ? '' : 'none' }}>
             {exporting ? <RefreshCw className="w-4 h-4 mr-2 animate-spin" /> : <Download className="w-4 h-4 mr-2" />}
             {exporting ? 'Exporting...' : 'Excel'}
           </Button>

@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
-import { getCurrentUser, canMasterData } from '@/lib/auth';
+import { getCurrentUser, canMasterData, canMenu } from '@/lib/auth';
 import * as XLSX from 'xlsx';
 
 // GET /api/items/export — download all items as Excel (.xlsx) file
@@ -15,9 +15,26 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
     }
 
-    // ★ Per-master-data export permission (Master Data → Item Information → Export)
-    if (!canMasterData(currentUser, 'items', 'export')) {
-      return NextResponse.json({ error: 'You do not have permission to export items' }, { status: 403 });
+    // ★ Export permission — flexible check:
+    //    If ANY of the following is true, allow export:
+    //      1. Master Data → 'items' → Export
+    //      2. Menu → 'itemPrice' → Export
+    //      3. Menu → 'myEntityStock' → Export
+    //      4. Menu → 'allEntityStock' → Export
+    //      5. Menu → 'stockForAll' → Export
+    //    Rationale: admin may have ticked Export on ANY of these places in the
+    //    User Management form — they all represent "this user can download Excel
+    //    for item-related data". It's confusing to require it on the specific
+    //    Master Data row when the user clearly intended to grant export access.
+    const canExportItems =
+      canMasterData(currentUser, 'items', 'export') ||
+      canMenu(currentUser, 'itemPrice', 'export') ||
+      canMenu(currentUser, 'myEntityStock', 'export') ||
+      canMenu(currentUser, 'allEntityStock', 'export') ||
+      canMenu(currentUser, 'stockForAll', 'export');
+
+    if (!canExportItems) {
+      return NextResponse.json({ error: 'You do not have permission to export items. Ask admin to grant Export on Item Information, Item Price, My Entity Stock, All Entity Stock, or Stock for All.' }, { status: 403 });
     }
 
     const searchParams = request.nextUrl.searchParams;
