@@ -633,7 +633,7 @@ export default function Home() {
   const [sfaData, setSfaData] = useState<any>(null)
   const [sfaPage, setSfaPage] = useState(1)
   const [sfaPageSize, setSfaPageSize] = useState(50)
-  const [sfaShowTotals, setSfaShowTotals] = useState(false)
+  const [sfaShowTotals, setSfaShowTotals] = useState(true)
   const [sfaDebouncedSearch, setSfaDebouncedSearch] = useState('')
 
 
@@ -3917,14 +3917,9 @@ export default function Home() {
     return (
       <div className="space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
-          <div>
-            <h2 className="text-xl font-semibold">Stock for All</h2>
-            <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
-          </div>
-          <Button variant={sfaShowTotals ? 'default' : 'outline'} size="sm" onClick={() => setSfaShowTotals(!sfaShowTotals)}>
-            <BarChart3 className="w-4 h-4 mr-2" />{sfaShowTotals ? 'Hide' : 'Show'} Total Stock
-          </Button>
+        <div>
+          <h2 className="text-xl font-semibold">Stock for All</h2>
+          <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
         </div>
 
         {/* Filters */}
@@ -3989,8 +3984,8 @@ export default function Home() {
           )}
         </div>
 
-        {/* Totals panel (collapsible) */}
-        {sfaShowTotals && data && (
+        {/* Totals panel — always visible */}
+        {data && (
           <div className="bg-card rounded-lg border p-4 space-y-3">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
               <div className="rounded-md border bg-muted/30 p-3">
@@ -4052,14 +4047,13 @@ export default function Home() {
                 <TableHead className="font-semibold text-right">Qty</TableHead>
                 <TableHead className="font-semibold">UoM</TableHead>
                 <TableHead className="font-semibold text-right">Unit Price</TableHead>
-                <TableHead className="font-semibold text-right">Stock Value</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {sfaLoading ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">Loading...</TableCell></TableRow>
               ) : stocks.length === 0 ? (
-                <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
+                <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No stock data found. Try adjusting filters.</TableCell></TableRow>
               ) : stocks.map((s, i) => (
                 <TableRow key={s.id} className="hover:bg-muted/30">
                   <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
@@ -4071,7 +4065,6 @@ export default function Home() {
                   <TableCell className="text-right font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
                   <TableCell className="text-xs">{s.uom}</TableCell>
                   <TableCell className="text-right font-mono">৳ {(s.unitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                  <TableCell className="text-right font-mono font-semibold">৳ {(s.stockValue || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -4081,7 +4074,6 @@ export default function Home() {
                   <td colSpan={6} className="px-3 py-2 text-right">Page Total:</td>
                   <td className="px-3 py-2 text-right font-mono">{stocks.reduce((s, r) => s + r.quantity, 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
                   <td colSpan={2}></td>
-                  <td className="px-3 py-2 text-right font-mono">৳ {stocks.reduce((s, r) => s + (r.stockValue || 0), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                 </tr>
               </tfoot>
             )}

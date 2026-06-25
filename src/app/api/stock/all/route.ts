@@ -74,12 +74,16 @@ export async function GET(request: NextRequest) {
 
     const itemFilters: Prisma.ItemWhereInput[] = [];
     if (search) {
-      // LIKE search across multiple columns
-      itemFilters.push(
-        { itemName: { contains: search } },
-        { itemCode: { contains: search } },
-        { barcode: { contains: search } },
-      );
+      // LIKE search across multiple columns — combined as OR (any one match is enough)
+      // ★ Use insensitive mode so 'item' matches 'Item' / 'ITEM' (Prisma's
+      //    SQLite adapter supports 'mode: insensitive' since Prisma 5+).
+      itemFilters.push({
+        OR: [
+          { itemName: { contains: search, mode: 'insensitive' } },
+          { itemCode: { contains: search, mode: 'insensitive' } },
+          { barcode: { contains: search, mode: 'insensitive' } },
+        ],
+      });
     }
     if (group) itemFilters.push({ group: { equals: group } });
     if (subGroup) itemFilters.push({ subGroup: { equals: subGroup } });
