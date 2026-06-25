@@ -4044,84 +4044,73 @@ AS Display Centre,720-500-D,0
     const data = sfaData
     const stocks = data?.stocks || []
     const totalPages = data?.totalPages || 0
+    const canDelete = isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'delete') || hasPermission('menu', 'myEntityStock', 'delete')
 
     return (
-      <div className="space-y-4">
+      <div className="space-y-3 md:space-y-4">
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-2">
+        <div className="flex items-start justify-between flex-wrap gap-2">
           <div>
-            <h2 className="text-xl font-semibold">Stock for All</h2>
-            <p className="text-sm text-muted-foreground">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item Code.</p>
+            <h2 className="text-lg md:text-xl font-semibold">Stock for All</h2>
+            <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item.</p>
           </div>
-          <div className="flex gap-2 flex-wrap">
-            {/* ★ Upload Format — opens a dedicated page (not popup) */}
-            <Button variant="outline" size="sm" onClick={() => setCurrentView('stockUploadFormat')} title="View CSV/Excel format documentation + download template">
-              <FileText className="w-4 h-4 mr-1.5" />Upload Format
+          <div className="flex gap-1.5 md:gap-2 flex-wrap">
+            <Button variant="outline" size="sm" onClick={() => setCurrentView('stockUploadFormat')}>
+              <FileText className="w-4 h-4 md:mr-1.5" /><span className="hidden md:inline">Upload Format</span>
             </Button>
-            {/* Upload button — gated on Create permission. Opens a dedicated
-                page (not a popup) per user request. */}
             {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'create') || hasPermission('menu', 'myEntityStock', 'create')) && (
               <Button size="sm" onClick={() => { setSfaUploadResult(null); setCurrentView('stockUploadPage') }}>
-                <Upload className="w-4 h-4 mr-1.5" />Upload Stock
+                <Upload className="w-4 h-4 md:mr-1.5" /><span className="hidden md:inline">Upload Stock</span>
               </Button>
             )}
-            {/* ★ Delete All Stock — ADMIN ONLY (kebol admin per user request).
-                Two-step confirmation prevents accidental wipes. */}
             {isAdmin && (
-              <Button
-                variant="destructive"
-                size="sm"
-                onClick={handleSfaDeleteAllStock}
-                disabled={sfaDeleteAllBusy}
-                title="Delete ALL stock rows across ALL entities (admin only)"
-              >
+              <Button variant="destructive" size="sm" onClick={handleSfaDeleteAllStock} disabled={sfaDeleteAllBusy}>
                 {sfaDeleteAllBusy
-                  ? <><RefreshCw className="w-4 h-4 mr-1.5 animate-spin" />Deleting...</>
-                  : <><Trash2 className="w-4 h-4 mr-1.5" />Delete All Stock</>}
+                  ? <><RefreshCw className="w-4 h-4 md:mr-1.5 animate-spin" /><span className="hidden md:inline">Deleting...</span></>
+                  : <><Trash2 className="w-4 h-4 md:mr-1.5" /><span className="hidden md:inline">Delete All</span></>}
               </Button>
             )}
           </div>
         </div>
 
         {/* Filters */}
-        <div className="bg-card rounded-lg border p-3 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-4 gap-2">
-            {/* Search */}
-            <div className="space-y-1">
-              <Label className="text-xs">Filter (Item Code / Name / Barcode)</Label>
-              <Input
-                placeholder="Search..."
-                value={sfaSearch}
-                onChange={e => setSfaSearch(e.target.value)}
-              />
-            </div>
-            {/* Group dropdown */}
+        <div className="bg-card rounded-lg border p-2 md:p-3 space-y-2 md:space-y-3">
+          {/* Search — full width on mobile, 1/4 on desktop */}
+          <div className="space-y-1">
+            <Label className="text-xs">Search Item</Label>
+            <Input
+              placeholder="Type item name..."
+              value={sfaSearch}
+              onChange={e => setSfaSearch(e.target.value)}
+              className="h-9"
+            />
+          </div>
+          {/* Dropdowns — 2 cols on mobile, 3 cols on desktop (since search takes 1) */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
             <div className="space-y-1">
               <Label className="text-xs">Group</Label>
               <Select value={sfaGroup || '__all__'} onValueChange={v => { setSfaGroup(v === '__all__' ? '' : v); setSfaSubGroup(''); setSfaPage(1) }}>
-                <SelectTrigger><SelectValue placeholder="All Groups" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Groups</SelectItem>
                   {(data?.groups || []).map(g => <SelectItem key={g} value={g}>{g}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            {/* SubGroup dropdown */}
             <div className="space-y-1">
               <Label className="text-xs">Sub Group</Label>
               <Select value={sfaSubGroup || '__all__'} onValueChange={v => { setSfaSubGroup(v === '__all__' ? '' : v); setSfaPage(1) }}>
-                <SelectTrigger><SelectValue placeholder="All Sub Groups" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Sub Groups</SelectItem>
                   {(data?.subGroups || []).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}
                 </SelectContent>
               </Select>
             </div>
-            {/* Entity dropdown */}
-            <div className="space-y-1">
+            <div className="space-y-1 col-span-2 md:col-span-1">
               <Label className="text-xs">Entity</Label>
               <Select value={sfaEntityId || '__all__'} onValueChange={v => { setSfaEntityId(v === '__all__' ? '' : v); setSfaPage(1) }}>
-                <SelectTrigger><SelectValue placeholder="All Entities" /></SelectTrigger>
+                <SelectTrigger className="h-9 text-xs"><SelectValue placeholder="All" /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="__all__">All Entities</SelectItem>
                   {entities.map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}
@@ -4132,56 +4121,54 @@ AS Display Centre,720-500-D,0
           {/* Clear filters */}
           {(sfaSearch || sfaGroup || sfaSubGroup || sfaEntityId) && (
             <div className="flex items-center justify-between text-xs">
-              <p className="text-muted-foreground">
-                Showing {data?.total || 0} stock rows
-                {sfaGroup && ` · Group: ${sfaGroup}`}
-                {sfaSubGroup && ` · Sub Group: ${sfaSubGroup}`}
-                {sfaEntityId && ` · Entity: ${entities.find(e => e.id === sfaEntityId)?.name || ''}`}
+              <p className="text-muted-foreground truncate">
+                {data?.total || 0} rows {sfaGroup ? `· ${sfaGroup}` : ''} {sfaEntityId ? `· ${entities.find(e => e.id === sfaEntityId)?.name || ''}` : ''}
               </p>
-              <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => { setSfaSearch(''); setSfaGroup(''); setSfaSubGroup(''); setSfaEntityId(''); setSfaPage(1) }}>
-                <X className="w-3 h-3 mr-1" />Clear Filters
+              <Button variant="ghost" size="sm" className="h-7 text-xs shrink-0 ml-2" onClick={() => { setSfaSearch(''); setSfaGroup(''); setSfaSubGroup(''); setSfaEntityId(''); setSfaPage(1) }}>
+                <X className="w-3 h-3 mr-1" />Clear
               </Button>
             </div>
           )}
         </div>
 
-        {/* Totals panel — always visible */}
+        {/* Totals — compact cards on mobile, full table on desktop */}
         {data && (
-          <div className="bg-card rounded-lg border p-4 space-y-3">
-            <div className="grid grid-cols-2 gap-3">
-              <div className="rounded-md border bg-blue-50 border-blue-200 p-3">
-                <p className="text-xs text-muted-foreground">Grand Total Qty</p>
-                <p className="text-xl font-bold text-blue-700">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+          <div className="bg-card rounded-lg border p-2 md:p-4 space-y-2 md:space-y-3">
+            <div className="grid grid-cols-2 gap-2 md:gap-3">
+              <div className="rounded-md border bg-blue-50 border-blue-200 p-2 md:p-3">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Grand Total Qty</p>
+                <p className="text-base md:text-xl font-bold text-blue-700">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
               </div>
-              <div className="rounded-md border bg-green-50 border-green-200 p-3">
-                <p className="text-xs text-muted-foreground">Distinct Entities</p>
-                <p className="text-xl font-bold text-green-700">{data.totalsByEntity.length}</p>
+              <div className="rounded-md border bg-green-50 border-green-200 p-2 md:p-3">
+                <p className="text-[10px] md:text-xs text-muted-foreground">Distinct Entities</p>
+                <p className="text-base md:text-xl font-bold text-green-700">{data.totalsByEntity.length}</p>
               </div>
             </div>
+            {/* Entity totals table — scrollable on mobile */}
             {data.totalsByEntity.length > 0 && (
               <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-xs">
+                <table className="w-full text-[10px] md:text-xs">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="text-left px-3 py-2 font-semibold">Entity</th>
-                      <th className="text-right px-3 py-2 font-semibold">Total Qty</th>
-                      <th className="text-right px-3 py-2 font-semibold">Total Value (৳)</th>
+                      <th className="text-left px-2 md:px-3 py-1.5 md:py-2 font-semibold">Entity</th>
+                      <th className="text-right px-2 md:px-3 py-1.5 md:py-2 font-semibold">Total Qty</th>
+                      <th className="text-right px-2 md:px-3 py-1.5 md:py-2 font-semibold">Value (৳)</th>
                     </tr>
                   </thead>
                   <tbody>
                     {data.totalsByEntity.map((t, i) => (
-                      <tr key={i} className="border-t hover:bg-muted/30">
-                        <td className="px-3 py-2 font-medium">{t.entityName}</td>
-                        <td className="px-3 py-2 text-right font-mono">{t.totalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                        <td className="px-3 py-2 text-right font-mono">{t.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <tr key={i} className="border-t">
+                        <td className="px-2 md:px-3 py-1.5 md:py-2 font-medium">{t.entityName}</td>
+                        <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">{t.totalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                        <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">{t.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       </tr>
                     ))}
                   </tbody>
                   <tfoot>
                     <tr className="border-t-2 bg-muted/30 font-semibold">
-                      <td className="px-3 py-2">Grand Total</td>
-                      <td className="px-3 py-2 text-right font-mono">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-2 text-right font-mono">৳ {data.grandTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-2 md:px-3 py-1.5 md:py-2">Total</td>
+                      <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
+                      <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">৳ {data.grandTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -4190,8 +4177,66 @@ AS Display Centre,720-500-D,0
           </div>
         )}
 
-        {/* Stock table */}
-        <div className="border rounded-lg overflow-hidden">
+        {/* ===== MOBILE: Card view (sm and below) ===== */}
+        <div className="sm:hidden space-y-2">
+          {sfaLoading ? (
+            <div className="text-center py-8 text-muted-foreground text-sm">Loading...</div>
+          ) : stocks.length === 0 ? (
+            <div className="text-center py-8 text-muted-foreground text-sm border rounded-lg">No stock data found.</div>
+          ) : (
+            <>
+              {stocks.map((s, i) => {
+                const booked = s.bookedQty || 0
+                const available = s.available || (s.quantity - booked)
+                return (
+                  <div key={s.id} className={`border rounded-lg p-3 space-y-2 ${booked > 0 ? 'bg-amber-50/40' : 'bg-card'}`}>
+                    {/* Item name + sl */}
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm truncate">{s.itemName}</p>
+                        <p className="text-[10px] text-muted-foreground">{s.entityName}</p>
+                      </div>
+                      {canDelete && (
+                        <Button variant="ghost" size="sm" className="text-destructive h-6 w-6 p-0 shrink-0"
+                          onClick={() => handleSfaDeleteStock(s.id, `${s.entityName} — ${s.itemName}`)}>
+                          <Trash2 className="w-3 h-3" />
+                        </Button>
+                      )}
+                    </div>
+                    {/* Qty / Booked / Available — 3 cols */}
+                    <div className="grid grid-cols-3 gap-1 text-center">
+                      <div className="bg-muted/40 rounded p-1.5">
+                        <p className="text-[9px] text-muted-foreground">Qty</p>
+                        <p className="text-sm font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+                      </div>
+                      <div className={`rounded p-1.5 ${booked > 0 ? 'bg-amber-100' : 'bg-muted/40'}`}>
+                        <p className="text-[9px] text-muted-foreground">Booked</p>
+                        <p className={`text-sm font-bold ${booked > 0 ? 'text-amber-700' : ''}`}>{booked}</p>
+                      </div>
+                      <div className="bg-muted/40 rounded p-1.5">
+                        <p className="text-[9px] text-muted-foreground">Available</p>
+                        <p className={`text-sm font-bold ${available < 0 ? 'text-red-600' : available === 0 ? 'text-amber-600' : 'text-green-700'}`}>{available.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+                      </div>
+                    </div>
+                    {/* UoM + Price + Group */}
+                    <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                      <span>{s.uom} · {s.group || '—'}</span>
+                      <span className="font-mono">৳ {(s.unitPrice || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+                    </div>
+                  </div>
+                )
+              })}
+              {/* Mobile page total */}
+              <div className="border rounded-lg p-2 bg-muted/30 flex justify-between text-xs font-semibold">
+                <span>Page Total:</span>
+                <span>{stocks.reduce((s, r) => s + r.quantity, 0).toLocaleString('en-US', { maximumFractionDigits: 2 })}</span>
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* ===== DESKTOP: Table view (sm and above) ===== */}
+        <div className="hidden sm:block border rounded-lg overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow className="bg-muted/50">
@@ -4205,7 +4250,7 @@ AS Display Centre,720-500-D,0
                 <TableHead className="font-semibold text-right">Available</TableHead>
                 <TableHead className="font-semibold">UoM</TableHead>
                 <TableHead className="font-semibold text-right">Unit Price</TableHead>
-                {(isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'delete') || hasPermission('menu', 'myEntityStock', 'delete')) && (
+                {canDelete && (
                   <TableHead className="font-semibold text-center">Remove</TableHead>
                 )}
               </TableRow>
@@ -4218,7 +4263,6 @@ AS Display Centre,720-500-D,0
               ) : stocks.map((s, i) => {
                 const booked = s.bookedQty || 0
                 const available = s.available || (s.quantity - booked)
-                const canDelete = isManagerOrAdmin || hasPermission('menu', 'stockForAll', 'delete') || hasPermission('menu', 'myEntityStock', 'delete')
                 return (
                 <TableRow key={s.id} className={`hover:bg-muted/30 ${booked > 0 ? 'bg-amber-50/40' : ''}`}>
                   <TableCell className="text-muted-foreground">{(sfaPage - 1) * sfaPageSize + i + 1}</TableCell>
@@ -4268,15 +4312,15 @@ AS Display Centre,720-500-D,0
           </Table>
         </div>
 
-        {/* Pagination */}
+        {/* Pagination — works for both mobile + desktop */}
         {data && data.total > 0 && (
           <div className="flex items-center justify-between flex-wrap gap-2">
             <div className="flex items-center gap-2">
-              <p className="text-sm text-muted-foreground">
-                Showing {(sfaPage - 1) * sfaPageSize + 1}–{Math.min(sfaPage * sfaPageSize, data.total)} of {data.total}
+              <p className="text-xs md:text-sm text-muted-foreground">
+                {(sfaPage - 1) * sfaPageSize + 1}–{Math.min(sfaPage * sfaPageSize, data.total)} of {data.total}
               </p>
               <Select value={String(sfaPageSize)} onValueChange={v => { setSfaPageSize(parseInt(v)); setSfaPage(1) }}>
-                <SelectTrigger className="w-[80px] h-8 text-xs"><SelectValue /></SelectTrigger>
+                <SelectTrigger className="w-[70px] h-8 text-xs"><SelectValue /></SelectTrigger>
                 <SelectContent>
                   <SelectItem value="20">20</SelectItem>
                   <SelectItem value="50">50</SelectItem>
