@@ -886,6 +886,38 @@ export default function Home() {
     if (user) { fetchEntities() }
   }, [user])
 
+  // ★ Auto-select entity when a user has exactly ONE accessible entity.
+  //    User request: "kono user ke jodi ekta entity dekhar rights deya hoy,
+  //    tahole login korar por jeno sorasori oi entity te dhuke jay, alada kore
+  //    jeno entity te select kore dhukte na hoy."
+  //
+  //    Behavior:
+  //    - admin/manager with multiple entities → still show the entity selection
+  //      page (so they can choose which entity to work in today)
+  //    - admin/manager with exactly ONE entity in the system → auto-enter it
+  //    - regular user with exactly ONE entity in their entityAccess → auto-enter it
+  //    - regular user with ZERO or MULTIPLE entities → show entity selection page
+  //
+  //    We only auto-select if workingEntity is NOT already set (so we don't
+  //    override a user's manual choice if they came back via Back button).
+  useEffect(() => {
+    if (!user || entitiesLoading || entities.length === 0) return
+    if (workingEntity) return // already chose an entity — respect that
+
+    const isPrivileged = user.role === 'admin' || user.role === 'manager'
+    const accessibleEntities = isPrivileged
+      ? entities
+      : entities.filter(e => user.entityAccess?.some(ea => ea.entityId === e.id))
+
+    if (accessibleEntities.length === 1) {
+      const onlyEntity = accessibleEntities[0]
+      setWorkingEntity({ id: onlyEntity.id, name: onlyEntity.name })
+      setCurrentView('itemPrice')
+    }
+    // else: 0 entities (no access) OR 2+ entities → fall through to entity
+    //       selection page (renderEntitySelection handles the 0 case)
+  }, [user, entities, entitiesLoading, workingEntity])
+
   const fetchItems = useCallback(async () => {
     setItemsLoading(true)
     try {
