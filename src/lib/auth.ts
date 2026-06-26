@@ -47,11 +47,11 @@ export async function getCurrentUser(request?: NextRequest) {
 
   if (!token) return null;
 
-  // Check cache first
-  const cached = userCache.get(token);
-  if (cached && cached.expires > Date.now()) {
-    return cached.user;
-  }
+  // ★ User cache DISABLED — same reason as basicUserCache above.
+  // const cached = userCache.get(token);
+  // if (cached && cached.expires > Date.now()) {
+  //   return cached.user;
+  // }
 
   const session = await db.session.findUnique({
     where: { token },
@@ -76,7 +76,7 @@ export async function getCurrentUser(request?: NextRequest) {
   }
 
   // Cache the user for 5 minutes
-  userCache.set(token, { user: session.user, expires: Date.now() + CACHE_TTL });
+  // userCache.set(token, { user: session.user, expires: Date.now() + CACHE_TTL });
 
   return session.user;
 }
@@ -110,11 +110,14 @@ export async function getCurrentUserBasic(request?: NextRequest) {
 
   if (!token) return null;
 
-  // Check basic cache first
-  const cached = basicUserCache.get(token);
-  if (cached && cached.expires > Date.now()) {
-    return cached.user;
-  }
+  // ★ Basic cache DISABLED — was causing stale user data on Vercel serverless
+  //   instances after deploys. The cache would hold old user records that
+  //   had empty entityAccess, causing "No Entity Available" even after
+  //   the user was properly set up.
+  // const cached = basicUserCache.get(token);
+  // if (cached && cached.expires > Date.now()) {
+  //   return cached.user;
+  // }
 
   // Lightweight query — only session + user + entityAccess (for filtering)
   const session = await db.session.findUnique({
@@ -145,7 +148,8 @@ export async function getCurrentUserBasic(request?: NextRequest) {
     return null;
   }
 
-  basicUserCache.set(token, { user: session.user, expires: Date.now() + CACHE_TTL });
+  // Cache disabled — don't set basicUserCache
+  // basicUserCache.set(token, { user: session.user, expires: Date.now() + CACHE_TTL });
 
   return session.user;
 }

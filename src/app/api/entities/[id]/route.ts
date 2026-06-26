@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { db } from '@/lib/db';
 import { getCurrentUserBasic } from '@/lib/auth';
-import { invalidateEntitiesCache } from '@/lib/entities-cache';
 
 // PUT update entity
 export async function PUT(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -25,9 +24,6 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
       },
     });
 
-    // Invalidate in-memory cache so the updated entity shows up immediately
-    invalidateEntitiesCache();
-
     return NextResponse.json({ entity });
   } catch (error) {
     console.error('Update entity error:', error);
@@ -45,9 +41,6 @@ export async function DELETE(request: NextRequest, { params }: { params: Promise
 
     const { id } = await params;
     await db.entity.delete({ where: { id } });
-
-    // Invalidate in-memory cache so the deleted entity disappears immediately
-    invalidateEntitiesCache();
 
     return NextResponse.json({ success: true });
   } catch (error) {
