@@ -3456,26 +3456,22 @@ AS Display Centre,720-500-D,0
     const list = scope === 'menu' ? user.menuAccess : user.masterDataAccess
     const entry = (list as any[])?.find((m: any) => (scope === 'menu' ? m.menuKey : m.masterDataKey) === key)
 
-    // ★ If NO entry exists for this key (legacy user, or admin never opened
-    //    this user's permission matrix), fall back to global toggles — matches
-    //    the backend canMenu/canMasterData behavior.
+    // ★ If NO entry exists for this key, DENY by default (except export).
+    //   Previously fell back to global canCreateItem/canModifyItem which
+    //   let users inherit permissions the admin never granted.
     if (!entry) {
-      if (action === 'create' || action === 'upload') return !!user.canCreateItem
-      if (action === 'edit' || action === 'delete') return !!user.canModifyItem
-      if (action === 'export') return true  // default allow
-      if (action === 'approve') return false
+      if (action === 'export') return true  // export default-allow
       return false
     }
     // Entry exists but hidden → no permissions
     if (!entry.visible) return false
 
     const flag = entry[`can${action.charAt(0).toUpperCase()}${action.slice(1)}`]
+    // ★ Check the per-menu/per-master-data flag ONLY.
+    //   No more `?? user.canCreateItem` fallback — that was the bug.
     if (flag === undefined) {
-      // back-compat: fall back to legacy global toggles
-      if (action === 'create' || action === 'upload') return !!user.canCreateItem
-      if (action === 'edit' || action === 'delete') return !!user.canModifyItem
       if (action === 'export') return true  // default allow
-      if (action === 'approve') return false  // ★ v59: approve is never inherited from legacy toggles
+      return false  // default deny for all other actions
     }
     return !!flag
   }
