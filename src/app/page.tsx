@@ -4145,9 +4145,9 @@ AS Display Centre,720-500-D,0
           )}
         </div>
 
-        {/* Totals — compact cards on mobile, full table on desktop */}
+        {/* Totals — just 2 cards, no entity breakdown table */}
         {data && (
-          <div className="bg-card rounded-lg border p-2 md:p-4 space-y-2 md:space-y-3">
+          <div className="bg-card rounded-lg border p-2 md:p-4">
             <div className="grid grid-cols-2 gap-2 md:gap-3">
               <div className="rounded-md border bg-blue-50 border-blue-200 p-2 md:p-3">
                 <p className="text-[10px] md:text-xs text-muted-foreground">Grand Total Qty</p>
@@ -4158,36 +4158,6 @@ AS Display Centre,720-500-D,0
                 <p className="text-base md:text-xl font-bold text-green-700">{data.totalsByEntity.length}</p>
               </div>
             </div>
-            {/* Entity totals table — scrollable on mobile */}
-            {data.totalsByEntity.length > 0 && (
-              <div className="overflow-x-auto rounded-md border">
-                <table className="w-full text-[10px] md:text-xs">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="text-left px-2 md:px-3 py-1.5 md:py-2 font-semibold">Entity</th>
-                      <th className="text-right px-2 md:px-3 py-1.5 md:py-2 font-semibold">Total Qty</th>
-                      <th className="text-right px-2 md:px-3 py-1.5 md:py-2 font-semibold">Value (৳)</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {data.totalsByEntity.map((t, i) => (
-                      <tr key={i} className="border-t">
-                        <td className="px-2 md:px-3 py-1.5 md:py-2 font-medium">{t.entityName}</td>
-                        <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">{t.totalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                        <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">{t.totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                  <tfoot>
-                    <tr className="border-t-2 bg-muted/30 font-semibold">
-                      <td className="px-2 md:px-3 py-1.5 md:py-2">Total</td>
-                      <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">{data.grandTotalQty.toLocaleString('en-US', { maximumFractionDigits: 2 })}</td>
-                      <td className="px-2 md:px-3 py-1.5 md:py-2 text-right font-mono">৳ {data.grandTotalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                    </tr>
-                  </tfoot>
-                </table>
-              </div>
-            )}
           </div>
         )}
 
