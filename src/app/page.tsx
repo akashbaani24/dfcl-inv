@@ -6611,15 +6611,9 @@ DEWS,720-500-B,5</pre>
           window.onload = function() {
             if (typeof JsBarcode !== 'undefined') {
               try {
-                JsBarcode(".barcode", "", {
-                  format: "CODE128",
-                  width: 2,
-                  height: 50,
-                  displayValue: true,
-                  fontSize: 14,
-                  textMargin: 2,
-                  margin: 0
-                });
+                // ★ Use .init() to read jsbarcode-value attributes from each SVG
+                //   (was passing empty string "" which generated blank barcodes)
+                JsBarcode(".barcode").init();
               } catch(e) { console.error(e); }
             }
             setTimeout(function() { window.print(); }, 500);
