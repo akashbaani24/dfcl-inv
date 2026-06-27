@@ -6571,11 +6571,13 @@ DEWS,720-500-B,5</pre>
       const labelCount = Math.min(qty, 20)
       const labels = Array.from({ length: labelCount }).map((_, idx) => `
         <div class="label">
-          <div class="title">${escapeHtml(name)}</div>
-          <svg class="barcode" jsbarcode-format="CODE128" jsbarcode-value="${escapeHtml(code || 'X')}" jsbarcode-width="2" jsbarcode-height="50" jsbarcode-displayvalue="true" jsbarcode-fontSize="14" jsbarcode-textMargin="2" jsbarcode-margin="0"></svg>
-          <div class="barcode-text">${escapeHtml(code || '')}</div>
+          <div class="item-name">${escapeHtml(name)}</div>
+          <div class="barcode-wrap">
+            <div id="bc${idx}_${pi.itemId?.slice(-4) || idx}" class="barcode-svg"></div>
+          </div>
+          <div class="barcode-num">${escapeHtml(code || '')}</div>
           <div class="meta">
-            <span>UoM: ${escapeHtml(uom)}</span>
+            <span>${escapeHtml(uom)}</span>
             <span>#${idx + 1}/${qty}</span>
             <span>${escapeHtml(purchaseNo)}</span>
           </div>
@@ -6584,39 +6586,40 @@ DEWS,720-500-B,5</pre>
       return labels
     }).join('')
 
+    // Build JsBarcode calls — one per barcode, using the code value
+    const barcodeScripts = items.map((pi: any, itemIdx: number) => {
+      const code = pi.item?.barcode || pi.item?.itemCode || pi.itemId || 'X'
+      const qty = Math.min(pi.quantity, 20)
+      const calls = Array.from({ length: qty }).map((_, idx) => {
+        const divId = `bc${idx}_${pi.itemId?.slice(-4) || idx}`
+        return `try{JsBarcode("#${divId}", "${escapeHtml(code)}", {format:"CODE128",width:2,height:50,displayValue:false,margin:0});}catch(e){}`
+      }).join('')
+      return calls
+    }).join('\n')
+
     win.document.write(`<!doctype html><html><head><title>Barcodes - ${escapeHtml(purchaseNo)}</title>
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:Arial,sans-serif;padding:15px;background:#fff}
         h1{font-size:18px;margin:0 0 10px;color:#1e3a8a;border-bottom:2px solid #1e3a8a;padding-bottom:5px}
         .info{font-size:11px;color:#666;margin-bottom:15px}
-        .labels{display:flex;flex-wrap:wrap;gap:12px}
-        .label{width:200px;height:130px;border:1px solid #999;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;page-break-inside:avoid;margin-bottom:4px}
-        .label .title{font-size:12px;font-weight:700;text-align:center;color:#1e293b;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 0}
-        .label .barcode{display:block;margin:2px 0}
-        .label .barcode-text{font-size:13px;font-family:'Courier New',monospace;font-weight:bold;text-align:center;color:#000;letter-spacing:1px;padding:2px 0}
-        .label .meta{font-size:9px;color:#666;display:flex;justify-content:space-between;width:100%;padding:0 3px}
-        @media print{
-          body{padding:8mm}
-          .label{border:1px dashed #999}
-          .labels{gap:8px}
-        }
+        .labels{display:flex;flex-wrap:wrap;gap:10px}
+        .label{width:200px;height:140px;border:1px solid #999;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;page-break-inside:avoid}
+        .item-name{font-size:12px;font-weight:bold;text-align:center;color:#000;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+        .barcode-wrap{display:flex;align-items:center;justify-content:center;height:55px}
+        .barcode-num{font-size:14px;font-family:'Courier New',monospace;font-weight:bold;text-align:center;color:#000;letter-spacing:1px}
+        .meta{font-size:9px;color:#666;display:flex;justify-content:space-between;width:100%;padding:0 3px}
+        @media print{body{padding:8mm}.label{border:1px dashed #999}.labels{gap:6px}}
       </style>
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
       </head><body>
         <h1>BARCODES — ${escapeHtml(purchaseNo)}</h1>
-        <div class="info">Purchase ID: ${escapeHtml(purchaseId)} | ${items.length} item(s) | Generated: ${bdNow()}</div>
+        <div class="info">${items.length} item(s) | Generated: ${bdNow()}</div>
         <div class="labels">${labels}</div>
         <script>
           window.onload = function() {
-            if (typeof JsBarcode !== 'undefined') {
-              try {
-                // ★ Use .init() to read jsbarcode-value attributes from each SVG
-                //   (was passing empty string "" which generated blank barcodes)
-                JsBarcode(".barcode").init();
-              } catch(e) { console.error(e); }
-            }
-            setTimeout(function() { window.print(); }, 500);
+            ${barcodeScripts}
+            setTimeout(function() { window.print(); }, 600);
           };
         </script>
       </body></html>`)
