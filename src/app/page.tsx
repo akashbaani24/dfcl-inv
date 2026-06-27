@@ -7566,7 +7566,9 @@ DEWS,720-500-B,5</pre>
           <TableHeader><TableRow className="bg-muted/50">
             <TableHead className="font-semibold">Booking No</TableHead>
             <TableHead className="font-semibold">Items</TableHead>
+            <TableHead className="font-semibold text-right">Qty</TableHead>
             <TableHead className="font-semibold">Customer</TableHead>
+            <TableHead className="font-semibold">Booking From</TableHead>
             <TableHead className="font-semibold">Booking Date</TableHead>
             <TableHead className="font-semibold">Till Date</TableHead>
             <TableHead className="font-semibold">Reason</TableHead>
@@ -7574,48 +7576,59 @@ DEWS,720-500-B,5</pre>
             <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {filteredBookings.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
-            : filteredBookings.map((b: any) => (
-              <TableRow key={b.id} className="hover:bg-muted/30">
-                <TableCell>
-                  <button type="button" onClick={() => { setSelectedBookingId(b.id); setCurrentView('bookingDetail') }} className="font-mono text-xs text-primary hover:underline" title="Click to view booking details">
-                    {b.bookingNo}
-                  </button>
-                </TableCell>
-                <TableCell>
-                  {b.items?.map((bi: any, i: number) => (
-                    <div key={i} className="text-xs">
-                      {bi.item?.itemName || '—'} <span className="text-muted-foreground">({bi.fromEntity?.name || '?'})</span> ×{bi.quantity}
-                    </div>
-                  ))}
-                </TableCell>
-                <TableCell>{b.customer?.name || '—'}</TableCell>
-                <TableCell className="text-xs">{bdDate(new Date(b.bookingDate))}</TableCell>
-                <TableCell className="text-xs">{b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</TableCell>
-                <TableCell className="text-xs">{b.reason || '—'}</TableCell>
-                <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
-                <TableCell className="text-center">
-                  <Button variant="ghost" size="sm" onClick={() => printBooking(b)} title="Print / PDF"><FileText className="w-4 h-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => {
-                    setEditingBookingId(b.id)
-                    setBookingForm({
-                      customerId: b.customerId || '',
-                      bookingDate: new Date(b.bookingDate).toISOString().split('T')[0],
-                      tillDate: b.tillDate ? new Date(b.tillDate).toISOString().split('T')[0] : '',
-                      status: b.status,
-                      reason: b.reason || '',
-                      notes: b.notes || '',
-                      items: (b.items || []).map((bi: any) => ({ itemId: bi.itemId, fromEntityId: bi.fromEntityId, quantity: String(bi.quantity) })),
-                      newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
-                    })
-                    setBookingCustomerMode('existing')
-                    fetchCustomers()
-                    setCurrentView('newBooking')
-                  }} title="Edit"><Edit className="w-4 h-4" /></Button>
-                  <Button variant="ghost" size="sm" onClick={() => handleDeleteBooking(b.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
-                </TableCell>
-              </TableRow>
-            ))}
+            {filteredBookings.length === 0 ? <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No bookings found</TableCell></TableRow>
+            : filteredBookings.flatMap((b: any) => {
+                // ★ One row per item (matching Excel export format)
+                const itemCount = b.items?.length || 0
+                if (itemCount === 0) {
+                  return [(
+                    <TableRow key={b.id} className="hover:bg-muted/30">
+                      <TableCell><button type="button" onClick={() => { setSelectedBookingId(b.id); setCurrentView('bookingDetail') }} className="font-mono text-xs text-primary hover:underline">{b.bookingNo}</button></TableCell>
+                      <TableCell className="text-muted-foreground">—</TableCell>
+                      <TableCell></TableCell>
+                      <TableCell>{b.customer?.name || '—'}</TableCell>
+                      <TableCell></TableCell>
+                      <TableCell className="text-xs">{bdDate(new Date(b.bookingDate))}</TableCell>
+                      <TableCell className="text-xs">{b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</TableCell>
+                      <TableCell className="text-xs">{b.reason || '—'}</TableCell>
+                      <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
+                      <TableCell className="text-center">
+                        <Button variant="ghost" size="sm" onClick={() => printBooking(b)} title="Print / PDF"><FileText className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => { setEditingBookingId(b.id); setBookingForm({ customerId: b.customerId || '', bookingDate: new Date(b.bookingDate).toISOString().split('T')[0], tillDate: b.tillDate ? new Date(b.tillDate).toISOString().split('T')[0] : '', status: b.status, reason: b.reason || '', notes: b.notes || '', items: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' }); setBookingCustomerMode('existing'); fetchCustomers(); setCurrentView('newBooking') }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteBooking(b.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                      </TableCell>
+                    </TableRow>
+                  )]
+                }
+                // One row per item — first row shows booking-level info + actions,
+                // subsequent rows show item-level info only (with rowspan-like effect via empty cells)
+                return b.items.map((bi: any, idx: number) => (
+                  <TableRow key={`${b.id}-${idx}`} className={`hover:bg-muted/30 ${idx > 0 ? 'border-t-0' : ''}`}>
+                    {idx === 0 ? (
+                      <TableCell rowSpan={itemCount}><button type="button" onClick={() => { setSelectedBookingId(b.id); setCurrentView('bookingDetail') }} className="font-mono text-xs text-primary hover:underline">{b.bookingNo}</button></TableCell>
+                    ) : null}
+                    <TableCell className="text-xs">{bi.item?.itemName || '—'}</TableCell>
+                    <TableCell className="text-right font-medium text-xs">{bi.quantity}</TableCell>
+                    {idx === 0 ? (
+                      <>
+                        <TableCell rowSpan={itemCount}>{b.customer?.name || '—'}</TableCell>
+                        <TableCell className="text-xs">{bi.fromEntity?.name || '—'}</TableCell>
+                        <TableCell rowSpan={itemCount} className="text-xs">{bdDate(new Date(b.bookingDate))}</TableCell>
+                        <TableCell rowSpan={itemCount} className="text-xs">{b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</TableCell>
+                        <TableCell rowSpan={itemCount} className="text-xs">{b.reason || '—'}</TableCell>
+                        <TableCell rowSpan={itemCount}><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
+                        <TableCell rowSpan={itemCount} className="text-center">
+                          <Button variant="ghost" size="sm" onClick={() => printBooking(b)} title="Print / PDF"><FileText className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => { setEditingBookingId(b.id); setBookingForm({ customerId: b.customerId || '', bookingDate: new Date(b.bookingDate).toISOString().split('T')[0], tillDate: b.tillDate ? new Date(b.tillDate).toISOString().split('T')[0] : '', status: b.status, reason: b.reason || '', notes: b.notes || '', items: (b.items || []).map((bi2: any) => ({ itemId: bi2.itemId, fromEntityId: bi2.fromEntityId, quantity: String(bi2.quantity) })), newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' }); setBookingCustomerMode('existing'); fetchCustomers(); setCurrentView('newBooking') }} title="Edit"><Edit className="w-4 h-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteBooking(b.id)} className="text-destructive hover:text-destructive" title="Delete"><Trash2 className="w-4 h-4" /></Button>
+                        </TableCell>
+                      </>
+                    ) : (
+                      <TableCell className="text-xs">{bi.fromEntity?.name || '—'}</TableCell>
+                    )}
+                  </TableRow>
+                ))
+              })}
           </TableBody>
         </Table>
       </div>
