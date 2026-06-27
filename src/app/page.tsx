@@ -6572,7 +6572,8 @@ DEWS,720-500-B,5</pre>
       const labels = Array.from({ length: labelCount }).map((_, idx) => `
         <div class="label">
           <div class="title">${escapeHtml(name)}</div>
-          <svg class="barcode" jsbarcode-format="CODE128" jsbarcode-value="${escapeHtml(code || 'X')}" jsbarcode-width="2" jsbarcode-height="40" jsbarcode-displayvalue="true"></svg>
+          <svg class="barcode" jsbarcode-format="CODE128" jsbarcode-value="${escapeHtml(code || 'X')}" jsbarcode-width="2" jsbarcode-height="50" jsbarcode-displayvalue="true" jsbarcode-fontSize="14" jsbarcode-textMargin="2" jsbarcode-margin="0"></svg>
+          <div class="barcode-text">${escapeHtml(code || '')}</div>
           <div class="meta">
             <span>UoM: ${escapeHtml(uom)}</span>
             <span>#${idx + 1}/${qty}</span>
@@ -6585,16 +6586,21 @@ DEWS,720-500-B,5</pre>
 
     win.document.write(`<!doctype html><html><head><title>Barcodes - ${escapeHtml(purchaseNo)}</title>
       <style>
-        *{box-sizing:border-box}
+        *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:Arial,sans-serif;padding:15px;background:#fff}
         h1{font-size:18px;margin:0 0 10px;color:#1e3a8a;border-bottom:2px solid #1e3a8a;padding-bottom:5px}
         .info{font-size:11px;color:#666;margin-bottom:15px}
-        .labels{display:flex;flex-wrap:wrap;gap:6px}
-        .label{width:180px;height:100px;border:1px solid #999;padding:5px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;page-break-inside:avoid}
-        .label .title{font-size:11px;font-weight:700;text-align:center;color:#1e293b;line-height:1.2;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-        .label .barcode{display:block}
-        .label .meta{font-size:8px;color:#666;display:flex;justify-content:space-between;width:100%;padding:0 3px}
-        @media print{body{padding:8mm}.label{border:1px dashed #999}}
+        .labels{display:flex;flex-wrap:wrap;gap:12px}
+        .label{width:200px;height:130px;border:1px solid #999;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;page-break-inside:avoid;margin-bottom:4px}
+        .label .title{font-size:12px;font-weight:700;text-align:center;color:#1e293b;line-height:1.3;max-width:100%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;padding:2px 0}
+        .label .barcode{display:block;margin:2px 0}
+        .label .barcode-text{font-size:13px;font-family:'Courier New',monospace;font-weight:bold;text-align:center;color:#000;letter-spacing:1px;padding:2px 0}
+        .label .meta{font-size:9px;color:#666;display:flex;justify-content:space-between;width:100%;padding:0 3px}
+        @media print{
+          body{padding:8mm}
+          .label{border:1px dashed #999}
+          .labels{gap:8px}
+        }
       </style>
       <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
       </head><body>
@@ -6604,9 +6610,19 @@ DEWS,720-500-B,5</pre>
         <script>
           window.onload = function() {
             if (typeof JsBarcode !== 'undefined') {
-              try { JsBarcode(".barcode").init(); } catch(e) { console.error(e); }
+              try {
+                JsBarcode(".barcode", "", {
+                  format: "CODE128",
+                  width: 2,
+                  height: 50,
+                  displayValue: true,
+                  fontSize: 14,
+                  textMargin: 2,
+                  margin: 0
+                });
+              } catch(e) { console.error(e); }
             }
-            setTimeout(function() { window.print(); }, 400);
+            setTimeout(function() { window.print(); }, 500);
           };
         </script>
       </body></html>`)
