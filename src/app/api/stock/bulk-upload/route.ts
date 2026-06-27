@@ -93,10 +93,17 @@ export async function POST(request: NextRequest) {
     };
 
     // Pre-load entities + items for fast lookup
-    const allEntities = await db.entity.findMany({ select: { id: true, name: true } });
+    // ★ Load shortCode too so users can upload using short codes (e.g. "DM")
+    //   instead of full entity names.
+    const allEntities = await db.entity.findMany({ select: { id: true, name: true, shortCode: true } });
     const entityByName = new Map<string, string>();
     for (const e of allEntities) {
+      // Map by full name (lowercased)
       entityByName.set(e.name.toLowerCase().trim(), e.id);
+      // ★ Also map by shortCode (uppercased) if it exists
+      if (e.shortCode) {
+        entityByName.set(e.shortCode.toUpperCase().trim(), e.id);
+      }
     }
 
     // Pre-load all items (by itemName). 22k items = ~3MB, acceptable.
@@ -137,7 +144,10 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      const entityId = entityByName.get(entityName.toLowerCase());
+      // ★ Resolve entity by full name (lowercased) OR shortCode (uppercased).
+      //    User can type either "Dynasty Furnishings Centre Ltd (Mirpur Branch)"
+      //    or just "DM" — both will match.
+      const entityId = entityByName.get(entityName.toLowerCase()) || entityByName.get(entityName.toUpperCase());
       if (!entityId) {
         skipped++;
         errors.push(`Row ${rowNo}: entity "${entityName}" not found in master table`);
