@@ -42,7 +42,7 @@ export async function GET(request: NextRequest) {
     const subGroup = (sp.get('subGroup') || '').trim();
     const entityId = (sp.get('entityId') || '').trim();
     const page = Math.max(1, parseInt(sp.get('page') || '1'));
-    const pageSize = Math.min(200, Math.max(1, parseInt(sp.get('pageSize') || '50')));
+    const pageSize = Math.min(50000, Math.max(1, parseInt(sp.get('pageSize') || '50')));
     const skip = (page - 1) * pageSize;
 
     // ── Permission: compute the list of entityIds this user can see ─────────
