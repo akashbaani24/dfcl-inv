@@ -6562,40 +6562,36 @@ DEWS,720-500-B,5</pre>
   const printPurchaseBarcodes = (purchaseId: string, purchaseNo: string, items: any[]) => {
     const win = window.open('', '_blank', 'width=800,height=600')
     if (!win) return
-    const labels = items.map((pi: any) => {
-      const code = pi.item?.barcode || pi.item?.itemCode || pi.itemId
+
+    // Build all labels + JsBarcode calls using a global counter for unique IDs
+    let counter = 0
+    const allLabels: string[] = []
+    const allJsCalls: string[] = []
+
+    for (const pi of items) {
+      const code = pi.item?.barcode || pi.item?.itemCode || pi.itemId || ''
       const name = pi.item?.itemName || '—'
       const uom = pi.uom || pi.item?.uom || 'PCS'
-      const qty = pi.quantity
-      // Build N labels (one per unit) — capped at 20 for safety
-      const labelCount = Math.min(qty, 20)
-      const labels = Array.from({ length: labelCount }).map((_, idx) => `
-        <div class="label">
-          <div class="item-name">${escapeHtml(name)}</div>
-          <div class="barcode-wrap">
-            <div id="bc${idx}_${pi.itemId?.slice(-4) || idx}" class="barcode-svg"></div>
-          </div>
-          <div class="barcode-num">${escapeHtml(code || '')}</div>
-          <div class="meta">
-            <span>${escapeHtml(uom)}</span>
-            <span>#${idx + 1}/${qty}</span>
-            <span>${escapeHtml(purchaseNo)}</span>
-          </div>
-        </div>
-      `).join('')
-      return labels
-    }).join('')
-
-    // Build JsBarcode calls — one per barcode, using the code value
-    const barcodeScripts = items.map((pi: any, itemIdx: number) => {
-      const code = pi.item?.barcode || pi.item?.itemCode || pi.itemId || 'X'
       const qty = Math.min(pi.quantity, 20)
-      const calls = Array.from({ length: qty }).map((_, idx) => {
-        const divId = `bc${idx}_${pi.itemId?.slice(-4) || idx}`
-        return `try{JsBarcode("#${divId}", "${escapeHtml(code)}", {format:"CODE128",width:2,height:50,displayValue:false,margin:0});}catch(e){}`
-      }).join('')
-      return calls
-    }).join('\n')
+
+      for (let idx = 0; idx < qty; idx++) {
+        const divId = `bc${counter}`
+        counter++
+        allLabels.push(`
+          <div class="label">
+            <div class="item-name">${escapeHtml(name)}</div>
+            <div class="barcode-wrap"><div id="${divId}" class="barcode-svg"></div></div>
+            <div class="barcode-num">${escapeHtml(code)}</div>
+            <div class="meta">
+              <span>${escapeHtml(uom)}</span>
+              <span>#${idx + 1}/${pi.quantity}</span>
+              <span>${escapeHtml(purchaseNo)}</span>
+            </div>
+          </div>`)
+        // JsBarcode call — pass the actual code value
+        allJsCalls.push(`try{JsBarcode("#${divId}","${escapeHtml(code || 'X')}",{format:"CODE128",width:2,height:50,displayValue:false,margin:0});}catch(e){}`)
+      }
+    }
 
     win.document.write(`<!doctype html><html><head><title>Barcodes - ${escapeHtml(purchaseNo)}</title>
       <style>
@@ -6615,10 +6611,10 @@ DEWS,720-500-B,5</pre>
       </head><body>
         <h1>BARCODES — ${escapeHtml(purchaseNo)}</h1>
         <div class="info">${items.length} item(s) | Generated: ${bdNow()}</div>
-        <div class="labels">${labels}</div>
+        <div class="labels">${allLabels.join('')}</div>
         <script>
           window.onload = function() {
-            ${barcodeScripts}
+            ${allJsCalls.join('\n            ')}
             setTimeout(function() { window.print(); }, 600);
           };
         </script>
