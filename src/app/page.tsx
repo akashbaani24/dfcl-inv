@@ -722,6 +722,82 @@ AS Display Centre,720-500-D,0
   // ★ Delete ALL stock across ALL entities (admin only).
   // Two-step confirmation to prevent accidental wipes.
   const [sfaDeleteAllBusy, setSfaDeleteAllBusy] = useState(false)
+  const [sfaExporting, setSfaExporting] = useState(false)
+
+  // ★ Export Stock for All data to Excel — uses xlsx library on the client side.
+  //    Exports ALL rows matching current filters (not just the current page).
+  const handleSfaExportExcel = async () => {
+    setSfaExporting(true)
+    try {
+      // Fetch ALL matching rows (up to 50k) in one go
+      const params = new URLSearchParams({ page: '1', pageSize: '50000' })
+      if (sfaDebouncedSearch) params.set('search', sfaDebouncedSearch)
+      if (sfaGroup) params.set('group', sfaGroup)
+      if (sfaSubGroup) params.set('subGroup', sfaSubGroup)
+      if (sfaEntityId) params.set('entityId', sfaEntityId)
+      const res = await authFetch(`/api/stock/all?${params}`)
+      if (!res.ok) {
+        toast({ title: 'Export failed', description: `HTTP ${res.status}`, variant: 'destructive' })
+        return
+      }
+      const data = await res.json()
+      const stocks = data.stocks || []
+      if (stocks.length === 0) {
+        toast({ title: 'No data', description: 'No stock rows to export.', variant: 'destructive' })
+        return
+      }
+
+      // Build Excel rows
+      const excelRows = stocks.map((s: any, i: number) => ({
+        Sl: i + 1,
+        Entity: s.entityName,
+        Group: s.group || '',
+        'Sub Group': s.subGroup || '',
+        'Item Name': s.itemName,
+        Qty: s.quantity,
+        Booked: s.bookedQty || 0,
+        Available: s.available || (s.quantity - (s.bookedQty || 0)),
+        UoM: s.uom || 'PCS',
+        'Unit Price': s.unitPrice || 0,
+      }))
+
+      // Create worksheet
+      const XLSX = await import('xlsx')
+      const ws = XLSX.utils.json_to_sheet(excelRows)
+      // Set column widths
+      ws['!cols'] = [
+        { wch: 5 },   // Sl
+        { wch: 35 },  // Entity
+        { wch: 12 },  // Group
+        { wch: 18 },  // Sub Group
+        { wch: 25 },  // Item Name
+        { wch: 10 },  // Qty
+        { wch: 10 },  // Booked
+        { wch: 12 },  // Available
+        { wch: 8 },   // UoM
+        { wch: 12 },  // Unit Price
+      ]
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Stock for All')
+      const buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' })
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      const now = new Date()
+      const dateStr = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      a.download = `stock-for-all-${dateStr}.xlsx`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      toast({ title: 'Export complete', description: `${stocks.length} rows exported to Excel.` })
+    } catch (err) {
+      toast({ title: 'Export failed', description: String(err), variant: 'destructive' })
+    } finally {
+      setSfaExporting(false)
+    }
+  }
   const handleSfaDeleteAllStock = async () => {
     // Step 1: First confirmation dialog
     const step1 = window.prompt(
@@ -4065,6 +4141,14 @@ AS Display Centre,720-500-D,0
             <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">Company-wide stock across all entities — filter by Group / Sub Group / Entity / Item.</p>
           </div>
           <div className="flex gap-1.5 md:gap-2 flex-wrap">
+            {/* ★ Export to Excel — exports the current filtered stock list */}
+            {canExportItems() && (
+              <Button variant="outline" size="sm" onClick={handleSfaExportExcel} disabled={sfaExporting}>
+                {sfaExporting
+                  ? <><RefreshCw className="w-4 h-4 md:mr-1.5 animate-spin" /><span className="hidden md:inline">Exporting...</span></>
+                  : <><Download className="w-4 h-4 md:mr-1.5" /><span className="hidden md:inline">Excel</span></>}
+              </Button>
+            )}
             <Button variant="outline" size="sm" onClick={() => setCurrentView('stockUploadFormat')}>
               <FileText className="w-4 h-4 md:mr-1.5" /><span className="hidden md:inline">Upload Format</span>
             </Button>
