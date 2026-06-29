@@ -656,7 +656,7 @@ export default function Home() {
     try {
       const formData = new FormData()
       formData.append('file', file)
-      const res = await authFetch(`/api/stock/bulk-upload?mode=${sfaUploadMode}`, {
+      const res = await authFetch(`/api/stock/bulk-upload`, {
         method: 'POST',
         body: formData,
       })
@@ -4880,28 +4880,8 @@ DEWS,720-500-B,5</pre>
               </p>
             </div>
 
-            {/* Mode selector */}
-            <div className="space-y-2">
-              <Label className="text-sm font-semibold">Mode</Label>
-              <p className="text-xs text-muted-foreground">Choose how to apply the uploaded quantities:</p>
-              <Select value={sfaUploadMode} onValueChange={v => setSfaUploadMode(v as 'set' | 'add')}>
-                <SelectTrigger className="h-12 text-sm"><SelectValue /></SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="set">
-                    <div className="space-y-0.5 py-1">
-                      <div className="font-medium">Set (Daily Stock Count) — RECOMMENDED for daily use</div>
-                      <div className="text-[11px] text-muted-foreground">Overwrites the existing stock with the exact quantity from the file. Use this after a physical count. Quantity = 0 deletes the stock row.</div>
-                    </div>
-                  </SelectItem>
-                  <SelectItem value="add">
-                    <div className="space-y-0.5 py-1">
-                      <div className="font-medium">Add (Received New Stock)</div>
-                      <div className="text-[11px] text-muted-foreground">Adds the file's quantity to existing stock. Use this when receiving new stock on top of what's already there.</div>
-                    </div>
-                  </SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
+            {/* ★ Mode selector removed — always overwrites (set behavior).
+                  Each row is independent (no aggregation/summing). */}
 
             {/* Download template */}
             <Button type="button" variant="outline" onClick={downloadSfaUploadTemplate}>
