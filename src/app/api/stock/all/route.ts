@@ -42,27 +42,20 @@ export async function GET(request: NextRequest) {
     const subGroup = (sp.get('subGroup') || '').trim();
     const entityId = (sp.get('entityId') || '').trim();
     const page = Math.max(1, parseInt(sp.get('page') || '1'));
-    const pageSize = Math.min(200, Math.max(1, parseInt(sp.get('pageSize') || '50')));
+    const pageSize = Math.min(50000, Math.max(1, parseInt(sp.get('pageSize') || '50')));
     const skip = (page - 1) * pageSize;
 
-    // ── Permission: compute the list of entityIds this user can see ─────────
+    // ── Permission: Stock for All shows ALL entities' stock.
+    //    Unlike My Entity Stock (which filters by entityAccess), Stock for All
+    //    is a company-wide view. Any user with menu access to 'stockForAll'
+    //    can see all entities' stock here.
+    //    (If you want to restrict per-entity, use the Entity dropdown filter.)
     const isPrivileged = currentUser.role === 'admin' || currentUser.role === 'manager';
-    const userEntityIds: string[] | null = isPrivileged
-      ? null
-      : (currentUser.entityAccess || []).map((ea: any) => ea.entityId);
+    // ★ No entityAccess filtering — show all entities.
+    const userEntityIds: string[] | null = null;
 
-    if (!isPrivileged && userEntityIds && userEntityIds.length === 0) {
-      return NextResponse.json({
-        stocks: [], total: 0, page, pageSize, totalPages: 0,
-        totalsByEntity: [], grandTotalQty: 0, grandTotalValue: 0,
-        groups: [], subGroups: [],
-      });
-    }
-
-    // If a specific entityId was requested, enforce access
-    if (entityId && userEntityIds && !userEntityIds.includes(entityId)) {
-      return NextResponse.json({ error: 'You do not have access to this entity' }, { status: 403 });
-    }
+    // If a specific entityId was requested, just use it (no access restriction —
+    // Stock for All is a company-wide view)
 
     // ── Build the where clause ─────────────────────────────────────────────
     const stockWhere: Prisma.StockWhereInput = { quantity: { gt: 0 } };
