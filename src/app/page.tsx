@@ -773,6 +773,7 @@ AS Display Centre,720-500-D,0
           paidStatus: 'unpaid', deliveryStatus: 'pending',
           checkedBy: '', approvedBy: '',
         })
+        fetchBrokerCommissions() // ★ refresh so sales order list shows updated indicator
         setCurrentView('brokerCommission')
       } else {
         toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
@@ -2550,7 +2551,7 @@ AS Display Centre,720-500-D,0
   useEffect(() => { if (currentView === 'receive') { fetchReceives(); fetchIncomingTransfers() } }, [currentView, workingEntity?.id])
   // ★ Fetch purchases when entering Purchase list or Purchase Approval page
   useEffect(() => { if (currentView === 'purchase' || currentView === 'purchaseApproval') fetchPurchases() }, [currentView])
-  useEffect(() => { if (currentView === 'salesOrder') fetchSalesOrders() }, [currentView])
+  useEffect(() => { if (currentView === 'salesOrder') { fetchSalesOrders(); fetchBrokerCommissions(); } }, [currentView])
   useEffect(() => { if (currentView === 'delivery') fetchSalesOrders() }, [currentView])
   useEffect(() => {
     if (currentView === 'supplierPayments' && workingEntity) { fetchSupplierPayments() }
@@ -5908,11 +5909,12 @@ DEWS,720-500-B,5</pre>
             <TableHead className="font-semibold text-right">Due</TableHead>
             <TableHead className="font-semibold">Order Date</TableHead>
             <TableHead className="font-semibold">Delivery</TableHead>
+            <TableHead className="font-semibold text-center">Broker</TableHead>
             <TableHead className="font-semibold">Status</TableHead>
             <TableHead className="font-semibold text-center">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {salesOrders.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
+            {salesOrders.length === 0 ? <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
             : salesOrders.map((s: any) => {
               const grossTotal = (s.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
               const discount = s.discount || 0
@@ -5920,6 +5922,9 @@ DEWS,720-500-B,5</pre>
               const paid = (s.payments||[]).reduce((sum:number,p:any)=>sum+p.amount,0)
               const due = total - paid
               const isAdmin = user?.role === 'admin' || user?.role === 'manager'
+              // ★ Broker commission indicator: lookup by salesOrderId
+              const brokerComm = brokerCommissions.find((b: any) => b.salesOrderId === s.id)
+              const hasBroker = !!brokerComm
               return (
               <TableRow key={s.id} className="hover:bg-muted/30 cursor-pointer" onClick={() => { setSelectedSalesOrder(s); setShowSalesDetailDialog(true) }}>
                 <TableCell className="font-medium">{s.salesNo || s.id?.slice(0,8)}</TableCell>
@@ -5931,6 +5936,26 @@ DEWS,720-500-B,5</pre>
                 </TableCell>
                 <TableCell className="text-xs">{bdDate(new Date(s.orderDate||s.createdAt))}</TableCell>
                 <TableCell className="text-xs">{s.deliveryDate?bdDate(new Date(s.deliveryDate)):'—'}</TableCell>
+                <TableCell className="text-center" onClick={(e)=>e.stopPropagation()}>
+                  {hasBroker ? (
+                    <span
+                      title={`Broker: ${brokerComm.brokerName}${brokerComm.commissionAmount ? ` • ৳${fmtBDT(brokerComm.commissionAmount)}` : ''}${brokerComm.paidStatus === 'paid' ? ' • Paid' : ' • Unpaid'}`}
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-semibold cursor-pointer hover:bg-emerald-200"
+                      onClick={() => { setCurrentView('brokerCommission') }}
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
+                      Yes
+                    </span>
+                  ) : (
+                    <span
+                      title="No broker commission for this order"
+                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200 text-xs"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
+                      No
+                    </span>
+                  )}
+                </TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
                 <TableCell className="text-center" onClick={(e)=>e.stopPropagation()}>
                   <Button variant="ghost" size="sm" onClick={() => printSalesInvoice(s)} title="Print Invoice"><FileText className="w-4 h-4" /></Button>
