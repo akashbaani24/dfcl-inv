@@ -889,3 +889,32 @@ model BookingItem {
   @@index([fromEntityId])
   @@index([fromEntityId, itemId])
 }
+
+// ★ Broker Commission — tracks commission paid to brokers for sales orders.
+// Created manually OR auto-created when Sales Order has 'brokerCommission' = true.
+model BrokerCommission {
+  id                String   @id @default(cuid())
+  brokerName        String
+  brokerContact     String?
+  brokerAddress     String?
+  salesOrderId      String?
+  orderDate         DateTime @default(now())
+  salesPersonName   String?
+  commissionAmount  Float    @default(0)
+  commissionType    String   @default("amount") // "amount" or "percentage"
+  commissionRate    Float?   // if percentage, the rate (e.g. 5 for 5%)
+  paymentType       String   @default("cash") // "cash", "mobile_banking", "cheque", "bank_deposit"
+  paymentDetails    String?  // mobile banking ref, cheque no, bank deposit ref etc
+  paidStatus        String   @default("unpaid") // "unpaid", "paid"
+  deliveryStatus    String   @default("pending") // "pending", "delivered"
+  checkedBy         String?
+  approvedBy        String?
+  createdBy         String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@index([brokerName])
+  @@index([salesOrderId])
+  @@index([orderDate])
+  @@index([paidStatus])
+}

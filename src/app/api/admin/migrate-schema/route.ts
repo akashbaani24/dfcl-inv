@@ -1110,6 +1110,47 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE Entity ADD COLUMN shortCode TEXT',
     description: 'Add shortCode column to Entity (e.g. DS for Dynasty Sylhet)',
   },
+  // v68: Create BrokerCommission table
+  {
+    id: '2026_06_27_broker_commission_table',
+    sql: `CREATE TABLE IF NOT EXISTS "BrokerCommission" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "brokerName" TEXT NOT NULL,
+      "brokerContact" TEXT,
+      "brokerAddress" TEXT,
+      "salesOrderId" TEXT,
+      "orderDate" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "salesPersonName" TEXT,
+      "commissionAmount" REAL NOT NULL DEFAULT 0,
+      "commissionType" TEXT NOT NULL DEFAULT 'amount',
+      "commissionRate" REAL,
+      "paymentType" TEXT NOT NULL DEFAULT 'cash',
+      "paymentDetails" TEXT,
+      "paidStatus" TEXT NOT NULL DEFAULT 'unpaid',
+      "deliveryStatus" TEXT NOT NULL DEFAULT 'pending',
+      "checkedBy" TEXT,
+      "approvedBy" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL
+    )`,
+    description: 'Create BrokerCommission table',
+  },
+  {
+    id: '2026_06_27_broker_commission_idx_name',
+    sql: 'CREATE INDEX IF NOT EXISTS "BrokerCommission_brokerName_idx" ON "BrokerCommission"("brokerName")',
+    description: 'Index on brokerName',
+  },
+  {
+    id: '2026_06_27_broker_commission_idx_date',
+    sql: 'CREATE INDEX IF NOT EXISTS "BrokerCommission_orderDate_idx" ON "BrokerCommission"("orderDate")',
+    description: 'Index on orderDate',
+  },
+  {
+    id: '2026_06_27_broker_commission_idx_paid',
+    sql: 'CREATE INDEX IF NOT EXISTS "BrokerCommission_paidStatus_idx" ON "BrokerCommission"("paidStatus")',
+    description: 'Index on paidStatus',
+  },
 ];
 
 export async function POST(request: NextRequest) {

@@ -209,6 +209,7 @@ export const MENU_ITEMS = [
   { key: 'reports_transfer', label: 'Report: Transfer', group: 'Function' },
   { key: 'reports_adjustment', label: 'Report: Adjustment', group: 'Function' },
   { key: 'reports_incentive', label: 'Report: Incentive', group: 'Function' },
+  { key: 'brokerCommission', label: 'Broker Commission', group: 'Function' },
 ] as const;
 
 export type MenuItemKey = typeof MENU_ITEMS[number]['key'];
