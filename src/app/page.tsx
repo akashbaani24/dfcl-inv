@@ -184,7 +184,7 @@ type ViewType =
   | 'tailors' | 'makingInfo' | 'uom' | 'suppliers' | 'customers' | 'employees'
   | 'groups' | 'subGroups'
   | 'bookingReasons'
-  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock' | 'stockForAll' | 'stockUploadFormat' | 'stockUploadPage'
+  | 'stockDetail' | 'stockEntry' | 'stockUpload' | 'addStock' | 'stockForAll' | 'stockUploadFormat' | 'stockUploadPage' | 'brokerCommission' | 'newBrokerCommission'
   | 'settings'
 
 const ALL_COLUMNS = [
@@ -235,6 +235,7 @@ const ALL_MENU_ITEMS = [
   { key: 'reports_transfer', label: 'Report: Transfer', group: 'Function' },
   { key: 'reports_adjustment', label: 'Report: Adjustment', group: 'Function' },
   { key: 'reports_incentive', label: 'Report: Incentive', group: 'Function' },
+  { key: 'brokerCommission', label: 'Broker Commission', group: 'Function' },
 ]
 
 // ⚠️ IMPORTANT: Every master data item must also be in MASTER_DATA_ITEMS in src/lib/auth.ts
@@ -722,6 +723,294 @@ AS Display Centre,720-500-D,0
   // ★ Delete ALL stock across ALL entities (admin only).
   // Two-step confirmation to prevent accidental wipes.
   const [sfaDeleteAllBusy, setSfaDeleteAllBusy] = useState(false)
+  // ★ Broker Commission state
+  const [brokerCommissions, setBrokerCommissions] = useState<any[]>([])
+  const [brokerCommissionForm, setBrokerCommissionForm] = useState({
+    brokerName: '', brokerContact: '', brokerAddress: '',
+    salesOrderId: '', orderDate: new Date().toISOString().split('T')[0],
+    salesPersonName: '',
+    commissionAmount: '', commissionType: 'amount', commissionRate: '',
+    paymentType: 'cash', paymentDetails: '',
+    paidStatus: 'unpaid', deliveryStatus: 'pending',
+    checkedBy: '', approvedBy: '',
+  })
+  const [brokerCommissionSaving, setBrokerCommissionSaving] = useState(false)
+
+  const fetchBrokerCommissions = useCallback(async () => {
+    try {
+      const res = await authFetch('/api/broker-commissions')
+      if (res.ok) {
+        const data = await res.json()
+        setBrokerCommissions(data.commissions || [])
+      }
+    } catch {}
+  }, [])
+
+  useEffect(() => {
+    if (currentView === 'brokerCommission') {
+      fetchBrokerCommissions()
+    }
+  }, [currentView, fetchBrokerCommissions])
+
+  const handleSaveBrokerCommission = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setBrokerCommissionSaving(true)
+    try {
+      const res = await authFetch('/api/broker-commissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(brokerCommissionForm),
+      })
+      const data = await res.json()
+      if (res.ok) {
+        toast({ title: 'Success', description: 'Broker commission created' })
+        setBrokerCommissionForm({
+          brokerName: '', brokerContact: '', brokerAddress: '',
+          salesOrderId: '', orderDate: new Date().toISOString().split('T')[0],
+          salesPersonName: '',
+          commissionAmount: '', commissionType: 'amount', commissionRate: '',
+          paymentType: 'cash', paymentDetails: '',
+          paidStatus: 'unpaid', deliveryStatus: 'pending',
+          checkedBy: '', approvedBy: '',
+        })
+        setCurrentView('brokerCommission')
+      } else {
+        toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to create broker commission', variant: 'destructive' })
+    } finally {
+      setBrokerCommissionSaving(false)
+    }
+  }
+
+  // ★ Broker Commission list page (no popup — full page)
+  const renderBrokerCommissionPage = () => (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between flex-wrap gap-2">
+        <h2 className="text-xl font-semibold">Broker Commission</h2>
+        <div className="flex gap-2">
+          {canExportItems() && (
+            <Button variant="outline" size="sm" onClick={() => {
+              // Simple Excel export
+              const XLSX = require('xlsx')
+              const rows = brokerCommissions.map((b, i) => ({
+                Sl: i + 1,
+                'Broker Name': b.brokerName,
+                'Contact': b.brokerContact || '',
+                'Sales ID': b.salesOrderId || '',
+                'Order Date': b.orderDate ? new Date(b.orderDate).toLocaleDateString('en-GB') : '',
+                'Sales Person': b.salesPersonName || '',
+                'Commission Amount': b.commissionAmount,
+                'Commission Type': b.commissionType === 'percentage' ? `Percentage (${b.commissionRate || 0}%)` : 'Amount',
+                'Payment Type': b.paymentType,
+                'Payment Details': b.paymentDetails || '',
+                'Paid Status': b.paidStatus,
+                'Delivery Status': b.deliveryStatus,
+                'Checked By': b.checkedBy || '',
+                'Approved By': b.approvedBy || '',
+              }))
+              const ws = XLSX.utils.json_to_sheet(rows)
+              const wb = XLSX.utils.book_new()
+              XLSX.utils.book_append_sheet(wb, ws, 'Broker Commissions')
+              XLSX.writeFile(wb, `broker-commissions-${new Date().toISOString().split('T')[0]}.xlsx`)
+            }}>
+              <Download className="w-4 h-4 mr-2" />Excel
+            </Button>
+          )}
+          {(isManagerOrAdmin || hasPermission('menu', 'brokerCommission', 'create')) && (
+            <Button size="sm" onClick={() => { setBrokerCommissionForm({
+              brokerName: '', brokerContact: '', brokerAddress: '',
+              salesOrderId: '', orderDate: new Date().toISOString().split('T')[0],
+              salesPersonName: '',
+              commissionAmount: '', commissionType: 'amount', commissionRate: '',
+              paymentType: 'cash', paymentDetails: '',
+              paidStatus: 'unpaid', deliveryStatus: 'pending',
+              checkedBy: '', approvedBy: '',
+            }); setCurrentView('newBrokerCommission') }}>
+              <Plus className="w-4 h-4 mr-2" />New Commission
+            </Button>
+          )}
+        </div>
+      </div>
+      <div className="border rounded-lg overflow-hidden overflow-x-auto">
+        <Table>
+          <TableHeader><TableRow className="bg-muted/50">
+            <TableHead className="font-semibold">Sl</TableHead>
+            <TableHead className="font-semibold">Broker Name</TableHead>
+            <TableHead className="font-semibold">Contact</TableHead>
+            <TableHead className="font-semibold">Order Date</TableHead>
+            <TableHead className="font-semibold">Sales Person</TableHead>
+            <TableHead className="font-semibold text-right">Commission</TableHead>
+            <TableHead className="font-semibold">Payment Type</TableHead>
+            <TableHead className="font-semibold">Paid</TableHead>
+            <TableHead className="font-semibold">Delivery</TableHead>
+            <TableHead className="font-semibold">Checked By</TableHead>
+            <TableHead className="font-semibold">Approved By</TableHead>
+          </TableRow></TableHeader>
+          <TableBody>
+            {brokerCommissions.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No broker commissions yet</TableCell></TableRow>
+            : brokerCommissions.map((b, i) => (
+              <TableRow key={b.id} className="hover:bg-muted/30">
+                <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                <TableCell className="font-medium">{b.brokerName}</TableCell>
+                <TableCell className="text-xs">{b.brokerContact || '—'}</TableCell>
+                <TableCell className="text-xs">{b.orderDate ? bdDate(new Date(b.orderDate)) : '—'}</TableCell>
+                <TableCell className="text-xs">{b.salesPersonName || '—'}</TableCell>
+                <TableCell className="text-right font-bold">৳ {Number(b.commissionAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                <TableCell className="text-xs capitalize">{b.paymentType?.replace('_', ' ') || 'cash'}</TableCell>
+                <TableCell><Badge variant={b.paidStatus === 'paid' ? 'default' : 'secondary'} className="capitalize">{b.paidStatus}</Badge></TableCell>
+                <TableCell><Badge variant={b.deliveryStatus === 'delivered' ? 'default' : 'outline'} className="capitalize">{b.deliveryStatus}</Badge></TableCell>
+                <TableCell className="text-xs">{b.checkedBy || '—'}</TableCell>
+                <TableCell className="text-xs">{b.approvedBy || '—'}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </div>
+    </div>
+  )
+
+  // ★ New Broker Commission page (full page, no popup)
+  const renderNewBrokerCommissionPage = () => (
+    <div className="space-y-4 max-w-3xl mx-auto">
+      <div className="flex items-center gap-3">
+        <Button variant="outline" size="sm" onClick={() => setCurrentView('brokerCommission')}>
+          <ArrowLeft className="w-4 h-4 mr-2" />Back
+        </Button>
+        <h2 className="text-xl font-semibold">New Broker Commission</h2>
+      </div>
+      <Card>
+        <CardContent className="pt-6">
+          <form onSubmit={handleSaveBrokerCommission} className="space-y-4">
+            {/* Broker details */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label>Broker Name *</Label>
+                <Input value={brokerCommissionForm.brokerName} onChange={e => setBrokerCommissionForm(f => ({ ...f, brokerName: e.target.value }))} required placeholder="e.g. Mr. Karim" />
+              </div>
+              <div className="space-y-2">
+                <Label>Broker Contact</Label>
+                <Input value={brokerCommissionForm.brokerContact} onChange={e => setBrokerCommissionForm(f => ({ ...f, brokerContact: e.target.value }))} placeholder="Phone number" />
+              </div>
+            </div>
+            <div className="space-y-2">
+              <Label>Broker Address</Label>
+              <Input value={brokerCommissionForm.brokerAddress} onChange={e => setBrokerCommissionForm(f => ({ ...f, brokerAddress: e.target.value }))} placeholder="Optional" />
+            </div>
+
+            <Separator />
+
+            {/* Sales order details */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Sales Order ID</Label>
+                <Input value={brokerCommissionForm.salesOrderId} onChange={e => setBrokerCommissionForm(f => ({ ...f, salesOrderId: e.target.value }))} placeholder="Auto from sales order (or type)" />
+              </div>
+              <div className="space-y-2">
+                <Label>Order Date</Label>
+                <Input type="date" value={brokerCommissionForm.orderDate} onChange={e => setBrokerCommissionForm(f => ({ ...f, orderDate: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Sales Person Name</Label>
+                <Input value={brokerCommissionForm.salesPersonName} onChange={e => setBrokerCommissionForm(f => ({ ...f, salesPersonName: e.target.value }))} placeholder="e.g. Md. Kamrul" />
+              </div>
+            </div>
+
+            <Separator />
+
+            {/* Commission details */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Commission Type</Label>
+                <Select value={brokerCommissionForm.commissionType} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, commissionType: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="amount">By Amount</SelectItem>
+                    <SelectItem value="percentage">By Percentage</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              {brokerCommissionForm.commissionType === 'amount' ? (
+                <div className="space-y-2">
+                  <Label>Commission Amount (৳)</Label>
+                  <Input type="number" step="0.01" value={brokerCommissionForm.commissionAmount} onChange={e => setBrokerCommissionForm(f => ({ ...f, commissionAmount: e.target.value }))} placeholder="e.g. 500" />
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  <Label>Commission Rate (%)</Label>
+                  <Input type="number" step="0.01" value={brokerCommissionForm.commissionRate} onChange={e => setBrokerCommissionForm(f => ({ ...f, commissionRate: e.target.value }))} placeholder="e.g. 5 for 5%" />
+                </div>
+              )}
+              <div className="space-y-2">
+                <Label>Payment Type</Label>
+                <Select value={brokerCommissionForm.paymentType} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, paymentType: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="cash">Cash</SelectItem>
+                    <SelectItem value="mobile_banking">Mobile Banking</SelectItem>
+                    <SelectItem value="cheque">Cheque</SelectItem>
+                    <SelectItem value="bank_deposit">Bank Deposit</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+
+            {/* Payment details — only show for non-cash */}
+            {brokerCommissionForm.paymentType !== 'cash' && (
+              <div className="space-y-2">
+                <Label>Payment Details {brokerCommissionForm.paymentType === 'mobile_banking' && '(Mobile banking ref/trxID)' || brokerCommissionForm.paymentType === 'cheque' && '(Cheque no, Bank name)' || '(Bank deposit ref)'}</Label>
+                <Input value={brokerCommissionForm.paymentDetails} onChange={e => setBrokerCommissionForm(f => ({ ...f, paymentDetails: e.target.value }))} placeholder="Enter payment details" />
+              </div>
+            )}
+
+            <Separator />
+
+            {/* Status + checked/approved */}
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="space-y-2">
+                <Label>Paid Status</Label>
+                <Select value={brokerCommissionForm.paidStatus} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, paidStatus: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="unpaid">Unpaid</SelectItem>
+                    <SelectItem value="paid">Paid</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Delivery Status</Label>
+                <Select value={brokerCommissionForm.deliveryStatus} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, deliveryStatus: v }))}>
+                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="delivered">Delivered</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label>Checked By</Label>
+                <Input value={brokerCommissionForm.checkedBy} onChange={e => setBrokerCommissionForm(f => ({ ...f, checkedBy: e.target.value }))} placeholder="Name" />
+              </div>
+              <div className="space-y-2">
+                <Label>Approved By</Label>
+                <Input value={brokerCommissionForm.approvedBy} onChange={e => setBrokerCommissionForm(f => ({ ...f, approvedBy: e.target.value }))} placeholder="Name" />
+              </div>
+            </div>
+
+            <div className="flex gap-2 pt-4">
+              <Button type="button" variant="outline" onClick={() => setCurrentView('brokerCommission')} className="flex-1">
+                <X className="w-4 h-4 mr-2" />Cancel
+              </Button>
+              <Button type="submit" disabled={brokerCommissionSaving} className="flex-1">
+                {brokerCommissionSaving ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Saving...</> : <><Save className="w-4 h-4 mr-2" />Save Commission</>}
+              </Button>
+            </div>
+          </form>
+        </CardContent>
+      </Card>
+    </div>
+  )
   const [sfaExporting, setSfaExporting] = useState(false)
 
   // ★ Export Stock for All data to Excel — uses xlsx library on the client side.
@@ -3598,6 +3887,7 @@ AS Display Centre,720-500-D,0
     { key: 'booking' as ViewType, label: 'Booking', bnLabel: 'বুকিং', icon: Receipt },
     { key: 'damage' as ViewType, label: 'Damage/Wastage', bnLabel: 'ক্ষতি/অপচয়', icon: AlertTriangle },
     { key: 'incentive' as ViewType, label: 'Incentive', bnLabel: 'ইনসেনটিভ', icon: DollarSign },
+    { key: 'brokerCommission' as ViewType, label: 'Broker Commission', bnLabel: 'ব্রোকার কমিশন', icon: DollarSign },
     { key: 'newsTicker' as ViewType, label: 'News Ticker', bnLabel: 'নিউজ টিকার', icon: FileText },
     { key: 'fabricStudio' as ViewType, label: 'Fabric Studio (3D)', bnLabel: 'ফ্যাব্রিক স্টুডিও (3D)', icon: Wand2 },
     { key: 'accounts' as ViewType, label: 'Income/Expense', bnLabel: 'আয়/ব্যয়', icon: DollarSign },
@@ -10492,6 +10782,8 @@ DEWS,720-500-B,5</pre>
       case 'stockForAll': return renderStockForAllPage()
       case 'stockUploadFormat': return renderStockUploadFormatPage()
       case 'stockUploadPage': return renderStockUploadPage()
+      case 'brokerCommission': return renderBrokerCommissionPage()
+      case 'newBrokerCommission': return renderNewBrokerCommissionPage()
       case 'itemAdjustment': return renderItemAdjustmentPage()
       case 'newAdjustment': return renderNewAdjustmentPage()
       case 'transfer': return renderTransferPage()
