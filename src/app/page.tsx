@@ -5914,7 +5914,9 @@ DEWS,720-500-B,5</pre>
           <TableBody>
             {salesOrders.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No sales orders</TableCell></TableRow>
             : salesOrders.map((s: any) => {
-              const total = (s.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
+              const grossTotal = (s.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
+              const discount = s.discount || 0
+              const total = grossTotal - discount
               const paid = (s.payments||[]).reduce((sum:number,p:any)=>sum+p.amount,0)
               const due = total - paid
               const isAdmin = user?.role === 'admin' || user?.role === 'manager'
@@ -6307,7 +6309,9 @@ DEWS,720-500-B,5</pre>
             {(() => {
               const so = salesOrders.find((s: any) => s.id === editingSalesOrderId)
               if (!so) return null
-              const total = (so.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
+              const grossTotal = (so.items||[]).reduce((sum:number,si:any)=>sum+(si.quantity||0)*(si.unitPrice||0)+(si.makingEntries||[]).reduce((m:number,me:any)=>m+(me.quantity||0)*(me.unitPrice||0),0),0)
+              const discount = so.discount || 0
+              const total = grossTotal - discount
               const paid = (so.payments||[]).reduce((sum:number,p:any)=>sum+p.amount,0)
               const due = total - paid
               if (due >= 0) return null // No advance, show nothing
