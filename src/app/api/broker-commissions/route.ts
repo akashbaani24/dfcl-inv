@@ -62,11 +62,13 @@ export async function POST(request: NextRequest) {
       if (salesOrderId) {
         const so = await db.salesOrder.findUnique({
           where: { id: salesOrderId },
-          select: { items: { select: { quantity: true, unitPrice: true } } },
+          select: { items: { select: { quantity: true, unitPrice: true } }, discount: true },
         });
         if (so) {
-          const orderTotal = so.items.reduce((sum: number, si: any) =>
+          const grossTotal = so.items.reduce((sum: number, si: any) =>
             sum + (si.quantity || 0) * (si.unitPrice || 0), 0);
+          const discount = so.discount || 0;
+          const orderTotal = grossTotal - discount;
           finalAmount = (orderTotal * parseFloat(commissionRate)) / 100;
         }
       }

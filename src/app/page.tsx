@@ -402,6 +402,12 @@ export default function Home() {
     items: [] as Array<{ itemId: string; itemName: string; quantity: string; unitPrice: string; makingEntries: Array<{ name: string; unitPrice: string; quantity: string }> }>,
     payments: [] as Array<{ amount: string; paymentType: string; paymentMode: string; paymentDate: string; chequeNo: string; bankName: string; notes: string }>,
     newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
+    // ★ Broker commission fields (optional)
+    hasBroker: false,
+    brokerName: '', brokerContact: '',
+    brokerCommissionType: 'amount' as 'amount' | 'percentage',
+    brokerCommissionAmount: '', brokerCommissionRate: '',
+    brokerPaymentType: 'cash', brokerPaidStatus: 'unpaid',
   })
   const [showSalesOrderDialog, setShowSalesOrderDialog] = useState(false)
   const [editingSalesOrderId, setEditingSalesOrderId] = useState<string | null>(null)
@@ -2173,7 +2179,7 @@ AS Display Centre,720-500-D,0
 
   // Sales order handlers
   const resetSalesOrderForm = () => {
-    setSalesOrderForm({ customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', salesType: 'cash' as 'cash' | 'order', tailorId: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' })
+    setSalesOrderForm({ customerId: '', salesPersonId: '', discount: '', orderDate: new Date().toISOString().split('T')[0], deliveryDate: '', status: 'pending', notes: '', salesType: 'cash' as 'cash' | 'order', tailorId: '', items: [], payments: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '', hasBroker: false, brokerName: '', brokerContact: '', brokerCommissionType: 'amount' as 'amount' | 'percentage', brokerCommissionAmount: '', brokerCommissionRate: '', brokerPaymentType: 'cash', brokerPaidStatus: 'unpaid' })
     setEditingSalesOrderId(null); setSalesCustomerMode('existing'); setSalesCustomerSearch(''); setSalesItemSearch(''); setSalesItemResults([])
   }
 
@@ -2296,7 +2302,56 @@ AS Display Centre,720-500-D,0
       const url = editingSalesOrderId ? `/api/sales-orders/${editingSalesOrderId}` : '/api/sales-orders'
       const method = editingSalesOrderId ? 'PUT' : 'POST'
       const res = await authFetch(url, { method, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-      if (res.ok) { const data = await res.json(); toast({ title: 'Success', description: editingSalesOrderId ? `Sales order updated: ${data.salesOrder?.salesNo || ''}` : `Sales order created: ${data.salesOrder?.salesNo || ''}` }); setShowSalesOrderDialog(false); resetSalesOrderForm(); fetchSalesOrders(); if (editingSalesOrderId) setCurrentView('salesOrder') }
+      if (res.ok) {
+        const data = await res.json()
+        const savedSalesOrderId = data.salesOrder?.id || editingSalesOrderId
+
+        // ★ If broker is enabled, save/update the linked broker commission entry
+        if (salesOrderForm.hasBroker && salesOrderForm.brokerName && savedSalesOrderId) {
+          try {
+            // Check if a commission already exists for this order (edit case)
+            const existingBroker = brokerCommissions.find((b: any) => b.salesOrderId === savedSalesOrderId)
+            const brokerPayload: any = {
+              brokerName: salesOrderForm.brokerName.trim(),
+              brokerContact: salesOrderForm.brokerContact || undefined,
+              salesOrderId: savedSalesOrderId,
+              orderDate: salesOrderForm.orderDate,
+              salesPersonName: employees.find((e: any) => e.id === salesOrderForm.salesPersonId)?.name || undefined,
+              commissionType: salesOrderForm.brokerCommissionType,
+              commissionRate: salesOrderForm.brokerCommissionType === 'percentage' ? parseFloat(salesOrderForm.brokerCommissionRate) || 0 : undefined,
+              commissionAmount: salesOrderForm.brokerCommissionType === 'amount' ? parseFloat(salesOrderForm.brokerCommissionAmount) || 0 : undefined,
+              paymentType: salesOrderForm.brokerPaymentType,
+              paidStatus: salesOrderForm.brokerPaidStatus,
+              deliveryStatus: salesOrderForm.status === 'delivered' ? 'delivered' : 'pending',
+            }
+            // For percentage type, the backend will auto-calculate from order total
+            const brokerUrl = existingBroker ? `/api/broker-commissions/${existingBroker.id}` : '/api/broker-commissions'
+            const brokerMethod = existingBroker ? 'PUT' : 'POST'
+            await authFetch(brokerUrl, { method: brokerMethod, headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(brokerPayload) })
+            fetchBrokerCommissions() // refresh indicator
+          } catch (brokerErr) {
+            console.error('Broker commission save failed (non-fatal):', brokerErr)
+            toast({ title: 'Warning', description: 'Sales order saved, but broker commission could not be saved. You can add it manually from Broker Commission page.' })
+          }
+        } else if (!salesOrderForm.hasBroker && editingSalesOrderId) {
+          // ★ If user unchecked Has Broker while editing, delete existing broker commission
+          const existingBroker = brokerCommissions.find((b: any) => b.salesOrderId === editingSalesOrderId)
+          if (existingBroker) {
+            try {
+              await authFetch(`/api/broker-commissions/${existingBroker.id}`, { method: 'DELETE' })
+              fetchBrokerCommissions()
+            } catch (e) {
+              console.error('Failed to delete broker commission:', e)
+            }
+          }
+        }
+
+        toast({ title: 'Success', description: editingSalesOrderId ? `Sales order updated: ${data.salesOrder?.salesNo || ''}` : `Sales order created: ${data.salesOrder?.salesNo || ''}` })
+        setShowSalesOrderDialog(false)
+        resetSalesOrderForm()
+        fetchSalesOrders()
+        if (editingSalesOrderId) setCurrentView('salesOrder')
+      }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -5962,6 +6017,8 @@ DEWS,720-500-B,5</pre>
                   {isAdmin && (
                     <Button variant="ghost" size="sm" onClick={() => {
                       setEditingSalesOrderId(s.id)
+                      // ★ Look up existing broker commission for this order
+                      const existingBroker = brokerCommissions.find((b: any) => b.salesOrderId === s.id)
                       // Pre-fill form with existing order data
                       setSalesOrderForm({
                         customerId: s.customerId || '',
@@ -5994,8 +6051,17 @@ DEWS,720-500-B,5</pre>
                         notes: s.notes || '',
                         newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
                         salesType: 'cash' as 'cash' | 'order', tailorId: '',
+                        // ★ Pre-fill broker fields from existing commission if any
+                        hasBroker: !!existingBroker,
+                        brokerName: existingBroker?.brokerName || '',
+                        brokerContact: existingBroker?.brokerContact || '',
+                        brokerCommissionType: (existingBroker?.commissionType as 'amount' | 'percentage') || 'amount',
+                        brokerCommissionAmount: existingBroker?.commissionType === 'amount' ? String(existingBroker?.commissionAmount || '') : '',
+                        brokerCommissionRate: existingBroker?.commissionType === 'percentage' ? String(existingBroker?.commissionRate || '') : '',
+                        brokerPaymentType: existingBroker?.paymentType || 'cash',
+                        brokerPaidStatus: existingBroker?.paidStatus || 'unpaid',
                       })
-                      fetchCustomers(); fetchEmployees(); fetchTailors()
+                      fetchCustomers(); fetchEmployees(); fetchTailors(); fetchBrokerCommissions()
                       setCurrentView('newSalesOrder')
                     }} title="Edit/Modify Order"><Edit className="w-4 h-4" /></Button>
                   )}
@@ -6612,6 +6678,121 @@ DEWS,720-500-B,5</pre>
             <div className="space-y-2 bg-card rounded-lg border p-4">
               <Label className="text-xs">Sales Note</Label>
               <Input value={salesOrderForm.notes} onChange={e => setSalesOrderForm({...salesOrderForm, notes: e.target.value})} placeholder="Any special instruction or note for this sale..." />
+            </div>
+
+            {/* ★ Broker Commission section */}
+            <div className="bg-card rounded-lg border">
+              <div className="flex items-center justify-between text-[10.5px] font-bold text-primary tracking-[1.5px] uppercase bg-primary/5 px-3 py-2 border-l-[3px] border-primary rounded-t-lg">
+                <span>Broker Commission</span>
+                <label className="flex items-center gap-2 normal-case tracking-normal text-[11px] cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={salesOrderForm.hasBroker}
+                    onChange={e => setSalesOrderForm({...salesOrderForm, hasBroker: e.target.checked})}
+                    className="w-4 h-4 rounded border-gray-300 text-primary focus:ring-primary"
+                  />
+                  Has Broker
+                </label>
+              </div>
+              {salesOrderForm.hasBroker && (
+                <div className="p-4 space-y-3">
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Broker Name *</Label>
+                      <Input
+                        placeholder="e.g. Mr. Karim"
+                        value={salesOrderForm.brokerName}
+                        onChange={e => setSalesOrderForm({...salesOrderForm, brokerName: e.target.value})}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label className="text-xs">Broker Contact</Label>
+                      <Input
+                        placeholder="Phone (optional)"
+                        value={salesOrderForm.brokerContact}
+                        onChange={e => setSalesOrderForm({...salesOrderForm, brokerContact: e.target.value})}
+                        className="h-9 text-sm"
+                      />
+                    </div>
+                  </div>
+                  <div className="grid grid-cols-3 gap-3">
+                    <div className="space-y-1">
+                      <Label className="text-xs">Commission Type</Label>
+                      <Select
+                        value={salesOrderForm.brokerCommissionType}
+                        onValueChange={v => setSalesOrderForm({...salesOrderForm, brokerCommissionType: v as 'amount' | 'percentage'})}
+                      >
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="amount">Fixed ৳</SelectItem>
+                          <SelectItem value="percentage">Percentage %</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {salesOrderForm.brokerCommissionType === 'amount' ? (
+                      <div className="space-y-1">
+                        <Label className="text-xs">Amount (৳)</Label>
+                        <Input
+                          type="number" step="0.01" placeholder="e.g. 500"
+                          value={salesOrderForm.brokerCommissionAmount}
+                          onChange={e => setSalesOrderForm({...salesOrderForm, brokerCommissionAmount: e.target.value})}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    ) : (
+                      <div className="space-y-1">
+                        <Label className="text-xs">Rate (%) — auto-calc from net total</Label>
+                        <Input
+                          type="number" step="0.01" placeholder="e.g. 5"
+                          value={salesOrderForm.brokerCommissionRate}
+                          onChange={e => setSalesOrderForm({...salesOrderForm, brokerCommissionRate: e.target.value})}
+                          className="h-9 text-sm"
+                        />
+                      </div>
+                    )}
+                    <div className="space-y-1">
+                      <Label className="text-xs">Payment Type</Label>
+                      <Select
+                        value={salesOrderForm.brokerPaymentType}
+                        onValueChange={v => setSalesOrderForm({...salesOrderForm, brokerPaymentType: v})}
+                      >
+                        <SelectTrigger className="h-9 text-sm"><SelectValue /></SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="cash">Cash</SelectItem>
+                          <SelectItem value="mobile_banking">Mobile Banking</SelectItem>
+                          <SelectItem value="cheque">Cheque</SelectItem>
+                          <SelectItem value="bank_deposit">Bank Deposit</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+                  {salesOrderForm.brokerCommissionType === 'percentage' && netTotal > 0 && salesOrderForm.brokerCommissionRate && (
+                    <div className="text-xs bg-muted/40 border rounded-md px-3 py-2 text-muted-foreground">
+                      Calculated commission: <span className="font-semibold text-foreground">৳ {((netTotal * (parseFloat(salesOrderForm.brokerCommissionRate) || 0)) / 100).toFixed(2)}</span>
+                      &nbsp;(on net total ৳ {netTotal.toFixed(2)})
+                    </div>
+                  )}
+                  <div className="flex items-center gap-2 text-xs">
+                    <Label className="text-muted-foreground">Paid status:</Label>
+                    <Select
+                      value={salesOrderForm.brokerPaidStatus}
+                      onValueChange={v => setSalesOrderForm({...salesOrderForm, brokerPaidStatus: v})}
+                    >
+                      <SelectTrigger className="h-8 text-xs w-32"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="unpaid">Unpaid</SelectItem>
+                        <SelectItem value="paid">Paid</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+              )}
+              {!salesOrderForm.hasBroker && (
+                <div className="p-4 text-xs text-muted-foreground border-t">
+                  No broker commission for this order. Tick "Has Broker" above to add one.
+                </div>
+              )}
             </div>
           </div>
 
