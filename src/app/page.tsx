@@ -6115,7 +6115,9 @@ DEWS,720-500-B,5</pre>
             const initials = eName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
             const subTotal = (so.items || []).reduce((sum: number, si: any) => sum + (si.quantity || 0) * (si.unitPrice || 0), 0)
             const makingTotal = (so.items || []).reduce((sum: number, si: any) => sum + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0), 0)
-            const grandTotal = subTotal + makingTotal
+            const grandTotalPreDiscount = subTotal + makingTotal
+            const discount = so.discount || 0
+            const grandTotal = grandTotalPreDiscount - discount
             const totalPaid = (so.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
             const due = grandTotal - totalPaid
             const orderDateStr = so.orderDate ? bdDate(new Date(so.orderDate)) : bdDate(new Date(so.createdAt))
@@ -6209,7 +6211,10 @@ DEWS,720-500-B,5</pre>
                       <tbody>
                         <tr><td className="px-3 py-1.5 text-muted-foreground">Sub Total</td><td className="px-3 py-1.5 text-right font-mono">৳ {subTotal.toFixed(2)}</td></tr>
                         <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Making Charges</td><td className="px-3 py-1.5 text-right font-mono">৳ {makingTotal.toFixed(2)}</td></tr>
-                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Total Amount</td><td className="px-3 py-1.5 text-right font-mono">{fmtBDT(grandTotal)}</td></tr>
+                        <tr className="border-t"><td className="px-3 py-1.5 text-muted-foreground">Total Amount</td><td className="px-3 py-1.5 text-right font-mono">{fmtBDT(grandTotalPreDiscount)}</td></tr>
+                        {discount > 0 && (
+                          <tr className="border-t bg-red-50"><td className="px-3 py-1.5 text-red-700">Discount</td><td className="px-3 py-1.5 text-right font-mono text-red-700">- ৳ {discount.toFixed(2)}</td></tr>
+                        )}
                         <tr className="bg-primary text-primary-foreground"><td className="px-3 py-2 font-bold">GRAND TOTAL</td><td className="px-3 py-2 text-right font-mono font-bold">{fmtBDT(grandTotal)}</td></tr>
                       </tbody>
                     </table>
