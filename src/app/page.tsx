@@ -438,13 +438,12 @@ export default function Home() {
     quantity: '',
     uom: 'PCS',
     price: '',
-    mode: 'add' as 'add' | 'set',
   })
   const [addStockTargetEntity, setAddStockTargetEntity] = useState<{ id: string; name: string } | null>(null)
   const [addStockReturnView, setAddStockReturnView] = useState<ViewType>('myEntityStock')
 
   const resetAddStockForm = () => {
-    setAddStockForm({ barcode: '', itemName: '', quantity: '', uom: 'PCS', price: '', mode: 'add' })
+    setAddStockForm({ barcode: '', itemName: '', quantity: '', uom: 'PCS', price: '' })
   }
 
   const openAddStockPage = (entity: { id: string; name: string }, returnView: ViewType = 'myEntityStock') => {
@@ -476,7 +475,6 @@ export default function Home() {
           entityId: addStockTargetEntity.id,
           uom: addStockForm.uom || 'PCS',
           price: addStockForm.price ? parseFloat(addStockForm.price) : 0,
-          mode: addStockForm.mode,
         }),
       })
       const data = await res.json()
@@ -4344,9 +4342,9 @@ AS Display Centre,720-500-D,0
                 <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
                   <p className="font-semibold">How it works:</p>
                   <p>• Type a <strong>unique barcode</strong> + <strong>item name</strong> + <strong>qty</strong>.</p>
+                  <p>• Stock is tracked at <strong>THAT specific barcode</strong> — future delivery scans of this barcode will find the qty.</p>
                   <p>• If <strong>item name</strong> already exists → no problem. The new barcode attaches to that item (one item can have many barcodes).</p>
-                  <p>• If <strong>barcode</strong> already exists anywhere → you'll get an error signal naming the existing item.</p>
-                  <p>• <strong>Mode "Add"</strong> = increment existing stock. <strong>Mode "Set"</strong> = overwrite with exact qty.</p>
+                  <p>• If <strong>barcode</strong> already exists anywhere → warning, submit blocked. Use a different barcode.</p>
                 </div>
 
                 {/* Barcode — no live lookup; uniqueness is checked at submit time on the backend. */}
@@ -4415,18 +4413,6 @@ AS Display Centre,720-500-D,0
                     onChange={e => setAddStockForm(f => ({ ...f, price: e.target.value }))}
                     className="h-10"
                   />
-                </div>
-
-                {/* Mode toggle */}
-                <div className="space-y-1">
-                  <Label className="text-sm">Mode</Label>
-                  <Select value={addStockForm.mode} onValueChange={v => setAddStockForm(f => ({ ...f, mode: v as 'add' | 'set' }))}>
-                    <SelectTrigger className="h-10 text-sm"><SelectValue /></SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="add">Add — increment existing stock (typical)</SelectItem>
-                      <SelectItem value="set">Set — overwrite with exact qty (corrections)</SelectItem>
-                    </SelectContent>
-                  </Select>
                 </div>
 
                 {/* Action buttons */}

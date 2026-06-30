@@ -19,6 +19,13 @@ import { getCurrentUser } from '@/lib/auth';
 //     duplicate:true so the frontend can signal it.
 //   • If both barcode and itemName are new → create a new Item.
 //
+// ★ STOCK TRACKING (v60-fix91):
+//   Stock is ALWAYS tracked at the specific barcode level — we upsert a row in
+//   the ItemBarcode table for (barcode, entityId) with the entered qty. This
+//   way future delivery scans of THAT barcode will find the qty.
+//   The generic Stock table (itemId, entityId) is also incremented to keep the
+//   aggregate view working.
+//
 // Body:
 //   {
 //     barcode:   string  — REQUIRED. Must NOT exist anywhere (Item.barcode OR ItemBarcode).
@@ -30,10 +37,6 @@ import { getCurrentUser } from '@/lib/auth';
 //                          (existing items keep their own UoM).
 //     price?:    number  — optional, defaults to 0. Used when creating a new Item
 //                          (existing items keep their own price).
-//     mode?:     'add' | 'set'  — optional, defaults to 'add'.
-//                          'add' = increment existing stock by qty (typical "adding new stock")
-//                          'set' = overwrite the stock row's qty with this exact value
-//                                  (useful for corrections after physical count)
 //   }
 //
 // Returns the upserted Stock row + the Item it belongs to.
@@ -65,7 +68,6 @@ export async function POST(request: NextRequest) {
       entityId,
       uom,
       price,
-      mode = 'add',
     } = body || {};
 
     // ---- Validation ----
@@ -84,9 +86,6 @@ export async function POST(request: NextRequest) {
     }
     if (!entityId) {
       return NextResponse.json({ error: 'Entity is required' }, { status: 400 });
-    }
-    if (mode !== 'add' && mode !== 'set') {
-      return NextResponse.json({ error: "Mode must be 'add' or 'set'" }, { status: 400 });
     }
 
     // ---- Verify entity exists ----
@@ -111,7 +110,7 @@ export async function POST(request: NextRequest) {
     // ============================================================
     // A barcode is GLOBALLY unique — it cannot exist on any other item
     // (neither as Item.barcode primary, nor as an ItemBarcode row anywhere).
-    // If it does → signal back to the user. This is the ONLY error case.
+    // If it does → signal back to the user with a warning. Submit blocked.
     const existingItemWithPrimaryBarcode = await db.item.findUnique({
       where: { barcode: cleanBarcode },
       select: { id: true, itemName: true, barcode: true },
@@ -160,12 +159,13 @@ export async function POST(request: NextRequest) {
     let attachedToExistingItem = false;
 
     if (!item) {
-      // ---- Create a new Item with this barcode as primary ----
+      // ---- Create a new Item ----
+      // Don't set primary barcode (the new barcode is tracked via ItemBarcode table).
       // year/lcNo/group/subGroup are non-optional in the schema — default to ''.
       // Admin can edit them later via the Item Information form.
       item = await db.item.create({
         data: {
-          barcode: cleanBarcode,
+          barcode: cleanBarcode,  // also set as primary for backward compat lookups
           itemName: cleanItemName,
           year: '',
           lcNo: '',
@@ -180,54 +180,53 @@ export async function POST(request: NextRequest) {
       createdNewItem = true;
     } else {
       // ---- Existing item — attach this new barcode to it ----
-      // If the item has no primary barcode yet → set it as primary.
-      // Otherwise → record it as an additional barcode via ItemBarcode (per-entity).
+      // If the item has no primary barcode yet → set it as primary (helps older lookups).
+      // Otherwise → leave primary alone; this barcode will be tracked via ItemBarcode.
       if (!item.barcode) {
         item = await db.item.update({
           where: { id: item.id },
           data: { barcode: cleanBarcode },
         });
-      } else {
-        // Item already has a primary barcode; this new barcode becomes an
-        // additional barcode. We track per-entity qty on ItemBarcode — store
-        // the qty there too so delivery scans against this barcode work.
-        // Try upsert on (barcode, entityId) unique key.
-        try {
-          await (db as any).itemBarcode.upsert({
-            where: { barcode_entityId: { barcode: cleanBarcode, entityId } },
-            update: mode === 'add'
-              ? { quantity: { increment: qty } }
-              : { quantity: qty },
-            create: {
-              itemId: item.id,
-              barcode: cleanBarcode,
-              entityId,
-              quantity: qty,
-            },
-          });
-        } catch (e) {
-          // If ItemBarcode table doesn't exist on this DB yet, fall back gracefully
-          // (migrate-schema endpoint will create it). The Stock row below is the
-          // primary record anyway.
-          console.error('ItemBarcode upsert failed (table may not exist yet):', e);
-        }
       }
       attachedToExistingItem = true;
     }
 
     // ============================================================
-    // ★ STEP 3: UPSERT THE STOCK ROW
+    // ★ STEP 3: UPSERT ItemBarcode ROW — track qty at the specific barcode
     // ============================================================
-    // Stock is the primary stock tracker (per item × entity).
-    // 'add' = increment existing qty (typical "I just received new stock")
-    // 'set' = overwrite with exact qty (typical "after physical count, set correct qty")
+    // ALWAYS create an ItemBarcode row for (barcode, entityId), even if the
+    // item is brand new or already has a primary barcode. This guarantees
+    // future delivery scans of THIS exact barcode will find the qty.
+    // (barcode, entityId) is unique per the schema — upsert handles re-runs safely.
+    try {
+      await (db as any).itemBarcode.upsert({
+        where: { barcode_entityId: { barcode: cleanBarcode, entityId } },
+        update: { quantity: { increment: qty } },
+        create: {
+          itemId: item.id,
+          barcode: cleanBarcode,
+          entityId,
+          quantity: qty,
+        },
+      });
+    } catch (e) {
+      // If ItemBarcode table doesn't exist on this DB yet, fall back gracefully
+      // (migrate-schema endpoint will create it). The Stock row below is the
+      // primary record anyway.
+      console.error('ItemBarcode upsert failed (table may not exist yet):', e);
+    }
+
+    // ============================================================
+    // ★ STEP 4: UPSERT THE STOCK ROW (aggregate per item × entity)
+    // ============================================================
+    // Stock is the aggregate tracker (sum of all barcodes' qty for an item).
+    // Always increment here (mode was removed per user request — there's no
+    // "set" option anymore, only "add").
     // ★ NOTE: quantity is now Float (was Int) so decimal stock like 0.50 is
     //   preserved exactly. Do NOT use Math.round() — it would lose precision.
     const stock = await db.stock.upsert({
       where: { itemId_entityId: { itemId: item.id, entityId } },
-      update: mode === 'add'
-        ? { quantity: { increment: qty } }
-        : { quantity: qty },
+      update: { quantity: { increment: qty } },
       create: {
         itemId: item.id,
         entityId,
@@ -237,17 +236,15 @@ export async function POST(request: NextRequest) {
     });
 
     // ============================================================
-    // ★ STEP 4: BUILD RESPONSE MESSAGE
+    // ★ STEP 5: BUILD RESPONSE MESSAGE
     // ============================================================
     let message: string;
     if (createdNewItem) {
-      message = `Created new item "${item.itemName}" with barcode ${cleanBarcode}. Stock set to ${stock.quantity} ${item.uom}.`;
+      message = `Created new item "${item.itemName}" with barcode ${cleanBarcode}. Stock set to ${stock.quantity} ${item.uom} at barcode level.`;
     } else if (attachedToExistingItem) {
-      message = `Attached new barcode ${cleanBarcode} to existing item "${item.itemName}". ${mode === 'add' ? `Added ${qty}` : `Set qty to ${qty}`}. New total: ${stock.quantity} ${item.uom}.`;
+      message = `Attached new barcode ${cleanBarcode} to existing item "${item.itemName}". Added ${qty} at this barcode. New aggregate total: ${stock.quantity} ${item.uom}.`;
     } else {
-      message = mode === 'add'
-        ? `Added ${qty} to item "${item.itemName}". New total: ${stock.quantity} ${item.uom}.`
-        : `Set stock for "${item.itemName}" to ${stock.quantity} ${item.uom}.`;
+      message = `Added ${qty} to item "${item.itemName}" at barcode ${cleanBarcode}. New aggregate total: ${stock.quantity} ${item.uom}.`;
     }
 
     return NextResponse.json({
@@ -257,7 +254,6 @@ export async function POST(request: NextRequest) {
       createdNewItem,
       attachedToExistingItem,
       addedBarcode: cleanBarcode,
-      mode,
       addedQty: qty,
       newTotal: stock.quantity,
       message,
