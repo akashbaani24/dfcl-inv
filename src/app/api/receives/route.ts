@@ -64,7 +64,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not have permission to create receives' }, { status: 403 });
     }
 
-    const { itemId, entityId, quantity, sourceEntityId, referenceNo, notes, transferId } = await request.json();
+    const { itemId, barcode, entityId, quantity, sourceEntityId, referenceNo, notes, transferId } = await request.json();
 
     if (!itemId || !entityId || !quantity) {
       return NextResponse.json(
@@ -75,12 +75,36 @@ export async function POST(request: NextRequest) {
 
     const qty = parseInt(quantity);
 
+    // ★ If barcode is provided, validate it belongs to this item
+    if (barcode) {
+      const itemRow = await db.item.findUnique({
+        where: { id: itemId },
+        select: { barcode: true, itemName: true },
+      });
+      if (!itemRow) {
+        return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+      }
+      if (itemRow.barcode !== barcode) {
+        const itemBarcodeRow = await (db as any).itemBarcode.findFirst({
+          where: { barcode, itemId },
+          select: { id: true },
+        });
+        if (!itemBarcodeRow) {
+          return NextResponse.json(
+            { error: `Barcode "${barcode}" does not belong to item "${itemRow.itemName}".` },
+            { status: 400 }
+          );
+        }
+      }
+    }
+
     // Use a transaction so all stock + transfer updates happen atomically
     const receive = await db.$transaction(async (tx) => {
-      // 1. Create the Receive entry
+      // 1. Create the Receive entry (with barcode if provided)
       const r = await tx.receive.create({
         data: {
           itemId,
+          barcode: barcode || null,
           entityId,
           quantity: qty,
           sourceEntityId: sourceEntityId || null,
@@ -96,7 +120,24 @@ export async function POST(request: NextRequest) {
       });
 
       // 2. Increment receiving entity's stock (always safe — never goes negative)
+      //    This updates the generic Stock table (aggregate per item+entity)
       await applyStockDelta(tx, itemId, entityId, qty);
+
+      // ★ 2b. If a specific barcode was provided, also track the qty on ItemBarcode
+      //      so that future scans of this exact barcode at this entity find the qty.
+      if (barcode) {
+        try {
+          // upsert by (barcode, entityId) — itemId is the parent
+          await (tx as any).itemBarcode.upsert({
+            where: { barcode_entityId: { barcode, entityId } },
+            update: { quantity: { increment: qty } },
+            create: { itemId, barcode, entityId, quantity: qty },
+          });
+        } catch (e) {
+          // Non-fatal — ItemBarcode tracking is best-effort
+          console.error('ItemBarcode receive increment error:', e);
+        }
+      }
 
       // ★ v59: Auto-create barcode on the item if it doesn't have one.
       // Generate a unique barcode based on the item's ID + timestamp.
@@ -137,21 +178,49 @@ export async function POST(request: NextRequest) {
           throw e;
         }
 
+        // ★ 3b. If a specific barcode was provided, also decrement the source entity's
+        //      ItemBarcode row for that barcode (best-effort, non-fatal).
+        if (barcode) {
+          try {
+            await (tx as any).itemBarcode.updateMany({
+              where: { barcode, entityId: sourceEntityId },
+              data: { quantity: { decrement: qty } },
+            });
+          } catch (e) {
+            console.error('ItemBarcode source decrement error:', e);
+          }
+        }
+
         // Find matching pending transfer (either by explicit transferId, or by item+from+to)
         let transfer: any = null;
         if (transferId) {
           transfer = await tx.transfer.findUnique({ where: { id: transferId } });
         } else {
           // Find the oldest pending transfer matching itemId + fromEntityId + toEntityId
-          transfer = await tx.transfer.findFirst({
-            where: {
-              itemId,
-              fromEntityId: sourceEntityId,
-              toEntityId: entityId,
-              status: 'pending',
-            },
-            orderBy: { createdAt: 'asc' },
-          });
+          // ★ If barcode is provided, prefer transfers with matching barcode first
+          if (barcode) {
+            transfer = await tx.transfer.findFirst({
+              where: {
+                itemId,
+                barcode,
+                fromEntityId: sourceEntityId,
+                toEntityId: entityId,
+                status: 'pending',
+              },
+              orderBy: { createdAt: 'asc' },
+            });
+          }
+          if (!transfer) {
+            transfer = await tx.transfer.findFirst({
+              where: {
+                itemId,
+                fromEntityId: sourceEntityId,
+                toEntityId: entityId,
+                status: 'pending',
+              },
+              orderBy: { createdAt: 'asc' },
+            });
+          }
         }
 
         if (transfer && transfer.status !== 'completed') {

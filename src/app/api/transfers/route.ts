@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not have permission to create transfers' }, { status: 403 });
     }
 
-    const { itemId, fromEntityId, toEntityId, quantity, notes } = await request.json();
+    const { itemId, barcode, fromEntityId, toEntityId, quantity, notes } = await request.json();
 
     if (!itemId || !fromEntityId || !toEntityId || !quantity) {
       return NextResponse.json(
@@ -81,6 +81,31 @@ export async function POST(request: NextRequest) {
     }
 
     const qty = parseInt(quantity);
+
+    // ★ If barcode is provided, validate that it belongs to this item
+    //   (either as Item.barcode primary, or as an ItemBarcode row).
+    if (barcode) {
+      const itemRow = await db.item.findUnique({
+        where: { id: itemId },
+        select: { barcode: true, itemName: true },
+      });
+      if (!itemRow) {
+        return NextResponse.json({ error: 'Item not found' }, { status: 404 });
+      }
+      // Accept if it matches the primary barcode OR exists as an additional barcode row
+      if (itemRow.barcode !== barcode) {
+        const itemBarcodeRow = await (db as any).itemBarcode.findFirst({
+          where: { barcode, itemId },
+          select: { id: true },
+        });
+        if (!itemBarcodeRow) {
+          return NextResponse.json(
+            { error: `Barcode "${barcode}" does not belong to item "${itemRow.itemName}".` },
+            { status: 400 }
+          );
+        }
+      }
+    }
 
     // ★ STOCK GUARD — ensure source entity has enough stock (minus pending outbound transfers)
     // to cover this transfer. This prevents creating transfers that exceed available stock.
@@ -115,6 +140,7 @@ export async function POST(request: NextRequest) {
     const transfer = await db.transfer.create({
       data: {
         itemId,
+        barcode: barcode || null,
         fromEntityId,
         toEntityId,
         quantity: qty,

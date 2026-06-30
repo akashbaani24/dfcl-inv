@@ -1151,6 +1151,29 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "BrokerCommission_paidStatus_idx" ON "BrokerCommission"("paidStatus")',
     description: 'Index on paidStatus',
   },
+  // v69: Add barcode column to Transfer + Receive — supports per-barcode stock tracking
+  //      so that transfers/receives are bound to the specific barcode that was scanned.
+  //      Previously only itemId was stored, which caused qty merges with the wrong barcode.
+  {
+    id: '2026_06_30_transfer_barcode',
+    sql: 'ALTER TABLE Transfer ADD COLUMN barcode TEXT',
+    description: 'Add barcode column to Transfer (NULL = generic item transfer)',
+  },
+  {
+    id: '2026_06_30_transfer_barcode_idx',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_barcode_idx" ON "Transfer"("barcode")',
+    description: 'Index on Transfer.barcode',
+  },
+  {
+    id: '2026_06_30_receive_barcode',
+    sql: 'ALTER TABLE Receive ADD COLUMN barcode TEXT',
+    description: 'Add barcode column to Receive (NULL = generic item receive)',
+  },
+  {
+    id: '2026_06_30_receive_barcode_idx',
+    sql: 'CREATE INDEX IF NOT EXISTS "Receive_barcode_idx" ON "Receive"("barcode")',
+    description: 'Index on Receive.barcode',
+  },
 ];
 
 export async function POST(request: NextRequest) {

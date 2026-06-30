@@ -612,6 +612,7 @@ model ItemAdjustment {
 model Transfer {
   id           String   @id @default(cuid())
   itemId       String
+  barcode      String?  // ★ specific barcode being transferred (for multi-barcode items)
   fromEntityId String
   toEntityId   String
   quantity     Int
@@ -630,11 +631,13 @@ model Transfer {
   @@index([createdAt])
   @@index([fromEntityId, status])
   @@index([toEntityId, status])
+  @@index([barcode])
 }
 
 model Receive {
   id             String   @id @default(cuid())
   itemId         String
+  barcode        String?  // ★ specific barcode being received (for multi-barcode items)
   entityId       String
   quantity       Int
   sourceEntityId String?  // if received from another entity (transfer)
@@ -649,6 +652,8 @@ model Receive {
   entity       Entity  @relation("ReceivesTo", fields: [entityId], references: [id], onDelete: Cascade)
   sourceEntity Entity? @relation("ReceivesFrom", fields: [sourceEntityId], references: [id], onDelete: SetNull)
   purchase     Purchase? @relation(fields: [purchaseId], references: [id], onDelete: SetNull)
+
+  @@index([barcode])
 }
 
 model SalesOrder {

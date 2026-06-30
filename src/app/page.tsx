@@ -106,6 +106,7 @@ interface ItemData {
   id?: string; serial?: number; year?: string; lcNo?: string
   group?: string; subGroup?: string; itemName?: string
   price?: number; uom?: string; stockQty?: number
+  barcode?: string; itemCode?: string  // ★ needed for barcode-bound transfers/receives
 }
 
 interface StockDetail { id: string; entityId: string; entityName: string; quantity: number }
@@ -320,7 +321,7 @@ export default function Home() {
   const [multiAdjustmentReason, setMultiAdjustmentReason] = useState('')
 
   const [transfers, setTransfers] = useState<TransferData[]>([])
-  const [transferForm, setTransferForm] = useState({ itemId: '', toEntityId: '', quantity: '', notes: '' })
+  const [transferForm, setTransferForm] = useState({ itemId: '', toEntityId: '', quantity: '', notes: '', barcode: '' })
   const [transferCurrentStock, setTransferCurrentStock] = useState<number | null>(null)
   const [transferPendingOutgoing, setTransferPendingOutgoing] = useState<number>(0)
   const [showTransferDialog, setShowTransferDialog] = useState(false)
@@ -349,7 +350,7 @@ export default function Home() {
   }
 
   const [receives, setReceives] = useState<ReceiveData[]>([])
-  const [receiveForm, setReceiveForm] = useState({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
+  const [receiveForm, setReceiveForm] = useState({ itemId: '', barcode: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' })
   const [showReceiveDialog, setShowReceiveDialog] = useState(false)
   // ★ Incoming transfers — pending transfers destined TO this entity, shown on the Receive page
   //    with a one-click "Receive" button that creates a Receive from the source entity.
@@ -1818,6 +1819,7 @@ AS Display Centre,720-500-D,0
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           itemId: transfer.itemId,
+          barcode: transfer.barcode || undefined,  // ★ pass barcode from transfer so receive goes to the same barcode
           entityId: workingEntity.id,
           quantity: transfer.quantity,
           sourceEntityId: transfer.fromEntityId,
@@ -2046,7 +2048,7 @@ AS Display Centre,720-500-D,0
     if (!ok) return
     try {
       const res = await authFetch('/api/transfers', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...transferForm, fromEntityId: workingEntity.id, quantity: parseInt(transferForm.quantity) }) })
-      if (res.ok) { toast({ title: 'Success', description: 'Transfer created' }); setShowTransferDialog(false); setTransferForm({ itemId: '', toEntityId: '', quantity: '', notes: '' }); fetchTransfers() }
+      if (res.ok) { toast({ title: 'Success', description: 'Transfer created' }); setShowTransferDialog(false); setTransferForm({ itemId: '', toEntityId: '', quantity: '', notes: '', barcode: '' }); fetchTransfers() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -2089,6 +2091,7 @@ AS Display Centre,720-500-D,0
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             itemId: row.itemId,
+            barcode: row.barcode || undefined,
             fromEntityId: workingEntity.id,
             toEntityId: multiTransferToEntityId,
             quantity: parseInt(row.quantity),
@@ -2192,7 +2195,7 @@ AS Display Centre,720-500-D,0
     if (!ok) return
     try {
       const res = await authFetch('/api/receives', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ...receiveForm, entityId: workingEntity.id, quantity: parseInt(receiveForm.quantity), sourceEntityId: receiveForm.sourceEntityId || undefined }) })
-      if (res.ok) { toast({ title: 'Success', description: 'Receive saved' }); setShowReceiveDialog(false); setReceiveForm({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' }); fetchReceives() }
+      if (res.ok) { toast({ title: 'Success', description: 'Receive saved' }); setShowReceiveDialog(false); setReceiveForm({ itemId: '', barcode: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' }); fetchReceives() }
       else { const d = await res.json(); toast({ title: 'Error', description: d.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
@@ -5586,7 +5589,7 @@ DEWS,720-500-B,5</pre>
       <Dialog open={showTransferDialog} onOpenChange={setShowTransferDialog}>
         <DialogContent><DialogHeader><DialogTitle>New Transfer</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveTransfer} className="space-y-4">
-            {renderItemSearchField(transferForm.itemId, (item) => setTransferForm(f => ({ ...f, itemId: item.id || '' })))}
+            {renderItemSearchField(transferForm.itemId, (item) => setTransferForm(f => ({ ...f, itemId: item.id || '', barcode: item.barcode || '' })))}
             <div className="space-y-2"><Label>From Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="space-y-2">
               <Label>To Entity*</Label>
@@ -5869,7 +5872,7 @@ DEWS,720-500-B,5</pre>
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold">Receive - {workingEntity?.name}</h2>
-        <Button onClick={() => { setReceiveForm({ itemId: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' }); setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null); setCurrentView('newReceive') }}><Plus className="w-4 h-4 mr-2" />New Receive</Button>
+        <Button onClick={() => { setReceiveForm({ itemId: '', barcode: '', quantity: '', sourceEntityId: '', referenceNo: '', notes: '' }); setTxItemSearch(''); setTxItemResults([]); setTxSelectedItem(null); setCurrentView('newReceive') }}><Plus className="w-4 h-4 mr-2" />New Receive</Button>
       </div>
 
       {/* ★ Incoming Transfers panel — pending transfers destined TO this entity.
@@ -5902,7 +5905,7 @@ DEWS,720-500-B,5</pre>
                       <TableCell className="font-mono text-xs">TR-{t.id.slice(-6).toUpperCase()}</TableCell>
                       <TableCell className="font-medium">
                         {t.itemName}
-                        {t.item?.barcode && <span className="ml-2 text-[10px] font-mono text-muted-foreground">BC: {t.item.barcode}</span>}
+                        {t.barcode && <span className="ml-2 text-[10px] font-mono text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">BC: {t.barcode}</span>}
                       </TableCell>
                       <TableCell>{t.fromEntityName}</TableCell>
                       <TableCell className="text-right font-bold">{t.quantity}</TableCell>
@@ -5961,7 +5964,7 @@ DEWS,720-500-B,5</pre>
       <Dialog open={showReceiveDialog} onOpenChange={setShowReceiveDialog}>
         <DialogContent><DialogHeader><DialogTitle>New Receive</DialogTitle></DialogHeader>
           <form onSubmit={handleSaveReceive} className="space-y-4">
-            {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '' })))}
+            {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '', barcode: item.barcode || '' })))}
             <div className="space-y-2"><Label>Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={receiveForm.quantity} onChange={e => setReceiveForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
             <div className="space-y-2">
@@ -7891,7 +7894,7 @@ DEWS,720-500-B,5</pre>
           <form onSubmit={handleSaveReceive} className="space-y-5">
             <div className="space-y-2">
               <Label className="text-sm font-semibold">Item *</Label>
-              {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '' })))}
+              {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '', barcode: item.barcode || '' })))}
             </div>
             <div className="space-y-2"><Label>Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
