@@ -35,23 +35,56 @@ export async function GET(request: NextRequest) {
 
     const skip = (page - 1) * pageSize;
 
+    // ★ v60-fix93: Search needs to look in BOTH Item.barcode AND the ItemBarcode table.
+    //   A single item can have many barcodes (multi-barcode items). The ItemBarcode
+    //   table holds the additional barcodes. Without checking it, scan-based item
+    //   lookup for additional barcodes fails with "No items found matching <barcode>".
+    //
+    //   Strategy:
+    //   1. Look up ItemBarcode rows matching the barcode search term.
+    //   2. Collect their itemIds + remember which specific barcode matched (for override).
+    //   3. OR those itemIds into the Item where clause.
+    const barcodeOverrideMap = new Map<string, string>();
+    let extraItemIdsFromBarcodes: string[] = [];
+    if (search.trim()) {
+      try {
+        const ibMatches = await (db as any).itemBarcode.findMany({
+          where: { barcode: { contains: search.trim() } },
+          select: { itemId: true, barcode: true },
+        });
+        for (const m of ibMatches) {
+          // Prefer exact match if multiple barcodes match for the same item
+          if (!barcodeOverrideMap.has(m.itemId) || m.barcode === search.trim()) {
+            barcodeOverrideMap.set(m.itemId, m.barcode);
+          }
+        }
+        extraItemIdsFromBarcodes = Array.from(new Set(ibMatches.map((m: any) => m.itemId)));
+      } catch (e) {
+        // ItemBarcode table may not exist on this DB — best-effort
+        console.error('ItemBarcode search failed:', e);
+      }
+    }
+
     // Build where clause for search — uses indexes (itemName, year, lcNo, group, subGroup)
     let where: Prisma.ItemWhereInput = {};
     if (search.trim()) {
       const searchTerm = search.trim();
-      where = {
-        OR: [
-          { itemName: { contains: searchTerm } },
-          { lcNo: { contains: searchTerm } },
-          { group: { contains: searchTerm } },
-          { subGroup: { contains: searchTerm } },
-          { year: { contains: searchTerm } },
-          { barcode: { contains: searchTerm } },
-          { itemCode: { contains: searchTerm } },
-          { color: { contains: searchTerm } },
-          { supplierCode: { contains: searchTerm } },
-        ],
-      };
+      const orClauses: Prisma.ItemWhereInput[] = [
+        { itemName: { contains: searchTerm } },
+        { lcNo: { contains: searchTerm } },
+        { group: { contains: searchTerm } },
+        { subGroup: { contains: searchTerm } },
+        { year: { contains: searchTerm } },
+        { barcode: { contains: searchTerm } },
+        { itemCode: { contains: searchTerm } },
+        { color: { contains: searchTerm } },
+        { supplierCode: { contains: searchTerm } },
+      ];
+      // ★ Add: any item whose id appears in ItemBarcode matches
+      if (extraItemIdsFromBarcodes.length > 0) {
+        orClauses.push({ id: { in: extraItemIdsFromBarcodes } });
+      }
+      where = { OR: orClauses };
     }
 
     // Parallel: get items + total count at the same time
@@ -127,7 +160,9 @@ export async function GET(request: NextRequest) {
       }
       // ★ Always expose barcode + itemCode regardless of column access — they're
       //   needed by the transfer/receive forms for scan-based item lookup.
-      result.barcode = item.barcode;
+      //   ★ v60-fix93: If this item was matched via an ItemBarcode row, use THAT
+      //   specific barcode (not the primary). Otherwise fall back to Item.barcode.
+      result.barcode = barcodeOverrideMap.get(item.id) || item.barcode;
       result.itemCode = item.itemCode;
       result.color = item.color;
       result.pattern = item.pattern;
