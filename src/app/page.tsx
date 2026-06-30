@@ -1962,6 +1962,26 @@ AS Display Centre,720-500-D,0
 
   const handleDeleteBooking = async (id: string) => { if (!confirm('Delete this booking?')) return; try { const res = await authFetch(`/api/bookings/${id}`, { method: 'DELETE' }); if (res.ok) { toast({ title: 'Deleted' }); fetchBookings() } } catch {} }
 
+  // ★ Quick status update for a booking — used by inline dropdown in list + detail page button
+  const handleUpdateBookingStatus = async (id: string, newStatus: string) => {
+    try {
+      const res = await authFetch(`/api/bookings/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status: newStatus }),
+      })
+      if (res.ok) {
+        toast({ title: 'Status Updated', description: `Booking is now "${newStatus}"` })
+        fetchBookings()
+      } else {
+        const d = await res.json().catch(() => ({}))
+        toast({ title: 'Error', description: d.error || 'Failed to update status', variant: 'destructive' })
+      }
+    } catch {
+      toast({ title: 'Error', description: 'Failed to update status', variant: 'destructive' })
+    }
+  }
+
   // Transaction item search
   const handleTxItemSearch = useCallback(async () => {
     if (!txItemSearch.trim()) return
@@ -8007,7 +8027,23 @@ DEWS,720-500-B,5</pre>
               <div><span className="text-muted-foreground">Customer:</span> <strong>{booking.customer?.name || '—'}</strong></div>
               <div><span className="text-muted-foreground">Booking Date:</span> {bdDate(new Date(booking.bookingDate))}</div>
               <div><span className="text-muted-foreground">Till Date:</span> {booking.tillDate ? bdDate(new Date(booking.tillDate)) : '—'}</div>
-              <div><span className="text-muted-foreground">Status:</span> <Badge variant={booking.status === 'delivered' ? 'default' : booking.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{booking.status}</Badge></div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-muted-foreground">Status:</span>
+                <Badge variant={booking.status === 'delivered' ? 'default' : booking.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{booking.status}</Badge>
+                <Select value={booking.status} onValueChange={(v) => handleUpdateBookingStatus(booking.id, v)}>
+                  <SelectTrigger className="h-7 text-xs capitalize w-36 inline-flex">
+                    <span className="text-muted-foreground">Update →</span>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="pending">Pending</SelectItem>
+                    <SelectItem value="confirmed">Confirmed</SelectItem>
+                    <SelectItem value="processing">Processing</SelectItem>
+                    <SelectItem value="delivered">Delivered</SelectItem>
+                    <SelectItem value="cancelled">Cancelled</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
               <div><span className="text-muted-foreground">Reason:</span> {booking.reason || '—'}</div>
               <div><span className="text-muted-foreground">Total Items:</span> <strong>{booking.items?.length || 0}</strong></div>
               <div><span className="text-muted-foreground">Total Qty:</span> <strong>{totalQty}</strong></div>
@@ -8110,7 +8146,20 @@ DEWS,720-500-B,5</pre>
                       <TableCell className="text-xs">{bdDate(new Date(b.bookingDate))}</TableCell>
                       <TableCell className="text-xs">{b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</TableCell>
                       <TableCell className="text-xs">{b.reason || '—'}</TableCell>
-                      <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
+                      <TableCell onClick={(e) => e.stopPropagation()}>
+                        <Select value={b.status} onValueChange={(v) => handleUpdateBookingStatus(b.id, v)}>
+                          <SelectTrigger className="h-7 text-xs capitalize w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="confirmed">Confirmed</SelectItem>
+                            <SelectItem value="processing">Processing</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </TableCell>
                       <TableCell className="text-center">
                         <Button variant="ghost" size="sm" onClick={() => printBooking(b)} title="Print / PDF"><FileText className="w-4 h-4" /></Button>
                         <Button variant="ghost" size="sm" onClick={() => { setEditingBookingId(b.id); setBookingForm({ customerId: b.customerId || '', bookingDate: new Date(b.bookingDate).toISOString().split('T')[0], tillDate: b.tillDate ? new Date(b.tillDate).toISOString().split('T')[0] : '', status: b.status, reason: b.reason || '', notes: b.notes || '', items: [], newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '' }); setBookingCustomerMode('existing'); fetchCustomers(); setCurrentView('newBooking') }} title="Edit"><Edit className="w-4 h-4" /></Button>
@@ -8132,7 +8181,24 @@ DEWS,720-500-B,5</pre>
                     <TableCell className="text-xs">{bdDate(new Date(b.bookingDate))}</TableCell>
                     <TableCell className="text-xs">{b.tillDate ? bdDate(new Date(b.tillDate)) : '—'}</TableCell>
                     <TableCell className="text-xs">{b.reason || '—'}</TableCell>
-                    <TableCell><Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge></TableCell>
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {idx === 0 ? (
+                        <Select value={b.status} onValueChange={(v) => handleUpdateBookingStatus(b.id, v)}>
+                          <SelectTrigger className="h-7 text-xs capitalize w-32">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="pending">Pending</SelectItem>
+                            <SelectItem value="confirmed">Confirmed</SelectItem>
+                            <SelectItem value="processing">Processing</SelectItem>
+                            <SelectItem value="delivered">Delivered</SelectItem>
+                            <SelectItem value="cancelled">Cancelled</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant={b.status === 'delivered' ? 'default' : b.status === 'cancelled' ? 'destructive' : 'secondary'} className="capitalize">{b.status}</Badge>
+                      )}
+                    </TableCell>
                     <TableCell className="text-center">
                       {idx === 0 && (
                         <>
