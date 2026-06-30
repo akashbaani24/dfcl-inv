@@ -5568,7 +5568,16 @@ DEWS,720-500-B,5</pre>
           <form onSubmit={handleSaveTransfer} className="space-y-4">
             {renderItemSearchField(transferForm.itemId, (item) => setTransferForm(f => ({ ...f, itemId: item.id || '' })))}
             <div className="space-y-2"><Label>From Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
-            <div className="space-y-2"><Label>To Entity*</Label><Select value={transferForm.toEntityId} onValueChange={v => setTransferForm(f => ({ ...f, toEntityId: v }))}><SelectTrigger><SelectValue placeholder="Select entity" /></SelectTrigger><SelectContent>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2">
+              <Label>To Entity*</Label>
+              <Combobox
+                options={entities.filter(e => e.id !== workingEntity?.id).map(e => ({ value: e.id, label: e.name }))}
+                value={transferForm.toEntityId}
+                onChange={(v) => setTransferForm(f => ({ ...f, toEntityId: v }))}
+                placeholder="Type to search destination entity..."
+                className="h-9"
+              />
+            </div>
 
             {/* Stock hint */}
             {transferForm.itemId && (
@@ -5699,14 +5708,13 @@ DEWS,720-500-B,5</pre>
                 </div>
                 <div className="space-y-2">
                   <Label className="text-sm font-semibold">To Entity *</Label>
-                  <Select value={multiTransferToEntityId} onValueChange={v => setMultiTransferToEntityId(v)}>
-                    <SelectTrigger><SelectValue placeholder="Select destination entity" /></SelectTrigger>
-                    <SelectContent>
-                      {entities.filter(e => e.id !== workingEntity?.id).map(e => (
-                        <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <Combobox
+                    options={entities.filter(e => e.id !== workingEntity?.id).map(e => ({ value: e.id, label: e.name }))}
+                    value={multiTransferToEntityId}
+                    onChange={(v) => setMultiTransferToEntityId(v)}
+                    placeholder="Type to search destination entity..."
+                    className="h-9"
+                  />
                 </div>
               </div>
 
@@ -5936,7 +5944,16 @@ DEWS,720-500-B,5</pre>
             {renderItemSearchField(receiveForm.itemId, (item) => setReceiveForm(f => ({ ...f, itemId: item.id || '' })))}
             <div className="space-y-2"><Label>Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="space-y-2"><Label>Quantity*</Label><Input type="number" value={receiveForm.quantity} onChange={e => setReceiveForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
-            <div className="space-y-2"><Label>Source Entity</Label><Select value={receiveForm.sourceEntityId || '__none__'} onValueChange={v => setReceiveForm(f => ({ ...f, sourceEntityId: v === '__none__' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2">
+              <Label>Source Entity</Label>
+              <Combobox
+                options={[{ value: '__none__', label: 'None' }, ...entities.filter(e => e.id !== workingEntity?.id).map(e => ({ value: e.id, label: e.name }))]}
+                value={receiveForm.sourceEntityId || '__none__'}
+                onChange={(v) => setReceiveForm(f => ({ ...f, sourceEntityId: v === '__none__' ? '' : v }))}
+                placeholder="Type to search source entity..."
+                className="h-9"
+              />
+            </div>
             <div className="space-y-2"><Label>Reference No</Label><Input value={receiveForm.referenceNo} onChange={e => setReceiveForm(f => ({ ...f, referenceNo: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Notes</Label><Input value={receiveForm.notes} onChange={e => setReceiveForm(f => ({ ...f, notes: e.target.value }))} /></div>
             <DialogFooter><Button type="submit">Save Receive</Button></DialogFooter>
@@ -7859,7 +7876,16 @@ DEWS,720-500-B,5</pre>
             <div className="space-y-2"><Label>Entity</Label><Input value={workingEntity?.name || ''} disabled /></div>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2"><Label>Quantity *</Label><Input type="number" value={receiveForm.quantity} onChange={e => setReceiveForm(f => ({ ...f, quantity: e.target.value }))} required min="1" /></div>
-              <div className="space-y-2"><Label>Source Entity</Label><Select value={receiveForm.sourceEntityId || '__none__'} onValueChange={v => setReceiveForm(f => ({ ...f, sourceEntityId: v === '__none__' ? '' : v }))}><SelectTrigger><SelectValue placeholder="Optional" /></SelectTrigger><SelectContent><SelectItem value="__none__">None</SelectItem>{entities.filter(e => e.id !== workingEntity?.id).map(e => <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>)}</SelectContent></Select></div>
+              <div className="space-y-2">
+              <Label>Source Entity</Label>
+              <Combobox
+                options={[{ value: '__none__', label: 'None' }, ...entities.filter(e => e.id !== workingEntity?.id).map(e => ({ value: e.id, label: e.name }))]}
+                value={receiveForm.sourceEntityId || '__none__'}
+                onChange={(v) => setReceiveForm(f => ({ ...f, sourceEntityId: v === '__none__' ? '' : v }))}
+                placeholder="Type to search source entity..."
+                className="h-9"
+              />
+            </div>
             </div>
             <div className="space-y-2"><Label>Reference No</Label><Input value={receiveForm.referenceNo} onChange={e => setReceiveForm(f => ({ ...f, referenceNo: e.target.value }))} /></div>
             <div className="space-y-2"><Label>Notes</Label><Input value={receiveForm.notes} onChange={e => setReceiveForm(f => ({ ...f, notes: e.target.value }))} /></div>
