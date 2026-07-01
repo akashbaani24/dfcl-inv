@@ -82,15 +82,19 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
           }
           const allDelivered = fullOrder.items.every(si => (delivered.get(si.id) || 0) >= si.quantity);
           // Check payment
-          const subTotal = fullOrder.items.reduce((s, si) => s + si.quantity * 0, 0); // placeholder
           const totalPaid = fullOrder.payments.reduce((s, p) => s + p.amount, 0);
-          // Compute grand total (need items' unit price + making entries)
+          // Compute grand total (need items' unit price + making entries) MINUS discount
           const fullItems = await db.salesOrderItem.findMany({
             where: { salesOrderId: id },
             include: { makingEntries: true },
           });
-          const grandTotal = fullItems.reduce((s, si) => s + si.quantity * si.unitPrice + (si.makingEntries.reduce((m, me) => m + me.quantity * me.unitPrice, 0)), 0);
-          const paymentCleared = totalPaid >= grandTotal;
+          const grossTotal = fullItems.reduce((s, si) => s + si.quantity * si.unitPrice + (si.makingEntries.reduce((m, me) => m + me.quantity * me.unitPrice, 0)), 0);
+          // ★ v60-fix98: subtract discount — otherwise "payment cleared" check fails when a discount was applied.
+          //   Before: grandTotal = grossTotal (ignores discount) → user could overpay and still get "not cleared" error.
+          //   After: grandTotal = grossTotal - discount → matches what the UI shows and what user actually owes.
+          const discount = (fullOrder as any).discount || 0;
+          const grandTotal = grossTotal - discount;
+          const paymentCleared = totalPaid >= grandTotal - 0.01; // small tolerance for float rounding
 
           if (!allDelivered) {
             return NextResponse.json(
