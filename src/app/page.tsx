@@ -9219,7 +9219,7 @@ DEWS,720-500-B,5</pre>
     }).filter((s: any) => s.status !== 'delivered') // hide fully-delivered orders
 
     // When user selects an order, show its items for picking
-    const selectOrder = (order: any) => {
+    const selectOrder = async (order: any) => {
       setDeliverySelectedOrder(order)
       // ★ Compute already-delivered qty per sales order item (from existing deliveries)
       const alreadyDelivered = new Map<string, number>()
@@ -9228,52 +9228,109 @@ DEWS,720-500-B,5</pre>
           alreadyDelivered.set(di.salesOrderItemId, (alreadyDelivered.get(di.salesOrderItemId) || 0) + di.quantity)
         }
       }
-      // Pre-populate the picked items list with all order items
-      // deliverQty = empty (user must scan to deliver)
-      // Each item also tracks: alreadyDeliveredQty, remainingQty
-      setDeliveryPickedItems((order.items || []).map((si: any) => {
+
+      // ★ Pre-populate the picked items list with all order items.
+      //   v60-fix97: do NOT auto-prefill barcode — user can deliver from ANY of the
+      //   item's barcodes at this entity (primary + additional). Just show the
+      //   total available qty so the user knows how much is on hand.
+      let initialItems = (order.items || []).map((si: any) => {
         const already = alreadyDelivered.get(si.id) || 0
         return {
           salesOrderItemId: si.id,
           itemId: si.itemId,
           itemName: si.item?.itemName || '—',
-          barcode: si.item?.barcode || '',
+          // ★ Don't pre-fill a specific barcode — user will scan one to deliver
+          barcode: '',
+          scannedBarcodes: [] as string[],  // ★ track which barcodes the user scanned
           itemCode: si.item?.itemCode || '',
           uom: si.item?.uom || 'PCS',
           orderedQty: si.quantity,
           alreadyDeliveredQty: already,
           remainingQty: si.quantity - already,
           deliverQty: '', // empty until user scans barcode
+          availableQty: null as number | null,  // ★ will fetch from stock API below
         }
-      }))
+      })
+      setDeliveryPickedItems(initialItems)
       setDeliveryBarcodeInput('')
+
+      // ★ v60-fix97: Async fetch available qty per item at this entity (sum of all
+      //   barcodes' stock). This shows the user "we have N units on hand" without
+      //   forcing a specific barcode.
+      if (workingEntity) {
+        try {
+          const res = await authFetch(`/api/stock/by-entity?entityId=${workingEntity.id}`)
+          if (res.ok) {
+            const d = await res.json()
+            const stockByItem = new Map<string, number>()
+            for (const s of (d.stocks || [])) {
+              const cur = stockByItem.get(s.itemId) || 0
+              stockByItem.set(s.itemId, cur + (s.quantity || 0))
+            }
+            setDeliveryPickedItems(items => items.map(p => ({
+              ...p,
+              availableQty: stockByItem.get(p.itemId) ?? 0,
+            })))
+          }
+        } catch {}
+      }
     }
 
     // When user scans/types a barcode, find the matching item in the order
-    const handleBarcodeScan = () => {
+    // ★ v60-fix97: An item can have multiple barcodes (primary + ItemBarcode rows).
+    //   When user scans any of those barcodes, we match it to the order item that
+    //   owns that barcode at this entity. We fetch the available barcodes for the
+    //   current entity on-demand.
+    const handleBarcodeScan = async () => {
       const bc = deliveryBarcodeInput.trim()
       if (!bc) return
       const bcLower = bc.toLowerCase()
 
-      // ★ Try multiple matching strategies:
-      // 1. Exact match on barcode
-      // 2. Exact match on itemCode
-      // 3. Exact match on itemName
-      // 4. Barcode "contains" match (for partial scans)
-      // 5. ItemCode "contains" match
+      // ★ Build a map of itemId → list of barcodes available at this entity.
+      //   We fetch from /api/stock/by-entity (per-barcode rows) — each row has
+      //   s.item.barcode + s.itemId. Multiple rows per itemId = multiple barcodes.
+      let itemBarcodesMap = new Map<string, string[]>()
+      try {
+        if (workingEntity) {
+          const res = await authFetch(`/api/stock/by-entity?entityId=${workingEntity.id}`)
+          if (res.ok) {
+            const d = await res.json()
+            for (const s of (d.stocks || [])) {
+              const arr = itemBarcodesMap.get(s.itemId) || []
+              if (s.item?.barcode) arr.push(s.item.barcode)
+              itemBarcodesMap.set(s.itemId, arr)
+            }
+          }
+        }
+      } catch {}
+
+      // ★ Match strategy:
+      //   1. itemId from order whose barcode list contains the scanned barcode (exact)
+      //   2. exact match on row.itemCode
+      //   3. exact match on row.itemName
+      //   4. "contains" match on any barcode / itemCode
       const findMatch = (includeRemaining: boolean) => {
         return deliveryPickedItems.find((p: any) => {
           const remaining = p.remainingQty || (p.orderedQty - (p.alreadyDeliveredQty || 0))
           if (includeRemaining && remaining <= 0) return false
 
-          // Exact matches
+          // ★ Check if scanned barcode belongs to this item (primary or additional)
+          const itemBarcodes = itemBarcodesMap.get(p.itemId) || []
+          for (const ib of itemBarcodes) {
+            if (ib.toLowerCase() === bcLower) return true
+          }
+          // Also check the item's primary barcode stored on Item (in case stock
+          // wasn't found at this entity yet but barcode is the item's primary)
           if (p.barcode && p.barcode.toLowerCase() === bcLower) return true
+
+          // Exact matches on itemCode / itemName
           if (p.itemCode && p.itemCode.toLowerCase() === bcLower) return true
           if (p.itemName && p.itemName.toLowerCase() === bcLower) return true
 
           // Contains matches (partial barcode scan)
-          if (p.barcode && p.barcode.toLowerCase().includes(bcLower)) return true
-          if (bcLower.length >= 4 && p.barcode && p.barcode.toLowerCase().includes(bcLower)) return true
+          for (const ib of itemBarcodes) {
+            if (ib.toLowerCase().includes(bcLower)) return true
+          }
           if (p.itemCode && p.itemCode.toLowerCase().includes(bcLower)) return true
 
           return false
@@ -9289,27 +9346,46 @@ DEWS,720-500-B,5</pre>
         if (fullMatch) {
           toast({ title: 'Already fully delivered', description: `${fullMatch.itemName} has no remaining quantity to deliver.`, variant: 'destructive' })
         } else {
-          toast({ title: 'Not found', description: `No item in this sales order matches "${bc}". Check the barcode and try again.`, variant: 'destructive' })
+          // ★ Helpful message: list the scanned barcode + suggest checking available stock
+          toast({ title: 'Not found', description: `No item in this sales order (or no available stock at this entity) matches barcode "${bc}". Check the barcode or add stock first.`, variant: 'destructive' })
         }
         setDeliveryBarcodeInput('')
         return
       }
 
-      // Increment the deliverQty for this item (capped at remaining)
-      const currentQty = parseFloat(match.deliverQty) || 0
+      // ★ Check available qty at this entity before allowing deliver
+      const availableForMatch = match.availableQty ?? 0
+      const currentDeliverQty = parseFloat(match.deliverQty) || 0
+      if (currentDeliverQty >= availableForMatch) {
+        toast({ title: 'Insufficient stock', description: `${match.itemName}: only ${availableForMatch} unit(s) available at this entity. Already delivering ${currentDeliverQty}.`, variant: 'destructive' })
+        setDeliveryBarcodeInput('')
+        return
+      }
+
+      // Increment the deliverQty for this item (capped at remaining AND available stock)
       const remaining = match.remainingQty || (match.orderedQty - (match.alreadyDeliveredQty || 0))
-      if (currentQty >= remaining) {
+      if (currentDeliverQty >= remaining) {
         toast({ title: 'Max reached', description: `${match.itemName}: already at max ${remaining} for this delivery.`, variant: 'destructive' })
         setDeliveryBarcodeInput('')
         return
       }
+
+      // ★ Track which barcode was scanned (for record-keeping / future audit)
+      const scannedSoFar = match.scannedBarcodes || []
+      if (!scannedSoFar.includes(bc)) scannedSoFar.push(bc)
+
       setDeliveryPickedItems(items =>
         items.map((p: any) => p.itemId === match.itemId
-          ? { ...p, deliverQty: String((parseFloat(p.deliverQty) || 0) + 1) }
+          ? {
+            ...p,
+            deliverQty: String((parseFloat(p.deliverQty) || 0) + 1),
+            scannedBarcodes: scannedSoFar,
+            // Don't set a fixed barcode — backend will pick any available barcode's stock
+          }
           : p
         )
       )
-      toast({ title: '✓ Added', description: `${match.itemName}: ${currentQty + 1} of ${remaining} remaining` })
+      toast({ title: '✓ Added', description: `${match.itemName}: ${currentDeliverQty + 1} of ${remaining} remaining (avail: ${availableForMatch})` })
       setDeliveryBarcodeInput('')
     }
 
@@ -9438,7 +9514,7 @@ DEWS,720-500-B,5</pre>
                     <tr>
                       <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">SL</th>
                       <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide">Item</th>
-                      <th className="px-2 py-2 text-left text-[11px] uppercase tracking-wide w-32">Barcode</th>
+                      <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-24">Available</th>
                       <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Ordered</th>
                       <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Delivered</th>
                       <th className="px-2 py-2 text-right text-[11px] uppercase tracking-wide w-20">Remaining</th>
@@ -9453,15 +9529,32 @@ DEWS,720-500-B,5</pre>
                       const isComplete = (p.alreadyDeliveredQty || 0) + qty >= p.orderedQty
                       const already = p.alreadyDeliveredQty || 0
                       const remaining = p.remainingQty || (p.orderedQty - already)
+                      const available = p.availableQty ?? null
+                      const lowStock = available !== null && available < remaining
+                      const scannedList = (p.scannedBarcodes || []) as string[]
                       return (
                         <tr key={p.itemId} className={`border-t ${isComplete ? 'bg-green-50/50' : isPicked ? 'bg-blue-50/40' : already > 0 ? 'bg-amber-50/30' : ''}`}>
                           <td className="px-2 py-2 text-center text-muted-foreground">{i + 1}</td>
                           <td className="px-2 py-2 font-medium">
                             {p.itemName}
-                            {p.barcode && <div className="text-[10px] font-mono text-muted-foreground">BC: {p.barcode}</div>}
                             {p.itemCode && p.itemCode !== p.itemName && <div className="text-[10px] font-mono text-muted-foreground">IC: {p.itemCode}</div>}
+                            {/* ★ Show scanned barcodes (if any) so user knows which barcode(s) they used */}
+                            {scannedList.length > 0 && (
+                              <div className="mt-1 flex flex-wrap gap-1">
+                                {scannedList.slice(0, 5).map((bc: string, idx: number) => (
+                                  <span key={idx} className="text-[9px] font-mono bg-blue-100 text-blue-800 px-1.5 py-0.5 rounded">
+                                    ✓ {bc}
+                                  </span>
+                                ))}
+                                {scannedList.length > 5 && (
+                                  <span className="text-[9px] text-muted-foreground">+{scannedList.length - 5} more</span>
+                                )}
+                              </div>
+                            )}
                           </td>
-                          <td className="px-2 py-2 font-mono text-xs">{p.barcode || p.itemCode || '—'}</td>
+                          <td className={`px-2 py-2 text-right font-mono ${lowStock ? 'text-red-600 font-semibold' : ''}`}>
+                            {available === null ? '…' : available}
+                          </td>
                           <td className="px-2 py-2 text-right">{p.orderedQty}</td>
                           <td className="px-2 py-2 text-right text-blue-700">{already}</td>
                           <td className="px-2 py-2 text-right font-semibold">{remaining}</td>

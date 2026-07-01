@@ -136,10 +136,39 @@ export async function POST(
       });
 
       // Decrement stock for each delivered item (atomic with stock guard)
+      // ★ v60-fix97: When an item has multiple barcodes at this entity (ItemBarcode rows),
+      //   we decrement from those rows first (oldest first by createdAt), then from the
+      //   aggregate Stock table. This keeps per-barcode tracking accurate so future
+      //   scans of a specific barcode find the right qty.
       for (const di of items as any[]) {
         const qty = parseFloat(di.quantity) || 0;
         if (qty <= 0) continue;
         try {
+          // ★ Step 1: Try to decrement from ItemBarcode rows at this entity.
+          //   We fetch rows ordered by oldest first, decrement each until qty is exhausted.
+          let remainingToDecrement = qty;
+          try {
+            const ibRows = await (tx as any).itemBarcode.findMany({
+              where: { itemId: di.itemId, entityId: salesOrder.entityId, quantity: { gt: 0 } },
+              orderBy: { id: 'asc' },  // ★ oldest first
+              select: { id: true, barcode: true, quantity: true },
+            });
+            for (const ib of ibRows) {
+              if (remainingToDecrement <= 0) break;
+              const takeFromThis = Math.min(ib.quantity, remainingToDecrement);
+              await (tx as any).itemBarcode.update({
+                where: { id: ib.id },
+                data: { quantity: { decrement: takeFromThis } },
+              });
+              remainingToDecrement -= takeFromThis;
+            }
+          } catch (e) {
+            // ItemBarcode table may not exist — fall through to aggregate decrement
+            console.error('ItemBarcode decrement failed:', e);
+          }
+
+          // ★ Step 2: Decrement the aggregate Stock table (always — this is the
+          //   primary stock tracker that the stock-guard checks against).
           await decrementStock(tx, di.itemId, salesOrder.entityId, qty);
         } catch (e) {
           if (e instanceof StockGuardError) {
