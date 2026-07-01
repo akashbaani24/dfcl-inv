@@ -2480,23 +2480,29 @@ AS Display Centre,720-500-D,0
     const printedOn = bdNow()
 
     // Build items table — each item row + nested making rows in same column style
+    // ★ v60-fix99: compute subTotal + makingTotal here (previously used undefined vars
+    //   which caused ReferenceError → blank print preview).
+    let subTotal = 0
+    let makingTotal = 0
     const itemsHtml = (s.items || []).map((si: any, i: number) => {
       const makingRows = (si.makingEntries || []).map((me: any) => {
         const meTotal = (me.quantity || 0) * (me.unitPrice || 0)
+        makingTotal += meTotal
         return `<tr class="making-row">
           <td style="text-align:center;color:#666">↳</td>
-          <td><span class="making-label">Making:</span> ${me.name || '—'} <span class="qty-price">(${me.quantity} × ৳ $৳ {(me.unitPrice || 0).toFixed(2)})</span></td>
-          <td class="num">৳ $৳ {(me.unitPrice || 0).toFixed(2)}</td>
-          <td class="num">৳ $৳ {meTotal.toFixed(2)}</td>
+          <td><span class="making-label">Making:</span> ${me.name || '—'} <span class="qty-price">(${me.quantity} × ৳ ${(me.unitPrice || 0).toFixed(2)})</span></td>
+          <td class="num">৳ ${(me.unitPrice || 0).toFixed(2)}</td>
+          <td class="num">৳ ${meTotal.toFixed(2)}</td>
         </tr>`
       }).join('')
       const itemBaseTotal = (si.quantity || 0) * (si.unitPrice || 0)
+      subTotal += itemBaseTotal
       const itemTotal = itemBaseTotal + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0)
       return `<tr class="item-row">
         <td class="num">${i + 1}</td>
-        <td><strong>${si.item?.itemName || '—'}</strong><br><span class="qty-price">Quantity: ${si.quantity} × Unit Price: ৳ $৳ {(si.unitPrice || 0).toFixed(2)}</span></td>
-        <td class="num">৳ $৳ {(si.unitPrice || 0).toFixed(2)}</td>
-        <td class="num bold">৳ $৳ {itemTotal.toFixed(2)}</td>
+        <td><strong>${si.item?.itemName || '—'}</strong><br><span class="qty-price">Quantity: ${si.quantity} × Unit Price: ৳ ${(si.unitPrice || 0).toFixed(2)}</span></td>
+        <td class="num">৳ ${(si.unitPrice || 0).toFixed(2)}</td>
+        <td class="num bold">৳ ${itemTotal.toFixed(2)}</td>
       </tr>${makingRows}`
     }).join('')
 
@@ -2516,7 +2522,7 @@ AS Display Centre,720-500-D,0
       return `<tr>
         <td>${pdStr}</td>
         <td>${methodStr}</td>
-        <td class="num">৳ $৳ {(p.amount || 0).toFixed(2)}</td>
+        <td class="num">৳ ${(p.amount || 0).toFixed(2)}</td>
       </tr>`
     }).join('')
 
@@ -2607,8 +2613,8 @@ AS Display Centre,720-500-D,0
       <div class="summary-section">
         <div class="summary">
           <table>
-            <tr><td class="label">Sub Total</td><td class="num">৳ $৳ {subTotal.toFixed(2)}</td></tr>
-            <tr><td class="label">Making Charges</td><td class="num">৳ $৳ {makingTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Sub Total</td><td class="num">৳ ${subTotal.toFixed(2)}</td></tr>
+            <tr><td class="label">Making Charges</td><td class="num">৳ ${makingTotal.toFixed(2)}</td></tr>
             <tr><td class="label">Total Amount</td><td class="num">৳ ${grandTotalPreDiscount.toFixed(2)}</td></tr>
             ${discount > 0 ? `<tr><td class="label">Discount</td><td class="num">-৳ ${discount.toFixed(2)}</td></tr>` : ''}
             <tr class="grand"><td>GRAND TOTAL</td><td class="num">৳ ${fmtBDT(grandTotal)}</td></tr>
@@ -2630,12 +2636,12 @@ AS Display Centre,720-500-D,0
         <div class="summary-section">
           <div class="summary">
             <table>
-              <tr><td class="label">Total Paid</td><td class="num">৳ $৳ {totalPaid.toFixed(2)}</td></tr>
-              <tr class="due"><td>DUE AMOUNT</td><td class="num">৳ $৳ {due.toFixed(2)}</td></tr>
+              <tr><td class="label">Total Paid</td><td class="num">৳ ${totalPaid.toFixed(2)}</td></tr>
+              <tr class="due"><td>DUE AMOUNT</td><td class="num">৳ ${due.toFixed(2)}</td></tr>
             </table>
           </div>
         </div>
-      </div>` : `<div class="summary-section"><div class="summary"><table><tr class="due"><td>DUE AMOUNT</td><td class="num">৳ $৳ {due.toFixed(2)}</td></tr></table></div></div>`}
+      </div>` : `<div class="summary-section"><div class="summary"><table><tr class="due"><td>DUE AMOUNT</td><td class="num">৳ ${due.toFixed(2)}</td></tr></table></div></div>`}
 
       <div class="sign-row">
         <div>Authorized Signature</div>
