@@ -1174,6 +1174,19 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "Receive_barcode_idx" ON "Receive"("barcode")',
     description: 'Index on Receive.barcode',
   },
+  // v70: Add batchId column to Transfer — groups multiple transfers created in one
+  //      multi-transfer action, so the destination entity sees them as ONE incoming batch
+  //      (one row in Incoming Transfers list) and can receive them all from one page.
+  {
+    id: '2026_07_01_transfer_batch_id',
+    sql: 'ALTER TABLE Transfer ADD COLUMN batchId TEXT',
+    description: 'Add batchId column to Transfer (groups multi-item transfers)',
+  },
+  {
+    id: '2026_07_01_transfer_batch_id_idx',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_batchId_idx" ON "Transfer"("batchId")',
+    description: 'Index on Transfer.batchId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

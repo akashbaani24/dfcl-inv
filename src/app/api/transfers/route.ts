@@ -67,7 +67,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'You do not have permission to create transfers' }, { status: 403 });
     }
 
-    const { itemId, barcode, fromEntityId, toEntityId, quantity, notes } = await request.json();
+    const { itemId, barcode, fromEntityId, toEntityId, quantity, batchId, notes } = await request.json();
 
     if (!itemId || !fromEntityId || !toEntityId || !quantity) {
       return NextResponse.json(
@@ -145,6 +145,7 @@ export async function POST(request: NextRequest) {
         toEntityId,
         quantity: qty,
         status: 'pending',
+        batchId: batchId || null,  // ★ groups multi-item transfers
         notes: notes || null,
         createdBy: currentUser.id,
       },

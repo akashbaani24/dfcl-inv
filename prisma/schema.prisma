@@ -617,6 +617,7 @@ model Transfer {
   toEntityId   String
   quantity     Int
   status       String   @default("pending") // "pending", "approved", "completed", "cancelled"
+  batchId      String?  // ★ groups multiple transfers created in one multi-transfer action
   notes        String?
   createdBy    String?
   createdAt    DateTime @default(now())
@@ -632,6 +633,7 @@ model Transfer {
   @@index([fromEntityId, status])
   @@index([toEntityId, status])
   @@index([barcode])
+  @@index([batchId])
 }
 
 model Receive {

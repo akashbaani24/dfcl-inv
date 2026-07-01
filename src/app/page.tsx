@@ -176,7 +176,7 @@ interface ReportData {
 type ViewType =
   | 'entitySelect'
   | 'itemPrice' | 'myEntityStock' | 'allEntityStock'
-  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive' | 'newReceive'
+  | 'itemAdjustment' | 'newAdjustment' | 'transfer' | 'newTransfer' | 'receive' | 'newReceive' | 'receiveBatch'
   | 'purchase' | 'newPurchase' | 'purchaseApproval' | 'purchaseDetail'
   | 'salesOrder' | 'newSalesOrder' | 'salesReturn' | 'newSalesReturn' | 'tailorPayment' | 'newTailorPayment'
   | 'booking' | 'newBooking' | 'bookingDetail' | 'incentive' | 'newFormula' | 'cogsPage' | 'supplierPayments' | 'newSupplierPayment' | 'delivery' | 'damage' | 'masterData' | 'inventory' | 'newsTicker' | 'fabricStudio' | 'accounts' | 'dailySales' | 'reports'
@@ -355,6 +355,12 @@ export default function Home() {
   // ★ Incoming transfers — pending transfers destined TO this entity, shown on the Receive page
   //    with a one-click "Receive" button that creates a Receive from the source entity.
   const [incomingTransfers, setIncomingTransfers] = useState<any[]>([])
+  // ★ v60-fix95: Receive Batch page — shows all items in a transfer batch with
+  //   per-barcode qty inputs, so user can receive multiple barcodes at once.
+  const [receiveBatchId, setReceiveBatchId] = useState<string | null>(null)
+  const [receiveBatchTransfers, setReceiveBatchTransfers] = useState<any[]>([])
+  const [receiveBatchForm, setReceiveBatchForm] = useState<Record<string, string>>({})  // transferId → qty to receive
+  const [receiveBatchSaving, setReceiveBatchSaving] = useState(false)
 
   // ★ Purchase state
   const [purchases, setPurchases] = useState<any[]>([])
@@ -1790,7 +1796,7 @@ AS Display Centre,720-500-D,0
       if (res.ok) {
         const d = await res.json()
         // Only show pending transfers where this entity is the destination
-        const incoming = (d.transfers || [])
+        const pending = (d.transfers || [])
           .filter((t: any) => t.toEntityId === workingEntity.id && t.status === 'pending')
           .map((t: any) => ({
             ...t,
@@ -1798,7 +1804,48 @@ AS Display Centre,720-500-D,0
             fromEntityName: t.fromEntity?.name || '',
             toEntityName: t.toEntity?.name || '',
           }))
-        setIncomingTransfers(incoming)
+
+        // ★ v60-fix95: Group by batchId so multi-item transfers show as ONE row.
+        //   - Transfers with a batchId → grouped; the row represents the whole batch
+        //     (count of items + total qty shown).
+        //   - Transfers without a batchId (legacy single-item transfers) → each
+        //     stays as its own row.
+        const batchMap = new Map<string, any>()
+        const standalone: any[] = []
+        for (const t of pending) {
+          if (t.batchId) {
+            const existing = batchMap.get(t.batchId)
+            if (existing) {
+              existing.items.push(t)
+              existing.totalQty += t.quantity
+            } else {
+              batchMap.set(t.batchId, {
+                batchId: t.batchId,
+                fromEntityId: t.fromEntityId,
+                fromEntityName: t.fromEntityName,
+                toEntityName: t.toEntityName,
+                createdAt: t.createdAt,
+                items: [t],
+                totalQty: t.quantity,
+              })
+            }
+          } else {
+            standalone.push({
+              ...t,
+              // Wrap single-item transfers in the same shape so the UI can be uniform
+              batchId: null,
+              items: [t],
+              totalQty: t.quantity,
+              fromEntityName: t.fromEntityName,
+              toEntityName: t.toEntityName,
+              createdAt: t.createdAt,
+            })
+          }
+        }
+        // Merge grouped batches + standalone transfers, sort newest first
+        const grouped = Array.from(batchMap.values()).concat(standalone)
+        grouped.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        setIncomingTransfers(grouped)
       }
     } catch {}
   }
@@ -2089,7 +2136,12 @@ AS Display Centre,720-500-D,0
     })
     if (!ok) return
 
-    // Submit each row in sequence
+    // ★ v60-fix95: Generate ONE batch ID for all rows in this multi-transfer
+    //   so the destination sees them as a single incoming batch and can receive
+    //   them all from one page. Format: TB-YYYYMMDD-XXXX (short, readable).
+    const batchId = `TB-${new Date().toISOString().slice(0,10).replace(/-/g,'')}-${Math.random().toString(36).slice(2,6).toUpperCase()}`
+
+    // Submit each row in sequence — all tagged with the same batchId
     let success = 0
     const failures: string[] = []
     for (const row of multiTransferRows) {
@@ -2103,6 +2155,7 @@ AS Display Centre,720-500-D,0
             fromEntityId: workingEntity.id,
             toEntityId: multiTransferToEntityId,
             quantity: parseInt(row.quantity),
+            batchId,  // ★ same batchId for all rows in this multi-transfer
             notes: multiTransferNotes || undefined,
           }),
         })
@@ -5895,33 +5948,50 @@ DEWS,720-500-B,5</pre>
               Incoming Transfers ({incomingTransfers.length})
             </CardTitle>
             <p className="text-xs text-amber-800">
-              These items are being transferred TO you from other entities. Click "Receive" to accept them — the source entity's stock will be decremented and yours incremented.
+              These items are being transferred TO you from other entities. Click "Receive" to open the receive page and accept the items — stock will move from source to your entity.
             </p>
           </CardHeader>
           <CardContent className="pt-0">
             <div className="border rounded-lg overflow-x-auto bg-white">
               <Table>
                 <TableHeader><TableRow className="bg-amber-100/60">
-                  <TableHead className="font-semibold text-xs">Transfer ID</TableHead>
-                  <TableHead className="font-semibold text-xs">Item</TableHead>
+                  <TableHead className="font-semibold text-xs">Batch ID</TableHead>
                   <TableHead className="font-semibold text-xs">From</TableHead>
-                  <TableHead className="font-semibold text-xs text-right">Qty</TableHead>
+                  <TableHead className="font-semibold text-xs text-center">Items</TableHead>
+                  <TableHead className="font-semibold text-xs text-right">Total Qty</TableHead>
                   <TableHead className="font-semibold text-xs">Date</TableHead>
                   <TableHead className="font-semibold text-xs text-center">Action</TableHead>
                 </TableRow></TableHeader>
                 <TableBody>
-                  {incomingTransfers.map(t => (
-                    <TableRow key={t.id} className="hover:bg-amber-50">
-                      <TableCell className="font-mono text-xs">TR-{t.id.slice(-6).toUpperCase()}</TableCell>
-                      <TableCell className="font-medium">
-                        {t.itemName}
-                        {t.barcode && <span className="ml-2 text-[10px] font-mono text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded">BC: {t.barcode}</span>}
+                  {incomingTransfers.map((batch) => (
+                    <TableRow key={batch.batchId || batch.items[0]?.id} className="hover:bg-amber-50">
+                      <TableCell className="font-mono text-xs">
+                        {batch.batchId
+                          ? batch.batchId
+                          : `TR-${(batch.items[0]?.id || '').slice(-6).toUpperCase()}`}
                       </TableCell>
-                      <TableCell>{t.fromEntityName}</TableCell>
-                      <TableCell className="text-right font-bold">{t.quantity}</TableCell>
-                      <TableCell className="text-xs text-muted-foreground">{bdDate(new Date(t.createdAt))}</TableCell>
+                      <TableCell>{batch.fromEntityName}</TableCell>
                       <TableCell className="text-center">
-                        <Button size="sm" onClick={() => handleQuickReceive(t)}>
+                        {batch.items.length} item{batch.items.length !== 1 ? 's' : ''}
+                      </TableCell>
+                      <TableCell className="text-right font-bold">{batch.totalQty}</TableCell>
+                      <TableCell className="text-xs text-muted-foreground">{bdDate(new Date(batch.createdAt))}</TableCell>
+                      <TableCell className="text-center">
+                        <Button
+                          size="sm"
+                          onClick={() => {
+                            // ★ Open the receive batch page with this batch's transfers
+                            setReceiveBatchId(batch.batchId || batch.items[0]?.id || null)
+                            setReceiveBatchTransfers(batch.items)
+                            // Pre-fill the form with each transfer's full quantity
+                            const initialForm: Record<string, string> = {}
+                            for (const t of batch.items) {
+                              initialForm[t.id] = String(t.quantity)
+                            }
+                            setReceiveBatchForm(initialForm)
+                            setCurrentView('receiveBatch')
+                          }}
+                        >
                           <ArrowDownToLine className="w-3.5 h-3.5 mr-1" />Receive
                         </Button>
                       </TableCell>
@@ -5995,6 +6065,196 @@ DEWS,720-500-B,5</pre>
       </Dialog>
     </div>
   )
+
+  // ★ v60-fix95: Receive Batch page — opened from the Incoming Transfers "Receive" button.
+  //    Lists every item/barcode in the batch with a per-row qty input, then submits
+  //    all receives in one go (each row → one POST /api/receives call).
+  const renderReceiveBatchPage = () => {
+    if (!workingEntity) return null
+    const totalToReceive = receiveBatchTransfers.reduce((s, t) => s + (parseFloat(receiveBatchForm[t.id] || '0') || 0), 0)
+    const totalExpected = receiveBatchTransfers.reduce((s, t) => s + t.quantity, 0)
+
+    const handleReceiveBatchSubmit = async (e: React.FormEvent) => {
+      e.preventDefault()
+      if (receiveBatchTransfers.length === 0) return
+      setReceiveBatchSaving(true)
+      const ok = await confirm({
+        title: 'Receive this batch?',
+        message: `This will receive ${totalToReceive} unit(s) across ${receiveBatchTransfers.length} item line(s) from "${receiveBatchTransfers[0]?.fromEntity?.name || receiveBatchTransfers[0]?.fromEntityName || 'source'}". Source entity's stock will be decremented and yours incremented. Continue?`,
+        confirmLabel: 'Receive Now',
+      })
+      if (!ok) { setReceiveBatchSaving(false); return }
+
+      let success = 0
+      const failures: string[] = []
+      for (const t of receiveBatchTransfers) {
+        const qty = parseFloat(receiveBatchForm[t.id] || '0') || 0
+        if (qty <= 0) continue  // skip rows where user entered 0 or blank
+        try {
+          const res = await authFetch('/api/receives', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              itemId: t.itemId,
+              barcode: t.barcode || undefined,
+              entityId: workingEntity.id,
+              quantity: qty,
+              sourceEntityId: t.fromEntityId,
+              transferId: t.id,
+              referenceNo: receiveBatchId || `TR-${t.id.slice(-6).toUpperCase()}`,
+              notes: `Batch receive: ${receiveBatchId || t.id}`,
+            }),
+          })
+          if (res.ok) {
+            success++
+          } else {
+            const d = await res.json().catch(() => ({}))
+            failures.push(`${t.item?.itemName || t.itemName}: ${d.error || 'failed'}`)
+          }
+        } catch {
+          failures.push(`${t.item?.itemName || t.itemName}: network error`)
+        }
+      }
+
+      if (success > 0) {
+        toast({ title: 'Batch Received', description: `Received ${success} of ${receiveBatchTransfers.length} item line(s).${failures.length > 0 ? ` ${failures.length} failed.` : ''}` })
+      }
+      if (failures.length > 0) {
+        toast({ title: 'Some receives failed', description: failures.slice(0, 3).join(' | '), variant: 'destructive' })
+      }
+      setReceiveBatchSaving(false)
+      if (success > 0) {
+        setReceiveBatchId(null)
+        setReceiveBatchTransfers([])
+        setReceiveBatchForm({})
+        fetchReceives()
+        fetchIncomingTransfers()
+        setCurrentView('receive')
+      }
+    }
+
+    return (
+      <div className="space-y-4 max-w-5xl mx-auto">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <Button variant="outline" size="sm" onClick={() => { setReceiveBatchId(null); setReceiveBatchTransfers([]); setReceiveBatchForm({}); setCurrentView('receive') }}>
+              <ArrowLeft className="w-4 h-4 mr-1" />Back
+            </Button>
+            <h2 className="text-xl font-bold">Receive Batch — {receiveBatchId || 'Single Transfer'}</h2>
+          </div>
+        </div>
+
+        <Card className="border-amber-200 bg-amber-50/40">
+          <CardContent className="pt-6">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+              <div>
+                <span className="text-muted-foreground">From:</span>{' '}
+                <strong>{receiveBatchTransfers[0]?.fromEntity?.name || receiveBatchTransfers[0]?.fromEntityName || '—'}</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">To:</span>{' '}
+                <strong>{workingEntity.name}</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Items:</span>{' '}
+                <strong>{receiveBatchTransfers.length}</strong>
+              </div>
+              <div>
+                <span className="text-muted-foreground">Total Qty:</span>{' '}
+                <strong>{totalExpected}</strong>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardContent className="pt-6">
+            <form onSubmit={handleReceiveBatchSubmit} className="space-y-4">
+              <div className="rounded-md border border-blue-200 bg-blue-50/50 p-3 text-xs text-blue-900 space-y-1">
+                <p className="font-semibold">How to receive:</p>
+                <p>• Each row shows an item + its specific barcode + expected qty.</p>
+                <p>• Adjust the "Qty to Receive" if you received less than expected (partial receive).</p>
+                <p>• Enter 0 to skip a row.</p>
+                <p>• Click "Receive All" at the bottom to submit.</p>
+              </div>
+
+              <div className="border rounded-lg overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead className="bg-muted/50">
+                    <tr>
+                      <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">SL</th>
+                      <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">Item</th>
+                      <th className="px-3 py-2 text-left font-semibold text-xs uppercase tracking-wide">Barcode</th>
+                      <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Expected</th>
+                      <th className="px-3 py-2 text-right font-semibold text-xs uppercase tracking-wide">Qty to Receive</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {receiveBatchTransfers.map((t, i) => (
+                      <tr key={t.id} className="border-t hover:bg-muted/20">
+                        <td className="px-3 py-2 text-muted-foreground">{i + 1}</td>
+                        <td className="px-3 py-2 font-medium">{t.item?.itemName || t.itemName || '—'}</td>
+                        <td className="px-3 py-2">
+                          {t.barcode ? (
+                            <span className="font-mono text-[11px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">{t.barcode}</span>
+                          ) : <span className="text-muted-foreground text-xs">—</span>}
+                        </td>
+                        <td className="px-3 py-2 text-right font-bold">{t.quantity}</td>
+                        <td className="px-3 py-2 text-right">
+                          <Input
+                            type="number"
+                            step="0.01"
+                            min="0"
+                            max={t.quantity}
+                            value={receiveBatchForm[t.id] ?? ''}
+                            onChange={e => setReceiveBatchForm(f => ({ ...f, [t.id]: e.target.value }))}
+                            className="h-8 text-right w-24 inline-block"
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                    {receiveBatchTransfers.length === 0 && (
+                      <tr><td colSpan={5} className="text-center py-6 text-muted-foreground">No items in this batch.</td></tr>
+                    )}
+                  </tbody>
+                  {receiveBatchTransfers.length > 0 && (
+                    <tfoot className="bg-muted/30 border-t">
+                      <tr>
+                        <td colSpan={3} className="px-3 py-2 text-right font-semibold">Total to receive:</td>
+                        <td className="px-3 py-2 text-right font-bold">{totalExpected}</td>
+                        <td className="px-3 py-2 text-right font-bold text-primary">{totalToReceive}</td>
+                      </tr>
+                    </tfoot>
+                  )}
+                </table>
+              </div>
+
+              <div className="flex gap-2 pt-2 border-t">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => { setReceiveBatchId(null); setReceiveBatchTransfers([]); setReceiveBatchForm({}); setCurrentView('receive') }}
+                  disabled={receiveBatchSaving}
+                  className="flex-1"
+                >
+                  <X className="w-4 h-4 mr-2" />Cancel
+                </Button>
+                <Button
+                  type="submit"
+                  disabled={receiveBatchSaving || receiveBatchTransfers.length === 0 || totalToReceive <= 0}
+                  className="flex-1"
+                >
+                  {receiveBatchSaving
+                    ? <><RefreshCw className="w-4 h-4 mr-2 animate-spin" />Receiving...</>
+                    : <><ArrowDownToLine className="w-4 h-4 mr-2" />Receive All ({totalToReceive})</>}
+                </Button>
+              </div>
+            </form>
+          </CardContent>
+        </Card>
+      </div>
+    )
+  }
 
   const renderSalesOrderPage = () => (
     <div className="space-y-4">
@@ -11089,6 +11349,7 @@ DEWS,720-500-B,5</pre>
       case 'transfer': return renderTransferPage()
       case 'newTransfer': return renderNewTransferPage()
       case 'receive': return renderReceivePage()
+      case 'receiveBatch': return renderReceiveBatchPage()
       case 'newReceive': return renderNewReceivePage()
       case 'purchase': return renderPurchaseListPage()
       case 'newPurchase': return renderNewPurchasePage()
