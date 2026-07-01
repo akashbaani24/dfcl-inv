@@ -1852,10 +1852,20 @@ AS Display Centre,720-500-D,0
     let cancelled = false
     const fetchTransferStock = async () => {
       try {
-        const res = await authFetch(`/api/stock?entityId=${workingEntity.id}`)
+        // ★ v60-fix94: use /api/stock/by-entity (per-barcode rows) instead of
+        //   /api/stock (aggregate), so we can match the SPECIFIC barcode's qty.
+        const res = await authFetch(`/api/stock/by-entity?entityId=${workingEntity.id}`)
         if (res.ok) {
           const d = await res.json()
-          const row = (d.stocks || []).find((s: any) => s.itemId === transferForm.itemId)
+          const matches = (d.stocks || []).filter((s: any) => s.itemId === transferForm.itemId)
+          let row: any = null
+          if (transferForm.barcode) {
+            row = matches.find((s: any) => s.item?.barcode === transferForm.barcode) || null
+          }
+          if (!row && matches.length > 0) {
+            // Fallback: aggregate qty for this item across all barcodes
+            row = { quantity: matches.reduce((sum: number, s: any) => sum + (s.quantity || 0), 0) }
+          }
           if (!cancelled) setTransferCurrentStock(row?.quantity ?? 0)
         }
       } catch {}
@@ -1873,7 +1883,7 @@ AS Display Centre,720-500-D,0
     }
     fetchTransferStock()
     return () => { cancelled = true }
-  }, [transferForm.itemId, workingEntity])
+  }, [transferForm.itemId, transferForm.barcode, workingEntity])
 
   const fetchBookings = async () => { if (!workingEntity) return; try { const res = await authFetch(`/api/bookings?entityId=${workingEntity.id}`); if (res.ok) { const d = await res.json(); setBookings(d.bookings) } } catch {} }
 
@@ -2142,13 +2152,16 @@ AS Display Centre,720-500-D,0
       pendingOutgoing: 0,
     }])
     // Fetch stock for this item asynchronously
+    // ★ pass barcode so stock lookup matches the SPECIFIC barcode (v60-fix94)
     if (workingEntity) {
-      fetchMultiTransferRowStock(item.id)
+      fetchMultiTransferRowStock(item.id, item.barcode)
     }
   }
 
   // Fetch current stock + pending outgoing for a specific row's item
-  const fetchMultiTransferRowStock = async (itemId: string) => {
+  // ★ v60-fix94: also pass barcode so we match the SPECIFIC barcode's stock row
+  //   (not the first item match — which could be a different barcode's row).
+  const fetchMultiTransferRowStock = async (itemId: string, barcode?: string) => {
     if (!workingEntity) return
     try {
       const [stockRes, transferRes] = await Promise.all([
@@ -2159,7 +2172,18 @@ AS Display Centre,720-500-D,0
       let pendingOutgoing = 0
       if (stockRes.ok) {
         const d = await stockRes.json()
-        const row = (d.stocks || []).find((s: any) => s.itemId === itemId)
+        // ★ Match by itemId AND (if barcode is provided) the specific barcode.
+        //   v60-fix92 made /api/stock/by-entity return one row per barcode, so
+        //   matching by itemId alone could pick the wrong barcode's qty.
+        const matches = (d.stocks || []).filter((s: any) => s.itemId === itemId)
+        let row: any = null
+        if (barcode) {
+          row = matches.find((s: any) => s.item?.barcode === barcode) || null
+        }
+        if (!row && matches.length > 0) {
+          // Fallback: sum all matching rows' qty (aggregate for this item)
+          row = { quantity: matches.reduce((sum: number, s: any) => sum + (s.quantity || 0), 0) }
+        }
         if (row) currentStock = row.quantity
       }
       if (transferRes.ok) {
