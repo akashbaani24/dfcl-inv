@@ -66,67 +66,67 @@
   --radius: 0.625rem;
 
   /* ============================================================
-   * ★ Modern Charcoal theme (v60-theme02)
-   *   Primary:   Charcoal (#1F2937)        — professional, neutral
-   *   Accent:    Warm orange (#F97316)     — energy, highlight actions
-   *   Background: Light grey (#F9FAFB)     — clean, modern
-   *   Surface:   White (#FFFFFF)            — clean cards
-   *   Text:      Near-black (#111827)       — high contrast
+   * ★ Harbor Haze theme (v60-theme03)
+   *   Primary:   Slate blue-grey (#475569)   — calm, professional harbor feel
+   *   Accent:    Sea teal (#0E7490)          — water-inspired highlight
+   *   Background: Misty haze (#F1F5F9)       — soft, foggy, eye-friendly
+   *   Surface:   White (#FFFFFF)              — clean cards
+   *   Text:      Deep navy (#0F172A)          — high contrast, maritime
    *
    *   All values are in OKLCH (matches existing variables format).
    *   Conversion reference:
-   *     #1F2937 → oklch(0.28 0.02 260)
-   *     #F97316 → oklch(0.7 0.18 50)
-   *     #F9FAFB → oklch(0.98 0.003 250)
+   *     #475569 → oklch(0.42 0.025 250)
+   *     #0E7490 → oklch(0.55 0.09 215)
+   *     #F1F5F9 → oklch(0.96 0.008 240)
    *     #FFFFFF → oklch(1 0 0)
-   *     #111827 → oklch(0.16 0.02 260)
+   *     #0F172A → oklch(0.18 0.025 260)
    * ============================================================ */
 
   /* Background + surfaces */
-  --background: oklch(0.98 0.003 250);            /* light grey */
-  --foreground: oklch(0.16 0.02 260);              /* near-black text */
+  --background: oklch(0.96 0.008 240);            /* misty haze */
+  --foreground: oklch(0.18 0.025 260);             /* deep navy text */
   --card: oklch(1 0 0);                            /* white card surface */
-  --card-foreground: oklch(0.16 0.02 260);
+  --card-foreground: oklch(0.18 0.025 260);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.16 0.02 260);
+  --popover-foreground: oklch(0.18 0.025 260);
 
-  /* Primary = charcoal */
-  --primary: oklch(0.28 0.02 260);
-  --primary-foreground: oklch(0.985 0 0);          /* white text on charcoal */
+  /* Primary = slate blue-grey (like a foggy harbor pier) */
+  --primary: oklch(0.42 0.025 250);
+  --primary-foreground: oklch(0.985 0 0);          /* white text on slate */
 
-  /* Secondary = light grey (for secondary buttons) */
-  --secondary: oklch(0.94 0.005 250);
-  --secondary-foreground: oklch(0.28 0.02 260);    /* charcoal text on grey bg */
+  /* Secondary = light haze (for secondary buttons) */
+  --secondary: oklch(0.93 0.01 240);
+  --secondary-foreground: oklch(0.42 0.025 250);   /* slate text on haze bg */
 
-  /* Muted = soft grey for borders / disabled states */
-  --muted: oklch(0.96 0.005 250);
-  --muted-foreground: oklch(0.5 0.01 250);
+  /* Muted = soft haze for borders / disabled states */
+  --muted: oklch(0.94 0.008 240);
+  --muted-foreground: oklch(0.5 0.02 240);
 
-  /* Accent = warm orange (for highlights, badges, hovers) */
-  --accent: oklch(0.7 0.18 50);
-  --accent-foreground: oklch(0.985 0 0);           /* white text on orange */
+  /* Accent = sea teal (water-inspired, calm but distinct) */
+  --accent: oklch(0.55 0.09 215);
+  --accent-foreground: oklch(0.985 0 0);           /* white text on teal */
 
   --destructive: oklch(0.577 0.245 27.325);        /* keep red for errors */
-  --border: oklch(0.9 0.005 250);                  /* cool grey border */
-  --input: oklch(0.9 0.005 250);
-  --ring: oklch(0.7 0.18 50);                      /* orange focus ring */
+  --border: oklch(0.88 0.012 240);                 /* cool haze border */
+  --input: oklch(0.88 0.012 240);
+  --ring: oklch(0.55 0.09 215);                    /* teal focus ring */
 
-  /* Chart palette — charcoal, orange, blue, teal, purple */
-  --chart-1: oklch(0.28 0.02 260);                 /* charcoal */
-  --chart-2: oklch(0.7 0.18 50);                   /* orange */
-  --chart-3: oklch(0.55 0.15 240);                 /* blue */
-  --chart-4: oklch(0.65 0.15 200);                 /* teal */
-  --chart-5: oklch(0.5 0.18 300);                  /* purple */
+  /* Chart palette — slate, teal, navy, soft green, muted coral */
+  --chart-1: oklch(0.42 0.025 250);                /* slate */
+  --chart-2: oklch(0.55 0.09 215);                 /* teal */
+  --chart-3: oklch(0.3 0.04 260);                  /* deep navy */
+  --chart-4: oklch(0.6 0.1 150);                   /* soft green */
+  --chart-5: oklch(0.65 0.13 30);                  /* muted coral */
 
-  /* Sidebar — slightly darker grey so it visually separates from main bg */
-  --sidebar: oklch(0.96 0.005 250);
-  --sidebar-foreground: oklch(0.16 0.02 260);
-  --sidebar-primary: oklch(0.28 0.02 260);
+  /* Sidebar — slightly darker haze so it visually separates from main bg */
+  --sidebar: oklch(0.94 0.012 240);
+  --sidebar-foreground: oklch(0.18 0.025 260);
+  --sidebar-primary: oklch(0.42 0.025 250);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.94 0.005 250);
-  --sidebar-accent-foreground: oklch(0.28 0.02 260);
-  --sidebar-border: oklch(0.9 0.005 250);
-  --sidebar-ring: oklch(0.7 0.18 50);
+  --sidebar-accent: oklch(0.93 0.01 240);
+  --sidebar-accent-foreground: oklch(0.42 0.025 250);
+  --sidebar-border: oklch(0.88 0.012 240);
+  --sidebar-ring: oklch(0.55 0.09 215);
 }
 
 .dark {
