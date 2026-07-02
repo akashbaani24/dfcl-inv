@@ -64,37 +64,69 @@
 
 :root {
   --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
+
+  /* ============================================================
+   * ★ Royal Heritage theme (v60-theme01)
+   *   Primary:   Deep emerald green (#0F5132) — trust + heritage
+   *   Accent:    Antique gold (#C9A227)      — premium feel
+   *   Background: Warm cream (#FAF7F0)        — soft, inviting
+   *   Surface:   White (#FFFFFF)              — clean cards
+   *   Text:      Near-black (#1A1A1A)         — high contrast
+   *
+   *   All values are in OKLCH (matches existing variables format).
+   *   Conversion reference:
+   *     #0F5132 → oklch(0.345 0.09 165)
+   *     #C9A227 → oklch(0.745 0.13 85)
+   *     #FAF7F0 → oklch(0.97 0.012 85)
+   *     #FFFFFF → oklch(1 0 0)
+   *     #1A1A1A → oklch(0.18 0 0)
+   * ============================================================ */
+
+  /* Background + surfaces */
+  --background: oklch(0.97 0.012 85);            /* warm cream */
+  --foreground: oklch(0.18 0 0);                  /* near-black text */
+  --card: oklch(1 0 0);                           /* white card surface */
+  --card-foreground: oklch(0.18 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.18 0 0);
+
+  /* Primary = deep emerald green */
+  --primary: oklch(0.345 0.09 165);
+  --primary-foreground: oklch(0.985 0 0);         /* white text on green */
+
+  /* Secondary = soft gold-tinted cream (for secondary buttons) */
+  --secondary: oklch(0.93 0.04 85);
+  --secondary-foreground: oklch(0.345 0.09 165);  /* green text on gold bg */
+
+  /* Muted = warm light grey for borders / disabled states */
+  --muted: oklch(0.94 0.015 85);
+  --muted-foreground: oklch(0.45 0.02 85);
+
+  /* Accent = antique gold (for highlights, badges, hovers) */
+  --accent: oklch(0.745 0.13 85);
+  --accent-foreground: oklch(0.18 0 0);            /* dark text on gold */
+
+  --destructive: oklch(0.577 0.245 27.325);        /* keep red for errors */
+  --border: oklch(0.88 0.02 85);                   /* warm beige border */
+  --input: oklch(0.88 0.02 85);
+  --ring: oklch(0.745 0.13 85);                    /* gold focus ring */
+
+  /* Chart palette — emerald, gold, terracotta, navy, deep brown */
+  --chart-1: oklch(0.345 0.09 165);                /* emerald */
+  --chart-2: oklch(0.745 0.13 85);                 /* gold */
+  --chart-3: oklch(0.6 0.18 35);                   /* terracotta */
+  --chart-4: oklch(0.35 0.1 250);                  /* navy */
+  --chart-5: oklch(0.4 0.05 50);                   /* deep brown */
+
+  /* Sidebar — slightly warmer cream so it visually separates from main bg */
+  --sidebar: oklch(0.95 0.018 85);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-primary: oklch(0.345 0.09 165);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.93 0.04 85);
+  --sidebar-accent-foreground: oklch(0.345 0.09 165);
+  --sidebar-border: oklch(0.88 0.02 85);
+  --sidebar-ring: oklch(0.745 0.13 85);
 }
 
 .dark {
