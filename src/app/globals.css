@@ -66,67 +66,68 @@
   --radius: 0.625rem;
 
   /* ============================================================
-   * ★ Harbor Haze theme (v60-theme03)
-   *   Primary:   Slate blue-grey (#475569)   — calm, professional harbor feel
-   *   Accent:    Sea teal (#0E7490)          — water-inspired highlight
-   *   Background: Misty haze (#F1F5F9)       — soft, foggy, eye-friendly
+   * ★ Emerald Odyssey theme (v60-theme04)
+   *   Primary:   Dark emerald (#00674F)      — deep, premium green
+   *   Accent:    Light teal (#73E6CB)        — fresh, airy highlight
+   *   Secondary: Medium teal (#3EBB9E)       — chart + badge accent
+   *   Background: White (#FFFFFF)             — clean, modern
    *   Surface:   White (#FFFFFF)              — clean cards
-   *   Text:      Deep navy (#0F172A)          — high contrast, maritime
+   *   Text:      Very dark green (#0A3C30)    — deep, maritime
    *
    *   All values are in OKLCH (matches existing variables format).
    *   Conversion reference:
-   *     #475569 → oklch(0.42 0.025 250)
-   *     #0E7490 → oklch(0.55 0.09 215)
-   *     #F1F5F9 → oklch(0.96 0.008 240)
+   *     #00674F → oklch(0.45 0.11 165)
+   *     #73E6CB → oklch(0.86 0.1 175)
+   *     #3EBB9E → oklch(0.72 0.1 170)
+   *     #0A3C30 → oklch(0.22 0.05 170)
    *     #FFFFFF → oklch(1 0 0)
-   *     #0F172A → oklch(0.18 0.025 260)
    * ============================================================ */
 
   /* Background + surfaces */
-  --background: oklch(0.96 0.008 240);            /* misty haze */
-  --foreground: oklch(0.18 0.025 260);             /* deep navy text */
+  --background: oklch(1 0 0);                      /* pure white */
+  --foreground: oklch(0.22 0.05 170);              /* very dark green text */
   --card: oklch(1 0 0);                            /* white card surface */
-  --card-foreground: oklch(0.18 0.025 260);
+  --card-foreground: oklch(0.22 0.05 170);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.18 0.025 260);
+  --popover-foreground: oklch(0.22 0.05 170);
 
-  /* Primary = slate blue-grey (like a foggy harbor pier) */
-  --primary: oklch(0.42 0.025 250);
-  --primary-foreground: oklch(0.985 0 0);          /* white text on slate */
+  /* Primary = dark emerald green */
+  --primary: oklch(0.45 0.11 165);
+  --primary-foreground: oklch(0.985 0 0);          /* white text on emerald */
 
-  /* Secondary = light haze (for secondary buttons) */
-  --secondary: oklch(0.93 0.01 240);
-  --secondary-foreground: oklch(0.42 0.025 250);   /* slate text on haze bg */
+  /* Secondary = light teal tint (for secondary buttons) */
+  --secondary: oklch(0.93 0.04 170);
+  --secondary-foreground: oklch(0.45 0.11 165);    /* emerald text on teal tint */
 
-  /* Muted = soft haze for borders / disabled states */
-  --muted: oklch(0.94 0.008 240);
-  --muted-foreground: oklch(0.5 0.02 240);
+  /* Muted = soft mint-tinted grey for borders / disabled states */
+  --muted: oklch(0.96 0.015 170);
+  --muted-foreground: oklch(0.5 0.03 170);
 
-  /* Accent = sea teal (water-inspired, calm but distinct) */
-  --accent: oklch(0.55 0.09 215);
-  --accent-foreground: oklch(0.985 0 0);           /* white text on teal */
+  /* Accent = light teal (fresh, airy highlight for badges/hovers) */
+  --accent: oklch(0.86 0.1 175);
+  --accent-foreground: oklch(0.22 0.05 170);       /* dark green text on light teal */
 
   --destructive: oklch(0.577 0.245 27.325);        /* keep red for errors */
-  --border: oklch(0.88 0.012 240);                 /* cool haze border */
-  --input: oklch(0.88 0.012 240);
-  --ring: oklch(0.55 0.09 215);                    /* teal focus ring */
+  --border: oklch(0.9 0.025 170);                  /* soft mint border */
+  --input: oklch(0.9 0.025 170);
+  --ring: oklch(0.45 0.11 165);                    /* emerald focus ring */
 
-  /* Chart palette — slate, teal, navy, soft green, muted coral */
-  --chart-1: oklch(0.42 0.025 250);                /* slate */
-  --chart-2: oklch(0.55 0.09 215);                 /* teal */
-  --chart-3: oklch(0.3 0.04 260);                  /* deep navy */
-  --chart-4: oklch(0.6 0.1 150);                   /* soft green */
-  --chart-5: oklch(0.65 0.13 30);                  /* muted coral */
+  /* Chart palette — emerald, light teal, medium teal, deep green, soft sage */
+  --chart-1: oklch(0.45 0.11 165);                 /* dark emerald */
+  --chart-2: oklch(0.86 0.1 175);                  /* light teal */
+  --chart-3: oklch(0.72 0.1 170);                  /* medium teal */
+  --chart-4: oklch(0.22 0.05 170);                 /* very dark green */
+  --chart-5: oklch(0.75 0.05 150);                 /* soft sage */
 
-  /* Sidebar — slightly darker haze so it visually separates from main bg */
-  --sidebar: oklch(0.94 0.012 240);
-  --sidebar-foreground: oklch(0.18 0.025 260);
-  --sidebar-primary: oklch(0.42 0.025 250);
+  /* Sidebar — very light mint tint so it visually separates from main bg */
+  --sidebar: oklch(0.97 0.02 170);
+  --sidebar-foreground: oklch(0.22 0.05 170);
+  --sidebar-primary: oklch(0.45 0.11 165);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.93 0.01 240);
-  --sidebar-accent-foreground: oklch(0.42 0.025 250);
-  --sidebar-border: oklch(0.88 0.012 240);
-  --sidebar-ring: oklch(0.55 0.09 215);
+  --sidebar-accent: oklch(0.93 0.04 170);
+  --sidebar-accent-foreground: oklch(0.45 0.11 165);
+  --sidebar-border: oklch(0.9 0.025 170);
+  --sidebar-ring: oklch(0.45 0.11 165);
 }
 
 .dark {
