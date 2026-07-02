@@ -1287,7 +1287,7 @@ AS Display Centre,720-500-D,0
 
   // ★ News Ticker state (top-level)
   const [tickerMessages, setTickerMessages] = useState<string[]>([])
-  const [tickerSettings, setTickerSettings] = useState({ speed: 30, bgColor: '#0F5132', textColor: '#ffffff', fontSize: 'sm' })
+  const [tickerSettings, setTickerSettings] = useState({ speed: 30, bgColor: '#1F2937', textColor: '#ffffff', fontSize: 'sm' })
   const [showTickerInput, setShowTickerInput] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
   const [showTickerSettings, setShowTickerSettings] = useState(false)
@@ -2529,44 +2529,44 @@ AS Display Centre,720-500-D,0
     win.document.write(`<html><head><title>Invoice ${s.salesNo || ''}</title><style>
       *{margin:0;padding:0;box-sizing:border-box}
       body{font-family:'Segoe UI',Arial,sans-serif;padding:25px 35px;color:#1f2937;background:#fff;font-size:13px;line-height:1.5}
-      .top-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;padding-bottom:18px;border-bottom:3px solid #0F5132}
+      .top-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;padding-bottom:18px;border-bottom:3px solid #1F2937}
       .biz{display:flex;gap:14px;align-items:flex-start}
-      .logo{width:62px;height:62px;background:#0F5132;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;letter-spacing:1px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);flex-shrink:0}
-      .biz-info h1{font-size:20px;color:#0F5132;letter-spacing:0.5px;margin-bottom:2px;font-weight:700}
+      .logo{width:62px;height:62px;background:#1F2937;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;letter-spacing:1px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);flex-shrink:0}
+      .biz-info h1{font-size:20px;color:#1F2937;letter-spacing:0.5px;margin-bottom:2px;font-weight:700}
       .biz-info .subtitle{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
       .biz-info .addr{font-size:11.5px;color:#475569;line-height:1.5}
       .doc-meta{text-align:right;flex-shrink:0}
-      .doc-meta .doc-title{font-size:24px;font-weight:800;color:#0F5132;letter-spacing:2px;margin-bottom:8px}
+      .doc-meta .doc-title{font-size:24px;font-weight:800;color:#1F2937;letter-spacing:2px;margin-bottom:8px}
       .doc-meta .meta-row{font-size:11.5px;color:#374151;line-height:1.7}
-      .doc-meta .meta-row strong{color:#1A1A1A;min-width:90px;display:inline-block;text-align:left}
+      .doc-meta .meta-row strong{color:#111827;min-width:90px;display:inline-block;text-align:left}
       .doc-meta .sales-no{font-size:13px;font-weight:700;color:#dc2626;font-family:monospace}
       .section{margin-top:18px}
-      .section-title{font-size:10.5px;font-weight:700;color:#0F5132;letter-spacing:1.5px;text-transform:uppercase;background:#eff6ff;padding:6px 10px;border-left:3px solid #0F5132;margin-bottom:8px}
+      .section-title{font-size:10.5px;font-weight:700;color:#1F2937;letter-spacing:1.5px;text-transform:uppercase;background:#eff6ff;padding:6px 10px;border-left:3px solid #1F2937;margin-bottom:8px}
       .cust-box{padding:8px 12px;font-size:12.5px;line-height:1.7;color:#1f2937}
-      .cust-box .cust-name{font-size:14px;font-weight:700;color:#0F5132;margin-bottom:2px}
+      .cust-box .cust-name{font-size:14px;font-weight:700;color:#1F2937;margin-bottom:2px}
       table{width:100%;border-collapse:collapse}
-      th{background:#0F5132;color:#fff;padding:9px 10px;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;text-align:left;font-weight:600}
+      th{background:#1F2937;color:#fff;padding:9px 10px;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;text-align:left;font-weight:600}
       th.num,td.num{text-align:right}
       td{padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px}
       tr.item-row td{background:#fff}
       tr.making-row td{background:#f8fafc;color:#64748b;font-size:11px;padding:5px 10px 5px 28px}
       .making-label{font-style:italic;color:#475569}
       .qty-price{color:#64748b;font-size:10.5px}
-      td.bold{font-weight:700;color:#1A1A1A}
+      td.bold{font-weight:700;color:#111827}
       .summary-section{display:flex;justify-content:flex-end;margin-top:14px}
-      .summary{width:300px;border:1.5px solid #0F5132}
+      .summary{width:300px;border:1.5px solid #1F2937}
       .summary table{width:100%}
       .summary td{border:none;padding:7px 12px;font-size:12.5px;border-bottom:1px solid #e5e7eb}
       .summary tr:last-child td{border-bottom:none}
       .summary .label{color:#475569}
-      .summary .grand td{background:#0F5132;color:#fff;font-weight:700;font-size:14px;padding:9px 12px}
+      .summary .grand td{background:#1F2937;color:#fff;font-weight:700;font-size:14px;padding:9px 12px}
       .summary .due td{background:#fef2f2;color:#dc2626;font-weight:700;font-size:14px;padding:9px 12px;border-top:2px solid #dc2626}
       .pay-table{margin-top:0}
       .pay-table th{background:#475569}
       .footer{margin-top:30px;padding-top:14px;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;font-size:10.5px;color:#64748b}
       .sign-row{margin-top:35px;display:flex;justify-content:space-between;padding:0 10px}
-      .sign-row div{border-top:1.5px solid #1A1A1A;padding-top:5px;width:180px;text-align:center;font-size:11px;color:#475569;font-weight:600}
-      .thank-you{text-align:center;margin-top:20px;font-size:11px;color:#0F5132;font-weight:600;letter-spacing:1px}
+      .sign-row div{border-top:1.5px solid #111827;padding-top:5px;width:180px;text-align:center;font-size:11px;color:#475569;font-weight:600}
+      .thank-you{text-align:center;margin-top:20px;font-size:11px;color:#1F2937;font-weight:600;letter-spacing:1px}
       @media print{body{padding:15px 20px}}
     </style></head><body>
       <div class="top-bar">
@@ -7398,7 +7398,7 @@ DEWS,720-500-B,5</pre>
       <style>
         *{box-sizing:border-box;margin:0;padding:0}
         body{font-family:Arial,sans-serif;padding:15px;background:#fff}
-        h1{font-size:18px;margin:0 0 10px;color:#0F5132;border-bottom:2px solid #0F5132;padding-bottom:5px}
+        h1{font-size:18px;margin:0 0 10px;color:#1F2937;border-bottom:2px solid #1F2937;padding-bottom:5px}
         .info{font-size:11px;color:#666;margin-bottom:15px}
         .labels{display:flex;flex-wrap:wrap;gap:10px}
         .label{width:200px;height:140px;border:1px solid #999;padding:8px;display:flex;flex-direction:column;align-items:center;justify-content:space-between;background:#fff;page-break-inside:avoid}
