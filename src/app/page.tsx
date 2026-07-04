@@ -1403,7 +1403,11 @@ AS Display Centre,720-500-D,0
 
   const checkAuth = async () => {
     try {
-      const res = await authFetch('/api/auth/me')
+      // ★ v60-fix100: pass cache:'no-store' so the browser always fetches fresh
+      //   permissions from the server. Without this, the browser may serve a
+      //   stale cached /api/auth/me response after an admin updates the user's
+      //   permissions (e.g. granting New Item rights).
+      const res = await authFetch('/api/auth/me', { cache: 'no-store' })
       if (res.ok) { const data = await res.json(); setUser(data.user) }
       else { localStorage.removeItem('auth_token') }
     } catch { /* not authenticated */ } finally { setIsLoading(false) }

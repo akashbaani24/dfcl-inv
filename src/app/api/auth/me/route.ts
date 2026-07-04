@@ -37,11 +37,21 @@ export async function GET(request: NextRequest) {
           canDelete: (mda as any).canDelete ?? false,
           canUpload: (mda as any).canUpload ?? false,
           canExport: (mda as any).canExport ?? false,
+          canApprove: (mda as any).canApprove ?? false,
         })),
       },
     }, {
       headers: {
-        'Cache-Control': 'private, max-age=300', // ★ Cache for 5 minutes on the client
+        // ★ v60-fix100: NO browser cache for /api/auth/me.
+        //   Previously this was 'private, max-age=300' (5 min cache), which meant
+        //   that when an admin updated a user's permissions (e.g. granted New Item
+        //   rights), the user's browser kept returning the OLD cached response
+        //   for up to 5 minutes — so the user couldn't see their new menu items
+        //   until they logged out + logged back in, or waited 5 min.
+        //   Setting no-store ensures every page load fetches fresh permissions.
+        'Cache-Control': 'no-store, no-cache, must-revalidate, max-age=0',
+        'Pragma': 'no-cache',
+        'Expires': '0',
       },
     });
   } catch (error) {
