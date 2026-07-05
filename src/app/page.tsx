@@ -11963,36 +11963,56 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
           </TableHeader>
           <TableBody>
             {(() => {
-              // ★ v60-fix105: Group entities by parent — show mother companies first,
-              //   then their sub-companies indented under each.
+              // ★ v60-fix106: Render entity hierarchy recursively (3+ levels supported).
+              //   - Mother companies (parentEntityId = NULL) shown at level 0
+              //   - Their sub-companies at level 1 (indented ↳)
+              //   - Sub-sub companies at level 2 (further indented ↳↳)
+              //   - And so on for deeper levels
               const mothers = entities.filter(e => !(e as any).parentEntityId)
               const children = entities.filter(e => !!(e as any).parentEntityId)
-              const rows: any[] = []
-              for (const m of mothers) {
-                rows.push({ entity: m, level: 0 })
-                const subs = children.filter(c => (c as any).parentEntityId === m.id)
+
+              // Recursive function: collect an entity + all its descendants in order
+              const collect = (entity: any, level: number, acc: any[]) => {
+                acc.push({ entity, level })
+                const subs = children.filter(c => (c as any).parentEntityId === entity.id)
                 for (const s of subs) {
-                  rows.push({ entity: s, level: 1 })
+                  collect(s, level + 1, acc)
                 }
               }
-              // Orphans (parent deleted) — show at end
-              const orphans = children.filter(c => !mothers.some(m => m.id === (c as any).parentEntityId))
-              for (const o of orphans) {
-                rows.push({ entity: o, level: 0 })
+
+              const rows: any[] = []
+              for (const m of mothers) {
+                collect(m, 0, rows)
               }
+              // Orphans (parent deleted) — show at end at top level
+              const orphans = children.filter(c => !mothers.some(m => m.id === (c as any).parentEntityId) && !entities.some(e => e.id === (c as any).parentEntityId && e.id !== (c as any).id))
+              for (const o of orphans) {
+                collect(o, 0, rows)
+              }
+
+              const levelPrefix = (level: number) => '↳ '.repeat(level)
+              const indentPx = (level: number) => level * 20
+
               return rows.map(({ entity, level }) => {
                 const parentName = (entity as any).parentEntityId ? entities.find(e => e.id === (entity as any).parentEntityId)?.name : ''
+                const hasChildren = entities.some(e => (e as any).parentEntityId === entity.id)
                 return (
-                  <TableRow key={entity.id} className={`hover:bg-muted/30 ${level === 1 ? 'bg-muted/10' : ''}`}>
+                  <TableRow key={entity.id} className={`hover:bg-muted/30 ${level >= 1 ? 'bg-muted/10' : ''}`}>
                     <TableCell className="font-medium">
-                      <div className="flex items-center gap-2" style={level === 1 ? { paddingLeft: '20px' } : {}}>
-                        {level === 1 && <span className="text-muted-foreground">↳</span>}
+                      <div className="flex items-center gap-2" style={level >= 1 ? { paddingLeft: `${indentPx(level)}px` } : {}}>
+                        {level >= 1 && <span className="text-muted-foreground text-xs">{levelPrefix(level)}</span>}
                         {(entity as any).logo ? (
                           <img src={(entity as any).logo} alt="Logo" className="w-8 h-8 rounded border object-contain bg-white" />
                         ) : null}
                         {entity.name}
-                        {level === 0 && entities.some(e => (e as any).parentEntityId === entity.id) && (
+                        {level === 0 && hasChildren && (
                           <Badge variant="secondary" className="text-[10px]">Mother</Badge>
+                        )}
+                        {level === 1 && hasChildren && (
+                          <Badge variant="outline" className="text-[10px]">Sub-Mother</Badge>
+                        )}
+                        {level >= 2 && (
+                          <Badge variant="outline" className="text-[10px] text-muted-foreground">Outlet</Badge>
                         )}
                       </div>
                     </TableCell>
