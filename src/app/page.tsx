@@ -2468,13 +2468,17 @@ AS Display Centre,720-500-D,0
     } catch { toast({ title: 'Error', description: 'Failed', variant: 'destructive' }) }
   }
 
-  // Print sales invoice — Bright Solutions style
+  // Print sales invoice — user's template format (v60-fix102)
+  // Layout: Header (logo+company left, customer+dates right)
+  //   → Item Information table + Item Totals sub-table (right)
+  //   → Making Information table + Making Totals sub-table (right)
+  //   → Grand Total (centered, bold)
+  //   → Payment Information table (Date, Method, Adv/Coll, Account, Amount)
   const printSalesInvoice = (s: any) => {
     const win = window.open('', '_blank', 'width=820,height=720')
     if (!win) return
     const entityName = s.entity?.name || workingEntity?.name || ''
     const entityDesc = s.entity?.description || ''
-    // Generate initials for hexagonal logo (max 2 chars)
     const initials = entityName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
     const custName = s.customer?.name || '—'
     const custPhone = s.customer?.phone || ''
@@ -2482,184 +2486,222 @@ AS Display Centre,720-500-D,0
     const orderDateStr = s.orderDate ? bdDate(new Date(s.orderDate)) : bdDate(new Date(s.createdAt))
     const deliveryDateStr = s.deliveryDate ? bdDate(new Date(s.deliveryDate)) : '—'
     const printedOn = bdNow()
+    const salesPersonName = (s as any).salesPerson?.name || (s as any).salesPersonName || ''
 
-    // Build items table — each item row + nested making rows in same column style
-    // ★ v60-fix99: compute subTotal + makingTotal here (previously used undefined vars
-    //   which caused ReferenceError → blank print preview).
-    let subTotal = 0
-    let makingTotal = 0
-    const itemsHtml = (s.items || []).map((si: any, i: number) => {
-      const makingRows = (si.makingEntries || []).map((me: any) => {
-        const meTotal = (me.quantity || 0) * (me.unitPrice || 0)
-        makingTotal += meTotal
-        return `<tr class="making-row">
-          <td style="text-align:center;color:#666">↳</td>
-          <td><span class="making-label">Making:</span> ${me.name || '—'} <span class="qty-price">(${me.quantity} × ৳ ${(me.unitPrice || 0).toFixed(2)})</span></td>
-          <td class="num">৳ ${(me.unitPrice || 0).toFixed(2)}</td>
-          <td class="num">৳ ${meTotal.toFixed(2)}</td>
-        </tr>`
-      }).join('')
-      const itemBaseTotal = (si.quantity || 0) * (si.unitPrice || 0)
-      subTotal += itemBaseTotal
-      const itemTotal = itemBaseTotal + (si.makingEntries || []).reduce((m: number, me: any) => m + (me.quantity || 0) * (me.unitPrice || 0), 0)
-      return `<tr class="item-row">
-        <td class="num">${i + 1}</td>
-        <td><strong>${si.item?.itemName || '—'}</strong><br><span class="qty-price">Quantity: ${si.quantity} × Unit Price: ৳ ${(si.unitPrice || 0).toFixed(2)}</span></td>
-        <td class="num">৳ ${(si.unitPrice || 0).toFixed(2)}</td>
-        <td class="num bold">৳ ${itemTotal.toFixed(2)}</td>
-      </tr>${makingRows}`
+    // ─── Build ITEMS table rows (one row per sales order item) ───
+    let itemTotalAmount = 0
+    const itemsRowsHtml = (s.items || []).map((si: any, i: number) => {
+      const qty = si.quantity || 0
+      const unitPrice = si.unitPrice || 0
+      const rowTotal = qty * unitPrice
+      itemTotalAmount += rowTotal
+      const uom = si.item?.uom || si.uom || 'PCS'
+      return `<tr>
+        <td class="sl">${i + 1}</td>
+        <td class="desc">${si.item?.itemName || '—'}</td>
+        <td class="num">${qty}</td>
+        <td class="center">${uom}</td>
+        <td class="num">${unitPrice.toFixed(2)}</td>
+        <td class="num bold">${rowTotal.toFixed(2)}</td>
+      </tr>`
     }).join('')
 
-    const grandTotalPreDiscount = subTotal + makingTotal
-    const discount = s.discount || 0
-    const grandTotal = grandTotalPreDiscount - discount
+    // ─── Build MAKING table rows (one row per making entry across ALL items) ───
+    let makingTotalAmount = 0
+    let makingIdx = 0
+    const makingRowsHtml = (s.items || []).flatMap((si: any) => {
+      return (si.makingEntries || []).map((me: any) => {
+        makingIdx++
+        const qty = me.quantity || 0
+        const unitPrice = me.unitPrice || 0
+        const rowTotal = qty * unitPrice
+        makingTotalAmount += rowTotal
+        const uom = 'PCS'
+        return `<tr>
+          <td class="sl">${makingIdx}</td>
+          <td class="desc">${me.name || '—'}</td>
+          <td class="num">${qty}</td>
+          <td class="center">${uom}</td>
+          <td class="num">${unitPrice.toFixed(2)}</td>
+          <td class="num bold">${rowTotal.toFixed(2)}</td>
+        </tr>`
+      })
+    }).join('')
+
+    // ─── Totals ───
+    // The order has ONE discount field. We apply it to the Items sub-table
+    // (matching the template where discount appears under item totals).
+    // Making sub-table shows 0 discount.
+    const itemDiscount = s.discount || 0
+    const itemSubTotal = itemTotalAmount - itemDiscount
+    const makingDiscount = 0
+    const makingSubTotal = makingTotalAmount - makingDiscount
+    const grandTotal = itemSubTotal + makingSubTotal
     const totalPaid = (s.payments || []).reduce((sum: number, p: any) => sum + p.amount, 0)
     const due = grandTotal - totalPaid
 
-    const paymentsHtml = (s.payments || []).map((p: any) => {
+    // ─── Payment rows ───
+    const paymentRowsHtml = (s.payments || []).map((p: any) => {
       const pdStr = p.paymentDate ? bdDate(new Date(p.paymentDate)) : '—'
       let methodStr = p.paymentType || ''
-      if (p.paymentType === 'cheque') methodStr = `Cheque${p.chequeNo ? ` (#${p.chequeNo})` : ''}${p.bankName ? ` - ${p.bankName}` : ''}`
+      if (p.paymentType === 'cheque') methodStr = `Cheque`
       else if (p.paymentType === 'cash') methodStr = 'Cash'
       else if (p.paymentType === 'card') methodStr = 'Card'
       else if (p.paymentType === 'mobile_banking') methodStr = 'Mobile Banking'
+      const modeStr = p.paymentMode || '—'
+      const acctStr = p.chequeNo || p.bankName || '—'
       return `<tr>
         <td>${pdStr}</td>
         <td>${methodStr}</td>
-        <td class="num">৳ ${(p.amount || 0).toFixed(2)}</td>
+        <td>${modeStr}</td>
+        <td>${acctStr}</td>
+        <td class="num">${(p.amount || 0).toFixed(2)}</td>
       </tr>`
     }).join('')
 
     win.document.write(`<html><head><title>Invoice ${s.salesNo || ''}</title><style>
       *{margin:0;padding:0;box-sizing:border-box}
-      body{font-family:'Segoe UI',Arial,sans-serif;padding:25px 35px;color:#1f2937;background:#fff;font-size:13px;line-height:1.5}
-      .top-bar{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;padding-bottom:18px;border-bottom:3px solid #00674F}
-      .biz{display:flex;gap:14px;align-items:flex-start}
-      .logo{width:62px;height:62px;background:#00674F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:20px;font-weight:700;letter-spacing:1px;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);flex-shrink:0}
-      .biz-info h1{font-size:20px;color:#00674F;letter-spacing:0.5px;margin-bottom:2px;font-weight:700}
-      .biz-info .subtitle{font-size:11px;color:#64748b;letter-spacing:2px;text-transform:uppercase;margin-bottom:6px}
-      .biz-info .addr{font-size:11.5px;color:#00674F;line-height:1.5}
-      .doc-meta{text-align:right;flex-shrink:0}
-      .doc-meta .doc-title{font-size:24px;font-weight:800;color:#00674F;letter-spacing:2px;margin-bottom:8px}
-      .doc-meta .meta-row{font-size:11.5px;color:#374151;line-height:1.7}
-      .doc-meta .meta-row strong{color:#0A3C30;min-width:90px;display:inline-block;text-align:left}
-      .doc-meta .sales-no{font-size:13px;font-weight:700;color:#dc2626;font-family:monospace}
-      .section{margin-top:18px}
-      .section-title{font-size:10.5px;font-weight:700;color:#00674F;letter-spacing:1.5px;text-transform:uppercase;background:#eff6ff;padding:6px 10px;border-left:3px solid #00674F;margin-bottom:8px}
-      .cust-box{padding:8px 12px;font-size:12.5px;line-height:1.7;color:#1f2937}
-      .cust-box .cust-name{font-size:14px;font-weight:700;color:#00674F;margin-bottom:2px}
+      body{font-family:'Segoe UI',Arial,sans-serif;padding:30px 40px;color:#000;background:#fff;font-size:12px;line-height:1.5}
+      .invoice-title{text-align:center;font-size:22px;font-weight:700;letter-spacing:2px;margin-bottom:18px;text-transform:uppercase}
+      .header{display:flex;justify-content:space-between;align-items:flex-start;gap:30px;margin-bottom:20px;padding-bottom:14px;border-bottom:2px solid #000}
+      .header-left{display:flex;gap:12px;align-items:flex-start}
+      .logo{width:56px;height:56px;background:#00674F;color:#fff;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:700;clip-path:polygon(25% 0,75% 0,100% 50%,75% 100%,25% 100%,0 50%);flex-shrink:0}
+      .company-info h2{font-size:15px;font-weight:700;margin-bottom:2px}
+      .company-info .line{font-size:11px;color:#333;line-height:1.6}
+      .header-right{text-align:right;font-size:11px;line-height:1.7}
+      .header-right .cust-name{font-size:14px;font-weight:700;margin-bottom:2px}
+      .header-right .line{color:#333}
+      .section{margin-top:14px}
+      .section-label{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-bottom:5px;padding:3px 8px;background:#f0f0f0;border-left:3px solid #00674F}
       table{width:100%;border-collapse:collapse}
-      th{background:#00674F;color:#fff;padding:9px 10px;font-size:11px;letter-spacing:0.5px;text-transform:uppercase;text-align:left;font-weight:600}
-      th.num,td.num{text-align:right}
-      td{padding:7px 10px;border-bottom:1px solid #e5e7eb;font-size:12px}
-      tr.item-row td{background:#fff}
-      tr.making-row td{background:#f8fafc;color:#64748b;font-size:11px;padding:5px 10px 5px 28px}
-      .making-label{font-style:italic;color:#00674F}
-      .qty-price{color:#64748b;font-size:10.5px}
-      td.bold{font-weight:700;color:#0A3C30}
-      .summary-section{display:flex;justify-content:flex-end;margin-top:14px}
-      .summary{width:300px;border:1.5px solid #00674F}
-      .summary table{width:100%}
-      .summary td{border:none;padding:7px 12px;font-size:12.5px;border-bottom:1px solid #e5e7eb}
-      .summary tr:last-child td{border-bottom:none}
-      .summary .label{color:#00674F}
-      .summary .grand td{background:#00674F;color:#fff;font-weight:700;font-size:14px;padding:9px 12px}
-      .summary .due td{background:#fef2f2;color:#dc2626;font-weight:700;font-size:14px;padding:9px 12px;border-top:2px solid #dc2626}
-      .pay-table{margin-top:0}
-      .pay-table th{background:#00674F}
-      .footer{margin-top:30px;padding-top:14px;border-top:1px solid #cbd5e1;display:flex;justify-content:space-between;font-size:10.5px;color:#64748b}
-      .sign-row{margin-top:35px;display:flex;justify-content:space-between;padding:0 10px}
-      .sign-row div{border-top:1.5px solid #0A3C30;padding-top:5px;width:180px;text-align:center;font-size:11px;color:#00674F;font-weight:600}
-      .thank-you{text-align:center;margin-top:20px;font-size:11px;color:#00674F;font-weight:600;letter-spacing:1px}
+      th,td{border:1px solid #000;padding:5px 8px;font-size:11px}
+      th{background:#00674F;color:#fff;font-weight:600;text-align:left;font-size:10.5px;text-transform:uppercase;letter-spacing:0.5px}
+      td.sl{text-align:center;width:35px}
+      td.num{text-align:right}
+      td.center{text-align:center}
+      td.bold{font-weight:700}
+      td.desc{text-align:left}
+      .table-with-totals{display:flex;gap:15px;align-items:flex-start}
+      .main-table{flex:1}
+      .totals-sub{width:220px;flex-shrink:0;margin-top:0}
+      .totals-sub table{width:100%}
+      .totals-sub td{border:1px solid #000;padding:5px 8px;font-size:11px}
+      .totals-sub td.label{font-weight:500}
+      .totals-sub td.val{text-align:right;font-weight:500}
+      .totals-sub tr.subtotal-row td{font-weight:700;background:#f5f5f5}
+      .grand-total-section{text-align:center;margin:18px 0;padding:10px;border:2px solid #00674F;background:#f0faf6}
+      .grand-total-section .label{font-size:13px;font-weight:600;letter-spacing:1px}
+      .grand-total-section .amount{font-size:20px;font-weight:800;color:#00674F;margin-left:10px}
+      .due-line{text-align:center;margin-top:6px;font-size:12px;font-weight:600}
+      .due-line .amt{color:#dc2626;font-size:14px}
+      .footer{margin-top:25px;padding-top:10px;border-top:1px solid #ccc;font-size:10px;color:#666;display:flex;justify-content:space-between}
       @media print{body{padding:15px 20px}}
     </style></head><body>
-      <div class="top-bar">
-        <div class="biz">
+
+      <div class="invoice-title">Invoice</div>
+
+      <div class="header">
+        <div class="header-left">
           <div class="logo">${initials}</div>
-          <div class="biz-info">
-            <h1>${entityName}</h1>
-            <div class="subtitle">Digital System</div>
-            <div class="addr">${entityDesc || '&nbsp;'}</div>
+          <div class="company-info">
+            <h2>${entityName}</h2>
+            <div class="line">${entityDesc || '&nbsp;'}</div>
+            <div class="line">Sales Id: <strong>${s.salesNo || ''}</strong></div>
+            ${salesPersonName ? `<div class="line">Sales Person: ${salesPersonName}</div>` : ''}
           </div>
         </div>
-        <div class="doc-meta">
-          <div class="doc-title">INVOICE</div>
-          <div class="meta-row sales-no">${s.salesNo || ''}</div>
-          <div class="meta-row"><strong>Order Date:</strong> ${orderDateStr}</div>
-          <div class="meta-row"><strong>Delivery Date:</strong> ${deliveryDateStr}</div>
-          ${s.notes ? `<div class="meta-row"><strong>Sales Note:</strong> ${s.notes}</div>` : ''}
-        </div>
-      </div>
-
-      <div class="section">
-        <div class="section-title">Customer Information</div>
-        <div class="cust-box">
+        <div class="header-right">
           <div class="cust-name">${custName}</div>
-          ${custPhone ? `<div><strong>Phone:</strong> ${custPhone}</div>` : ''}
-          ${custAddr ? `<div><strong>Address:</strong> ${custAddr}</div>` : ''}
+          ${custAddr ? `<div class="line">${custAddr}</div>` : ''}
+          ${custPhone ? `<div class="line">${custPhone}</div>` : ''}
+          <div class="line"><strong>Order Date:</strong> ${orderDateStr}</div>
+          <div class="line"><strong>Delivery Date:</strong> ${deliveryDateStr}</div>
         </div>
       </div>
 
       <div class="section">
-        <table>
-          <thead><tr>
-            <th style="width:40px;text-align:center">SL</th>
-            <th>Item Description</th>
-            <th style="width:110px;text-align:right">Unit Price (BDT)</th>
-            <th style="width:120px;text-align:right">Total (BDT)</th>
-          </tr></thead>
-          <tbody>
-            ${itemsHtml || `<tr><td colspan="4" style="text-align:center;color:#94a3b8;padding:20px">No items</td></tr>`}
-          </tbody>
-        </table>
-      </div>
-
-      <div class="summary-section">
-        <div class="summary">
-          <table>
-            <tr><td class="label">Sub Total</td><td class="num">৳ ${subTotal.toFixed(2)}</td></tr>
-            <tr><td class="label">Making Charges</td><td class="num">৳ ${makingTotal.toFixed(2)}</td></tr>
-            <tr><td class="label">Total Amount</td><td class="num">৳ ${grandTotalPreDiscount.toFixed(2)}</td></tr>
-            ${discount > 0 ? `<tr><td class="label">Discount</td><td class="num">-৳ ${discount.toFixed(2)}</td></tr>` : ''}
-            <tr class="grand"><td>GRAND TOTAL</td><td class="num">৳ ${fmtBDT(grandTotal)}</td></tr>
-          </table>
-        </div>
-      </div>
-
-      ${(s.payments && s.payments.length > 0) ? `
-      <div class="section">
-        <div class="section-title">Payment Information</div>
-        <table class="pay-table">
-          <thead><tr>
-            <th style="width:140px">Payment Date</th>
-            <th>Payment Method</th>
-            <th style="width:120px;text-align:right">Amount (BDT)</th>
-          </tr></thead>
-          <tbody>${paymentsHtml}</tbody>
-        </table>
-        <div class="summary-section">
-          <div class="summary">
+        <div class="section-label">Item Information</div>
+        <div class="table-with-totals">
+          <div class="main-table">
             <table>
-              <tr><td class="label">Total Paid</td><td class="num">৳ ${totalPaid.toFixed(2)}</td></tr>
-              <tr class="due"><td>DUE AMOUNT</td><td class="num">৳ ${due.toFixed(2)}</td></tr>
+              <thead><tr>
+                <th style="width:35px;text-align:center">Sl</th>
+                <th>Item Description</th>
+                <th style="width:60px;text-align:right">Qty</th>
+                <th style="width:50px;text-align:center">UoM</th>
+                <th style="width:90px;text-align:right">Unit Price</th>
+                <th style="width:100px;text-align:right">Total</th>
+              </tr></thead>
+              <tbody>
+                ${itemsRowsHtml || `<tr><td colspan="6" style="text-align:center;color:#999;padding:15px">No items</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="totals-sub">
+            <table>
+              <tr><td class="label">Total Amount</td><td class="val">${itemTotalAmount.toFixed(2)}</td></tr>
+              <tr><td class="label">Discount</td><td class="val">${itemDiscount.toFixed(2)}</td></tr>
+              <tr class="subtotal-row"><td class="label">Sub Total</td><td class="val">${itemSubTotal.toFixed(2)}</td></tr>
             </table>
           </div>
         </div>
-      </div>` : `<div class="summary-section"><div class="summary"><table><tr class="due"><td>DUE AMOUNT</td><td class="num">৳ ${due.toFixed(2)}</td></tr></table></div></div>`}
-
-      <div class="sign-row">
-        <div>Authorized Signature</div>
-        <div>Customer Signature</div>
       </div>
 
-      <div class="thank-you">Thank you for your business!</div>
+      <div class="section">
+        <div class="section-label">Making Information</div>
+        <div class="table-with-totals">
+          <div class="main-table">
+            <table>
+              <thead><tr>
+                <th style="width:35px;text-align:center">Sl</th>
+                <th>Making Description</th>
+                <th style="width:60px;text-align:right">Qty</th>
+                <th style="width:50px;text-align:center">UoM</th>
+                <th style="width:90px;text-align:right">Unit Price</th>
+                <th style="width:100px;text-align:right">Total</th>
+              </tr></thead>
+              <tbody>
+                ${makingRowsHtml || `<tr><td colspan="6" style="text-align:center;color:#999;padding:15px">No making charges</td></tr>`}
+              </tbody>
+            </table>
+          </div>
+          <div class="totals-sub">
+            <table>
+              <tr><td class="label">Total Amount</td><td class="val">${makingTotalAmount.toFixed(2)}</td></tr>
+              <tr><td class="label">Discount</td><td class="val">${makingDiscount.toFixed(2)}</td></tr>
+              <tr class="subtotal-row"><td class="label">Sub Total</td><td class="val">${makingSubTotal.toFixed(2)}</td></tr>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      <div class="grand-total-section">
+        <span class="label">GRAND TOTAL:</span>
+        <span class="amount">৳ ${grandTotal.toFixed(2)}</span>
+      </div>
+
+      ${totalPaid > 0 ? `<div class="due-line">Total Paid: ৳ ${totalPaid.toFixed(2)} &nbsp;|&nbsp; DUE: <span class="amt">৳ ${due.toFixed(2)}</span></div>` : `<div class="due-line">DUE: <span class="amt">৳ ${due.toFixed(2)}</span></div>`}
+
+      <div class="section">
+        <div class="section-label">Payment Information</div>
+        <table>
+          <thead><tr>
+            <th style="width:100px">Date</th>
+            <th>Payment Method</th>
+            <th style="width:110px">Advance/Collection</th>
+            <th style="width:130px">Account No</th>
+            <th style="width:100px;text-align:right">Amount</th>
+          </tr></thead>
+          <tbody>
+            ${paymentRowsHtml || `<tr><td colspan="5" style="text-align:center;color:#999;padding:10px">No payments recorded</td></tr>`}
+          </tbody>
+        </table>
+      </div>
 
       <div class="footer">
         <div>Prepared By: ${user?.displayName || 'System'}</div>
         <div>Printed On: ${printedOn}</div>
       </div>
-
-      ${custPhone ? `<div style="text-align:center;margin-top:15px"><a href="https://wa.me/${custPhone.replace(/[^0-9]/g, '').replace(/^0/, '880')}" target="_blank" style="display:inline-block;padding:8px 24px;background:#25D366;color:#fff;text-decoration:none;border-radius:6px;font-size:13px;font-weight:600">📱 Send via WhatsApp</a></div>` : ''}
 
       <script>window.onload=()=>window.print()</script>
     </body></html>`)
