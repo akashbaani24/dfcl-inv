@@ -11955,20 +11955,29 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
             <TableRow className="bg-muted/50">
               <TableHead className="font-semibold">Name</TableHead>
               <TableHead className="font-semibold">Type</TableHead>
-              <TableHead className="font-semibold">Description</TableHead>
+              <TableHead className="font-semibold">Address</TableHead>
+              <TableHead className="font-semibold">Phone</TableHead>
               <TableHead className="font-semibold text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {entities.map(entity => (
               <TableRow key={entity.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">{entity.name}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    {(entity as any).logo ? (
+                      <img src={(entity as any).logo} alt="Logo" className="w-8 h-8 rounded border object-contain bg-white" />
+                    ) : null}
+                    {entity.name}
+                  </div>
+                </TableCell>
                 <TableCell>
                   <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : (entity as any).entityType === 'factory' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
                     {((entity as any).entityType || 'outlet').replace('_', ' ')}
                   </Badge>
                 </TableCell>
-                <TableCell className="text-muted-foreground">{entity.description || '-'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{(entity as any).address || '-'}</TableCell>
+                <TableCell className="text-muted-foreground text-xs">{(entity as any).phone || '-'}</TableCell>
                 <TableCell className="text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
@@ -11991,6 +12000,11 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
               <div className="space-y-2"><Label>Short Code</Label><Input placeholder="e.g. DS" value={(entityForm as any).shortCode || ''} onChange={e => setEntityForm({ ...entityForm, shortCode: e.target.value } as any)} maxLength={10} className="uppercase" /></div>
             </div>
             <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
+            {/* ★ v60-fix104: Address + Phone — show on invoices + booking prints */}
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2"><Label>Address</Label><Input placeholder="e.g. House 12, Road 5, Gulshan, Dhaka" value={(entityForm as any).address || ''} onChange={e => setEntityForm({ ...entityForm, address: e.target.value } as any)} /></div>
+              <div className="space-y-2"><Label>Phone</Label><Input placeholder="e.g. +880 1234 567890" value={(entityForm as any).phone || ''} onChange={e => setEntityForm({ ...entityForm, phone: e.target.value } as any)} /></div>
+            </div>
             <div className="space-y-2">
               <Label>Entity Type</Label>
               <Select value={entityForm.entityType || 'outlet'} onValueChange={v => setEntityForm({ ...entityForm, entityType: v })}>
@@ -12003,6 +12017,29 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
                 </SelectContent>
               </Select>
               <p className="text-[11px] text-muted-foreground">Outlet → uses outletCommission from incentive formulas. Factory, Head Office & Warehouse → uses headOfficeCommission.</p>
+            </div>
+            {/* ★ v60-fix104: Company Logo Upload */}
+            <div className="space-y-2">
+              <Label>Company Logo</Label>
+              <div className="flex items-center gap-3">
+                {(entityForm as any).logo ? (
+                  <img src={(entityForm as any).logo} alt="Logo" className="w-16 h-16 rounded-lg border object-contain bg-white" />
+                ) : (
+                  <div className="w-16 h-16 rounded-lg border flex items-center justify-center text-muted-foreground text-xs">No logo</div>
+                )}
+                <div className="flex flex-col gap-1">
+                  <input type="file" accept="image/*" onChange={handleLogoUpload} className="hidden" id="logo-upload-2" />
+                  <Button type="button" variant="outline" size="sm" onClick={() => document.getElementById('logo-upload-2')?.click()}>
+                    <Upload className="w-3.5 h-3.5 mr-1.5" />Upload Logo
+                  </Button>
+                  {(entityForm as any).logo && (
+                    <Button type="button" variant="ghost" size="sm" className="text-destructive h-7 text-xs" onClick={() => setEntityForm({ ...entityForm, logo: '' } as any)}>
+                      <X className="w-3 h-3 mr-1" />Remove
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <p className="text-[11px] text-muted-foreground">JPG / PNG up to 2 MB. Shows on invoices + entity selection page.</p>
             </div>
             <DialogFooter><Button type="submit"><Save className="w-4 h-4 mr-2" />{editingEntityId ? 'Update' : 'Create'}</Button></DialogFooter>
           </form>
