@@ -11949,16 +11949,15 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
         <Button onClick={openNewEntityDialog}><Plus className="w-4 h-4 mr-2" />New Entity</Button>
       </div>
       <p className="text-sm text-muted-foreground">Entities represent warehouses, stores, branches or any location where stock is maintained. Set the correct entity type — it determines which incentive commission rate applies (outlet vs head office).</p>
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
+      <div className="border rounded-lg overflow-x-auto">
+        <Table className="min-w-[800px]">
           <TableHeader>
             <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold">Name</TableHead>
-              <TableHead className="font-semibold">Type</TableHead>
-              <TableHead className="font-semibold">Under (Mother Company)</TableHead>
-              <TableHead className="font-semibold">Address</TableHead>
-              <TableHead className="font-semibold">Phone</TableHead>
-              <TableHead className="font-semibold text-center">Actions</TableHead>
+              <TableHead className="font-semibold whitespace-nowrap">Name</TableHead>
+              <TableHead className="font-semibold whitespace-nowrap">Type</TableHead>
+              <TableHead className="font-semibold whitespace-nowrap">Under (Mother)</TableHead>
+              <TableHead className="font-semibold whitespace-nowrap">Address / Phone</TableHead>
+              <TableHead className="font-semibold text-center whitespace-nowrap">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -12022,8 +12021,11 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
                       </Badge>
                     </TableCell>
                     <TableCell className="text-muted-foreground text-xs">{parentName || '—'}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{(entity as any).address || '-'}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{(entity as any).phone || '-'}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">
+                      {(entity as any).address && <div>{(entity as any).address}</div>}
+                      {(entity as any).phone && <div>📞 {(entity as any).phone}</div>}
+                      {!(entity as any).address && !(entity as any).phone && <span>-</span>}
+                    </TableCell>
                     <TableCell className="text-center">
                       <div className="flex items-center justify-center gap-1">
                         <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
