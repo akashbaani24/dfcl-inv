@@ -1199,6 +1199,17 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE Entity ADD COLUMN phone TEXT',
     description: 'Add phone column to Entity (nullable)',
   },
+  // v72: Add parentEntityId column to Entity — groups sub-companies under a mother company
+  {
+    id: '2026_07_06_entity_parent',
+    sql: 'ALTER TABLE Entity ADD COLUMN parentEntityId TEXT',
+    description: 'Add parentEntityId column to Entity (self-FK, nullable)',
+  },
+  {
+    id: '2026_07_06_entity_parent_idx',
+    sql: 'CREATE INDEX IF NOT EXISTS "Entity_parentEntityId_idx" ON "Entity"("parentEntityId")',
+    description: 'Index on Entity.parentEntityId',
+  },
 ];
 
 export async function POST(request: NextRequest) {

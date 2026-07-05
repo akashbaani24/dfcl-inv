@@ -630,7 +630,7 @@ export default function Home() {
   // Entity state
   const [entities, setEntities] = useState<EntityData[]>([])
   const [entitiesLoading, setEntitiesLoading] = useState(false)
-  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' })
+  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '', parentEntityId: '' })
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
@@ -3538,7 +3538,7 @@ AS Display Centre,720-500-D,0
     try {
       const res = await authFetch('/api/entities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '', parentEntityId: '' }); setShowEntityDialog(false); fetchEntities() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create entity', variant: 'destructive' }) }
   }
@@ -3548,7 +3548,7 @@ AS Display Centre,720-500-D,0
     if (!editingEntityId) return
     try {
       const res = await authFetch(`/api/entities/${editingEntityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
-      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '', parentEntityId: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
       else { const data = await res.json(); toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update entity', variant: 'destructive' }) }
   }
@@ -3574,11 +3574,11 @@ AS Display Centre,720-500-D,0
   }
 
   const openEditEntityDialog = (entity: EntityData) => {
-    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet', shortCode: (entity as any).shortCode || '', logo: (entity as any).logo || '', address: (entity as any).address || '', phone: (entity as any).phone || '' }); setShowEntityDialog(true)
+    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet', shortCode: (entity as any).shortCode || '', logo: (entity as any).logo || '', address: (entity as any).address || '', phone: (entity as any).phone || '', parentEntityId: (entity as any).parentEntityId || '' }); setShowEntityDialog(true)
   }
 
   const openNewEntityDialog = () => {
-    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' }); setShowEntityDialog(true)
+    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '', parentEntityId: '' }); setShowEntityDialog(true)
   }
 
   // User handlers
@@ -11955,37 +11955,65 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
             <TableRow className="bg-muted/50">
               <TableHead className="font-semibold">Name</TableHead>
               <TableHead className="font-semibold">Type</TableHead>
+              <TableHead className="font-semibold">Under (Mother Company)</TableHead>
               <TableHead className="font-semibold">Address</TableHead>
               <TableHead className="font-semibold">Phone</TableHead>
               <TableHead className="font-semibold text-center">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {entities.map(entity => (
-              <TableRow key={entity.id} className="hover:bg-muted/30">
-                <TableCell className="font-medium">
-                  <div className="flex items-center gap-2">
-                    {(entity as any).logo ? (
-                      <img src={(entity as any).logo} alt="Logo" className="w-8 h-8 rounded border object-contain bg-white" />
-                    ) : null}
-                    {entity.name}
-                  </div>
-                </TableCell>
-                <TableCell>
-                  <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : (entity as any).entityType === 'factory' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
-                    {((entity as any).entityType || 'outlet').replace('_', ' ')}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-muted-foreground text-xs">{(entity as any).address || '-'}</TableCell>
-                <TableCell className="text-muted-foreground text-xs">{(entity as any).phone || '-'}</TableCell>
-                <TableCell className="text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
-                    <Button variant="ghost" size="sm" onClick={() => handleDeleteEntity(entity.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                  </div>
-                </TableCell>
-              </TableRow>
-            ))}
+            {(() => {
+              // ★ v60-fix105: Group entities by parent — show mother companies first,
+              //   then their sub-companies indented under each.
+              const mothers = entities.filter(e => !(e as any).parentEntityId)
+              const children = entities.filter(e => !!(e as any).parentEntityId)
+              const rows: any[] = []
+              for (const m of mothers) {
+                rows.push({ entity: m, level: 0 })
+                const subs = children.filter(c => (c as any).parentEntityId === m.id)
+                for (const s of subs) {
+                  rows.push({ entity: s, level: 1 })
+                }
+              }
+              // Orphans (parent deleted) — show at end
+              const orphans = children.filter(c => !mothers.some(m => m.id === (c as any).parentEntityId))
+              for (const o of orphans) {
+                rows.push({ entity: o, level: 0 })
+              }
+              return rows.map(({ entity, level }) => {
+                const parentName = (entity as any).parentEntityId ? entities.find(e => e.id === (entity as any).parentEntityId)?.name : ''
+                return (
+                  <TableRow key={entity.id} className={`hover:bg-muted/30 ${level === 1 ? 'bg-muted/10' : ''}`}>
+                    <TableCell className="font-medium">
+                      <div className="flex items-center gap-2" style={level === 1 ? { paddingLeft: '20px' } : {}}>
+                        {level === 1 && <span className="text-muted-foreground">↳</span>}
+                        {(entity as any).logo ? (
+                          <img src={(entity as any).logo} alt="Logo" className="w-8 h-8 rounded border object-contain bg-white" />
+                        ) : null}
+                        {entity.name}
+                        {level === 0 && entities.some(e => (e as any).parentEntityId === entity.id) && (
+                          <Badge variant="secondary" className="text-[10px]">Mother</Badge>
+                        )}
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : (entity as any).entityType === 'factory' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
+                        {((entity as any).entityType || 'outlet').replace('_', ' ')}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{parentName || '—'}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{(entity as any).address || '-'}</TableCell>
+                    <TableCell className="text-muted-foreground text-xs">{(entity as any).phone || '-'}</TableCell>
+                    <TableCell className="text-center">
+                      <div className="flex items-center justify-center gap-1">
+                        <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                        <Button variant="ghost" size="sm" onClick={() => handleDeleteEntity(entity.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                )
+              })
+            })()}
           </TableBody>
         </Table>
       </div>
@@ -12000,6 +12028,21 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
               <div className="space-y-2"><Label>Short Code</Label><Input placeholder="e.g. DS" value={(entityForm as any).shortCode || ''} onChange={e => setEntityForm({ ...entityForm, shortCode: e.target.value } as any)} maxLength={10} className="uppercase" /></div>
             </div>
             <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
+            {/* ★ v60-fix105: Parent Entity — for mother/sub company hierarchy */}
+            <div className="space-y-2">
+              <Label>Parent Entity (Mother Company)</Label>
+              <Select value={(entityForm as any).parentEntityId || '__none__'} onValueChange={v => setEntityForm({ ...entityForm, parentEntityId: v === '__none__' ? '' : v } as any)}>
+                <SelectTrigger><SelectValue placeholder="None (top-level entity)" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None (top-level) —</SelectItem>
+                  {/* Don't allow an entity to be its own parent (editing case) */}
+                  {entities.filter(e => e.id !== editingEntityId).map(e => (
+                    <SelectItem key={e.id} value={e.id}>{e.name}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-[11px] text-muted-foreground">Select a mother company if this entity is a sub-company/branch. Leave empty for top-level.</p>
+            </div>
             {/* ★ v60-fix104: Address + Phone — show on invoices + booking prints */}
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-2"><Label>Address</Label><Input placeholder="e.g. House 12, Road 5, Gulshan, Dhaka" value={(entityForm as any).address || ''} onChange={e => setEntityForm({ ...entityForm, address: e.target.value } as any)} /></div>

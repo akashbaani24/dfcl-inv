@@ -125,6 +125,11 @@ model Entity {
   address     String?
   // ★ v60-fix103: Contact phone field — shows on invoices alongside address.
   phone       String?
+  // ★ v60-fix105: Parent entity (mother company). NULL = this is a top-level entity.
+  //   Used to group sub-companies/branches under a mother company.
+  parentEntityId String?
+  parentEntity   Entity?  @relation("EntityHierarchy", fields: [parentEntityId], references: [id], onDelete: SetNull)
+  childEntities  Entity[] @relation("EntityHierarchy")
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 

@@ -11,7 +11,12 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { name, description, entityType, shortCode, logo, address, phone } = await request.json();
+    const { name, description, entityType, shortCode, logo, address, phone, parentEntityId } = await request.json();
+
+    // ★ Prevent circular reference: parentEntityId can't be the same as this entity's id
+    if (parentEntityId && parentEntityId === id) {
+      return NextResponse.json({ error: 'Entity cannot be its own parent' }, { status: 400 });
+    }
 
     const entity = await db.entity.update({
       where: { id },
@@ -23,6 +28,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         logo: logo !== undefined ? (logo || null) : undefined,
         address: address !== undefined ? (address || null) : undefined,
         phone: phone !== undefined ? (phone || null) : undefined,
+        parentEntityId: parentEntityId !== undefined ? (parentEntityId || null) : undefined,
       },
     });
 
