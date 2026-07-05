@@ -11,7 +11,7 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
     }
 
     const { id } = await params;
-    const { name, description, entityType, shortCode, logo } = await request.json();
+    const { name, description, entityType, shortCode, logo, address, phone } = await request.json();
 
     const entity = await db.entity.update({
       where: { id },
@@ -21,6 +21,8 @@ export async function PUT(request: NextRequest, { params }: { params: Promise<{ 
         entityType: entityType || undefined,
         shortCode: shortCode !== undefined ? (shortCode || null) : undefined,
         logo: logo !== undefined ? (logo || null) : undefined,
+        address: address !== undefined ? (address || null) : undefined,
+        phone: phone !== undefined ? (phone || null) : undefined,
       },
     });
 

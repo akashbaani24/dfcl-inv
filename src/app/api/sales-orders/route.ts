@@ -24,7 +24,7 @@ export async function GET(request: NextRequest) {
       orderBy: { createdAt: 'desc' },
       take: 200, // ★ Limit to 200 most recent orders for performance
       include: {
-        entity: { select: { name: true } },
+        entity: { select: { name: true, address: true, phone: true, logo: true } },
         customer: { select: { name: true, phone: true } },
         salesPerson: { select: { name: true } },
         items: {
@@ -139,7 +139,7 @@ export async function POST(request: NextRequest) {
         } : undefined,
       },
       include: {
-        entity: { select: { name: true } },
+        entity: { select: { name: true, address: true, phone: true, logo: true } },
         customer: { select: { name: true, phone: true } },
         items: { include: { item: { select: { itemName: true } }, makingEntries: true } },
         payments: true,
@@ -292,7 +292,7 @@ export async function PUT(request: NextRequest) {
         } : undefined,
       },
       include: {
-        entity: { select: { name: true } },
+        entity: { select: { name: true, address: true, phone: true, logo: true } },
         customer: { select: { name: true, phone: true } },
         items: { include: { item: { select: { itemName: true, barcode: true, itemCode: true, uom: true } }, makingEntries: true } },
         payments: true,

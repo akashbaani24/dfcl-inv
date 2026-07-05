@@ -1187,6 +1187,18 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "Transfer_batchId_idx" ON "Transfer"("batchId")',
     description: 'Index on Transfer.batchId',
   },
+  // v71: Add address + phone columns to Entity — shows on invoices, booking prints, etc.
+  //      Both nullable so existing entities work without modification.
+  {
+    id: '2026_07_05_entity_address',
+    sql: 'ALTER TABLE Entity ADD COLUMN address TEXT',
+    description: 'Add address column to Entity (nullable)',
+  },
+  {
+    id: '2026_07_05_entity_phone',
+    sql: 'ALTER TABLE Entity ADD COLUMN phone TEXT',
+    description: 'Add phone column to Entity (nullable)',
+  },
 ];
 
 export async function POST(request: NextRequest) {

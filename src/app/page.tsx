@@ -630,7 +630,7 @@ export default function Home() {
   // Entity state
   const [entities, setEntities] = useState<EntityData[]>([])
   const [entitiesLoading, setEntitiesLoading] = useState(false)
-  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' })
+  const [entityForm, setEntityForm] = useState({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' })
   const [editingEntityId, setEditingEntityId] = useState<string | null>(null)
   const [showEntityDialog, setShowEntityDialog] = useState(false)
 
@@ -2479,6 +2479,11 @@ AS Display Centre,720-500-D,0
     if (!win) return
     const entityName = s.entity?.name || workingEntity?.name || ''
     const entityDesc = s.entity?.description || ''
+    // ★ v60-fix103: prefer the entity's stored address + phone (set via Entity form);
+    //   fall back to workingEntity if sales order doesn't have the entity joined.
+    const entityAddr = (s.entity?.address as string) || (workingEntity as any)?.address || ''
+    const entityPhone = (s.entity?.phone as string) || (workingEntity as any)?.phone || ''
+    const entityLogo = (s.entity?.logo as string) || (workingEntity as any)?.logo || ''
     const initials = entityName.split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase() || 'DF'
     const custName = s.customer?.name || '—'
     const custPhone = s.customer?.phone || ''
@@ -2602,10 +2607,14 @@ AS Display Centre,720-500-D,0
 
       <div class="header">
         <div class="header-left">
-          <div class="logo">${initials}</div>
+          ${entityLogo
+            ? `<img src="${entityLogo}" alt="Logo" style="width:64px;height:64px;object-fit:contain;border:1px solid #ccc;padding:2px;background:#fff" />`
+            : `<div class="logo">${initials}</div>`}
           <div class="company-info">
             <h2>${entityName}</h2>
-            <div class="line">${entityDesc || '&nbsp;'}</div>
+            ${entityDesc ? `<div class="line">${entityDesc}</div>` : ''}
+            ${entityAddr ? `<div class="line">${entityAddr}</div>` : ''}
+            ${entityPhone ? `<div class="line">Phone: ${entityPhone}</div>` : ''}
             <div class="line">Sales Id: <strong>${s.salesNo || ''}</strong></div>
             ${salesPersonName ? `<div class="line">Sales Person: ${salesPersonName}</div>` : ''}
           </div>
@@ -2613,7 +2622,7 @@ AS Display Centre,720-500-D,0
         <div class="header-right">
           <div class="cust-name">${custName}</div>
           ${custAddr ? `<div class="line">${custAddr}</div>` : ''}
-          ${custPhone ? `<div class="line">${custPhone}</div>` : ''}
+          ${custPhone ? `<div class="line">Phone: ${custPhone}</div>` : ''}
           <div class="line"><strong>Order Date:</strong> ${orderDateStr}</div>
           <div class="line"><strong>Delivery Date:</strong> ${deliveryDateStr}</div>
         </div>
@@ -3529,7 +3538,7 @@ AS Display Centre,720-500-D,0
     try {
       const res = await authFetch('/api/entities', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
       const data = await res.json()
-      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' }); setShowEntityDialog(false); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity created' }); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' }); setShowEntityDialog(false); fetchEntities() }
       else { toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to create entity', variant: 'destructive' }) }
   }
@@ -3539,7 +3548,7 @@ AS Display Centre,720-500-D,0
     if (!editingEntityId) return
     try {
       const res = await authFetch(`/api/entities/${editingEntityId}`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(entityForm) })
-      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
+      if (res.ok) { toast({ title: 'Success', description: 'Entity updated' }); setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' }); setShowEntityDialog(false); setCurrentView('entities'); fetchEntities() }
       else { const data = await res.json(); toast({ title: 'Error', description: data.error, variant: 'destructive' }) }
     } catch { toast({ title: 'Error', description: 'Failed to update entity', variant: 'destructive' }) }
   }
@@ -3565,11 +3574,11 @@ AS Display Centre,720-500-D,0
   }
 
   const openEditEntityDialog = (entity: EntityData) => {
-    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet', shortCode: (entity as any).shortCode || '', logo: '' }); setShowEntityDialog(true)
+    setEditingEntityId(entity.id); setEntityForm({ name: entity.name, description: entity.description || '', entityType: (entity as any).entityType || 'outlet', shortCode: (entity as any).shortCode || '', logo: (entity as any).logo || '', address: (entity as any).address || '', phone: (entity as any).phone || '' }); setShowEntityDialog(true)
   }
 
   const openNewEntityDialog = () => {
-    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '' }); setShowEntityDialog(true)
+    setEditingEntityId(null); setEntityForm({ name: '', description: '', entityType: 'outlet', shortCode: '', logo: '', address: '', phone: '' }); setShowEntityDialog(true)
   }
 
   // User handlers
@@ -11021,6 +11030,11 @@ DEWS,720-500-B,5</pre>
                 <div className="space-y-2"><Label>Short Code</Label><Input placeholder="e.g. DS" value={(entityForm as any).shortCode || ''} onChange={e => setEntityForm({ ...entityForm, shortCode: e.target.value } as any)} maxLength={10} className="uppercase" /></div>
               </div>
               <div className="space-y-2"><Label>Description</Label><Input placeholder="Optional description" value={entityForm.description} onChange={e => setEntityForm({ ...entityForm, description: e.target.value })} /></div>
+              {/* ★ v60-fix103: Address + Phone — show on invoices + booking prints */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2"><Label>Address</Label><Input placeholder="e.g. House 12, Road 5, Gulshan, Dhaka" value={(entityForm as any).address || ''} onChange={e => setEntityForm({ ...entityForm, address: e.target.value } as any)} /></div>
+                <div className="space-y-2"><Label>Phone</Label><Input placeholder="e.g. +880 1234 567890" value={(entityForm as any).phone || ''} onChange={e => setEntityForm({ ...entityForm, phone: e.target.value } as any)} /></div>
+              </div>
               <div className="space-y-2">
                 <Label>Entity Type</Label>
                 <Select value={(entityForm as any).entityType || 'outlet'} onValueChange={v => setEntityForm({ ...entityForm, entityType: v } as any)}>
