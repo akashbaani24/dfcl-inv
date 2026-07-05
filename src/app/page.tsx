@@ -11949,95 +11949,82 @@ AJ-435-39-E,2606190000002,SM-S22`}</pre>
         <Button onClick={openNewEntityDialog}><Plus className="w-4 h-4 mr-2" />New Entity</Button>
       </div>
       <p className="text-sm text-muted-foreground">Entities represent warehouses, stores, branches or any location where stock is maintained. Set the correct entity type — it determines which incentive commission rate applies (outlet vs head office).</p>
-      <div className="border rounded-lg overflow-x-auto">
-        <Table className="min-w-[800px]">
-          <TableHeader>
-            <TableRow className="bg-muted/50">
-              <TableHead className="font-semibold whitespace-nowrap">Name</TableHead>
-              <TableHead className="font-semibold whitespace-nowrap">Type</TableHead>
-              <TableHead className="font-semibold whitespace-nowrap">Under (Mother)</TableHead>
-              <TableHead className="font-semibold whitespace-nowrap">Address / Phone</TableHead>
-              <TableHead className="font-semibold text-center whitespace-nowrap">Actions</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {(() => {
-              // ★ v60-fix106: Render entity hierarchy recursively (3+ levels supported).
-              //   - Mother companies (parentEntityId = NULL) shown at level 0
-              //   - Their sub-companies at level 1 (indented ↳)
-              //   - Sub-sub companies at level 2 (further indented ↳↳)
-              //   - And so on for deeper levels
-              const mothers = entities.filter(e => !(e as any).parentEntityId)
-              const children = entities.filter(e => !!(e as any).parentEntityId)
+      <div className="space-y-2">
+        {(() => {
+          // ★ v60-fix108: Render entity hierarchy as card-style list (no horizontal scroll).
+          //   Replaced the old 5-column table with a flexible card layout where each
+          //   entity is one row with name/logo on the left, meta badges in the middle,
+          //   and Edit/Delete buttons pinned to the right. Cards wrap gracefully on
+          //   narrow screens — no more horizontal scroll needed to reach Actions.
+          const mothers = entities.filter(e => !(e as any).parentEntityId)
+          const children = entities.filter(e => !!(e as any).parentEntityId)
 
-              // Recursive function: collect an entity + all its descendants in order
-              const collect = (entity: any, level: number, acc: any[]) => {
-                acc.push({ entity, level })
-                const subs = children.filter(c => (c as any).parentEntityId === entity.id)
-                for (const s of subs) {
-                  collect(s, level + 1, acc)
-                }
-              }
+          const collect = (entity: any, level: number, acc: any[]) => {
+            acc.push({ entity, level })
+            const subs = children.filter(c => (c as any).parentEntityId === entity.id)
+            for (const s of subs) {
+              collect(s, level + 1, acc)
+            }
+          }
 
-              const rows: any[] = []
-              for (const m of mothers) {
-                collect(m, 0, rows)
-              }
-              // Orphans (parent deleted) — show at end at top level
-              const orphans = children.filter(c => !mothers.some(m => m.id === (c as any).parentEntityId) && !entities.some(e => e.id === (c as any).parentEntityId && e.id !== (c as any).id))
-              for (const o of orphans) {
-                collect(o, 0, rows)
-              }
+          const rows: any[] = []
+          for (const m of mothers) {
+            collect(m, 0, rows)
+          }
+          const orphans = children.filter(c => !mothers.some(m => m.id === (c as any).parentEntityId) && !entities.some(e => e.id === (c as any).parentEntityId && e.id !== (c as any).id))
+          for (const o of orphans) {
+            collect(o, 0, rows)
+          }
 
-              const levelPrefix = (level: number) => '↳ '.repeat(level)
-              const indentPx = (level: number) => level * 20
-
-              return rows.map(({ entity, level }) => {
-                const parentName = (entity as any).parentEntityId ? entities.find(e => e.id === (entity as any).parentEntityId)?.name : ''
-                const hasChildren = entities.some(e => (e as any).parentEntityId === entity.id)
-                return (
-                  <TableRow key={entity.id} className={`hover:bg-muted/30 ${level >= 1 ? 'bg-muted/10' : ''}`}>
-                    <TableCell className="font-medium">
-                      <div className="flex items-center gap-2" style={level >= 1 ? { paddingLeft: `${indentPx(level)}px` } : {}}>
-                        {level >= 1 && <span className="text-muted-foreground text-xs">{levelPrefix(level)}</span>}
-                        {(entity as any).logo ? (
-                          <img src={(entity as any).logo} alt="Logo" className="w-8 h-8 rounded border object-contain bg-white" />
-                        ) : null}
-                        {entity.name}
-                        {level === 0 && hasChildren && (
-                          <Badge variant="secondary" className="text-[10px]">Mother</Badge>
-                        )}
-                        {level === 1 && hasChildren && (
-                          <Badge variant="outline" className="text-[10px]">Sub-Mother</Badge>
-                        )}
-                        {level >= 2 && (
-                          <Badge variant="outline" className="text-[10px] text-muted-foreground">Outlet</Badge>
-                        )}
-                      </div>
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant="outline" className={`text-xs capitalize ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : (entity as any).entityType === 'factory' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
+          return rows.map(({ entity, level }) => {
+            const parentName = (entity as any).parentEntityId ? entities.find(e => e.id === (entity as any).parentEntityId)?.name : ''
+            const hasChildren = entities.some(e => (e as any).parentEntityId === entity.id)
+            return (
+              <div
+                key={entity.id}
+                className={`flex flex-wrap items-center gap-3 p-3 border rounded-lg ${level >= 1 ? 'bg-muted/10' : 'bg-card'}`}
+                style={level >= 1 ? { marginLeft: `${level * 20}px` } : {}}
+              >
+                {/* Left: logo + name + level prefix */}
+                <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                  {level >= 1 && <span className="text-muted-foreground text-xs whitespace-nowrap">{'↳ '.repeat(level)}</span>}
+                  {(entity as any).logo ? (
+                    <img src={(entity as any).logo} alt="Logo" className="w-9 h-9 rounded border object-contain bg-white shrink-0" />
+                  ) : (
+                    <div className="w-9 h-9 rounded border bg-muted/30 flex items-center justify-center text-muted-foreground text-[10px] font-bold shrink-0">
+                      {(entity.name || '??').split(/\s+/).slice(0, 2).map((w: string) => w[0] || '').join('').toUpperCase()}
+                    </div>
+                  )}
+                  <div className="min-w-0">
+                    <div className="font-medium truncate">{entity.name}</div>
+                    <div className="text-[11px] text-muted-foreground flex flex-wrap items-center gap-1">
+                      <Badge variant="outline" className={`text-[10px] capitalize px-1.5 py-0 ${(entity as any).entityType === 'head_office' ? 'bg-purple-50 text-purple-700' : (entity as any).entityType === 'warehouse' ? 'bg-blue-50 text-blue-700' : (entity as any).entityType === 'factory' ? 'bg-orange-50 text-orange-700' : 'bg-green-50 text-green-700'}`}>
                         {((entity as any).entityType || 'outlet').replace('_', ' ')}
                       </Badge>
-                    </TableCell>
-                    <TableCell className="text-muted-foreground text-xs">{parentName || '—'}</TableCell>
-                    <TableCell className="text-muted-foreground text-xs">
-                      {(entity as any).address && <div>{(entity as any).address}</div>}
-                      {(entity as any).phone && <div>📞 {(entity as any).phone}</div>}
-                      {!(entity as any).address && !(entity as any).phone && <span>-</span>}
-                    </TableCell>
-                    <TableCell className="text-center">
-                      <div className="flex items-center justify-center gap-1">
-                        <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleDeleteEntity(entity.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
-                      </div>
-                    </TableCell>
-                  </TableRow>
-                )
-              })
-            })()}
-          </TableBody>
-        </Table>
+                      {level === 0 && hasChildren && <Badge variant="secondary" className="text-[10px] px-1.5 py-0">Mother</Badge>}
+                      {level === 1 && hasChildren && <Badge variant="outline" className="text-[10px] px-1.5 py-0">Sub-Mother</Badge>}
+                      {level >= 2 && <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-muted-foreground">Outlet</Badge>}
+                      {parentName && <span className="text-[10px] text-muted-foreground">↳ {parentName}</span>}
+                    </div>
+                  </div>
+                </div>
+
+                {/* Middle: address + phone (hidden on narrow screens via order/visibility) */}
+                <div className="hidden md:block text-[11px] text-muted-foreground min-w-[180px] max-w-[260px] flex-1">
+                  {(entity as any).address && <div className="truncate" title={(entity as any).address}>📍 {(entity as any).address}</div>}
+                  {(entity as any).phone && <div className="truncate" title={(entity as any).phone}>📞 {(entity as any).phone}</div>}
+                  {!(entity as any).address && !(entity as any).phone && <span className="text-muted-foreground/50">—</span>}
+                </div>
+
+                {/* Right: Actions — always visible, never clipped */}
+                <div className="flex items-center gap-1 shrink-0">
+                  <Button variant="ghost" size="sm" onClick={() => openEditEntityDialog(entity)} title="Edit"><Edit className="w-4 h-4" /></Button>
+                  <Button variant="ghost" size="sm" onClick={() => handleDeleteEntity(entity.id)} title="Delete" className="text-destructive hover:text-destructive"><Trash2 className="w-4 h-4" /></Button>
+                </div>
+              </div>
+            )
+          })
+        })()}
       </div>
 
       {/* Entity Dialog */}
