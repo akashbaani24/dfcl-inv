@@ -958,8 +958,18 @@ AS Display Centre,720-500-D,0
             {/* Sales order details */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               <div className="space-y-2">
-                <Label>Sales Order ID</Label>
-                <Input value={brokerCommissionForm.salesOrderId} onChange={e => setBrokerCommissionForm(f => ({ ...f, salesOrderId: e.target.value }))} placeholder="Auto from sales order (or type)" />
+                <Label>Sales Order</Label>
+                {/* ★ v60-fix112: Show salesNo (e.g. SO-20260705-4052) instead of raw id.
+                    Read-only — the sales order is pre-selected from the Broker menu. */}
+                <Select value={brokerCommissionForm.salesOrderId || '__none__'} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, salesOrderId: v === '__none__' ? '' : v }))}>
+                  <SelectTrigger><SelectValue placeholder="Select sales order" /></SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="__none__">— None —</SelectItem>
+                    {salesOrders.filter((s: any) => s.hasBroker).map((s: any) => (
+                      <SelectItem key={s.id} value={s.id}>{s.salesNo || s.id?.slice(0,8)} — {s.customer?.name || '—'}</SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
               <div className="space-y-2">
                 <Label>Order Date</Label>
