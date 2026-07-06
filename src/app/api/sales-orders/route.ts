@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
     if (!currentUser) return NextResponse.json({ error: 'Not authenticated' }, { status: 401 });
 
     const body = await request.json();
-    const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments } = body;
+    const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments, hasBroker } = body;
 
     if (!entityId) return NextResponse.json({ error: 'Entity is required' }, { status: 400 });
     if (!customerId) return NextResponse.json({ error: 'Customer is required' }, { status: 400 });
@@ -102,6 +102,7 @@ export async function POST(request: NextRequest) {
         deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
         status: status || 'pending',
         notes: notes || null,
+        hasBroker: hasBroker || false,  // ★ v60-fix110
         createdBy: currentUser.id,
         items: {
           create: items.map((item: any) => ({
@@ -238,7 +239,7 @@ export async function PUT(request: NextRequest) {
     const { id } = body;
     if (!id) return NextResponse.json({ error: 'Sales order ID is required' }, { status: 400 });
 
-    const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments } = body;
+    const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments, hasBroker } = body;
 
     // Delete existing items + making entries + payments, then recreate
     await db.salesMakingEntry.deleteMany({ where: { salesOrderItem: { salesOrderId: id } } });
@@ -256,6 +257,7 @@ export async function PUT(request: NextRequest) {
         deliveryDate: deliveryDate ? new Date(deliveryDate) : null,
         status: status || 'pending',
         notes: notes || null,
+        hasBroker: hasBroker !== undefined ? !!hasBroker : undefined,  // ★ v60-fix110
         items: {
           create: (items || []).map((item: any) => ({
             itemId: item.itemId,

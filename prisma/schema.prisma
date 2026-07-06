@@ -677,6 +677,11 @@ model SalesOrder {
   deliveryDate  DateTime?
   status        String         @default("pending")
   discount      Float          @default(0) // ★ flat discount amount
+  // ★ v60-fix110: Simple flag — does this order have a broker?
+  //   If true, the order shows up in the Broker Commission menu's summary list,
+  //   where the user can click the sales ID to open the broker details form.
+  //   If false, it doesn't appear in the Broker menu at all.
+  hasBroker     Boolean        @default(false)
   // ★ Delivery management fields
   deliveryPerson  String?  // name of delivery person
   deliveryStatus  String   @default("pending") // pending, out_for_delivery, delivered, failed

@@ -1210,6 +1210,12 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'CREATE INDEX IF NOT EXISTS "Entity_parentEntityId_idx" ON "Entity"("parentEntityId")',
     description: 'Index on Entity.parentEntityId',
   },
+  // v73: Add hasBroker column to SalesOrder — simple YES/NO flag for broker
+  {
+    id: '2026_07_06_salesorder_hasbroker',
+    sql: 'ALTER TABLE SalesOrder ADD COLUMN hasBroker BOOLEAN NOT NULL DEFAULT 0',
+    description: 'Add hasBroker column to SalesOrder (default false)',
+  },
 ];
 
 export async function POST(request: NextRequest) {
