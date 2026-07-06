@@ -242,6 +242,8 @@ export async function PUT(request: NextRequest) {
     if (!id) return NextResponse.json({ error: 'Sales order ID is required' }, { status: 400 });
 
     const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments, hasBroker } = body;
+    // ★ v60-fix110-debug: log for PUT too
+    console.log('[PUT /api/sales-orders] hasBroker from body:', hasBroker, 'type:', typeof hasBroker, 'full body keys:', Object.keys(body));
 
     // Delete existing items + making entries + payments, then recreate
     await db.salesMakingEntry.deleteMany({ where: { salesOrderItem: { salesOrderId: id } } });
