@@ -973,7 +973,24 @@ AS Display Centre,720-500-D,0
               </div>
               <div className="space-y-2">
                 <Label>Order Date</Label>
-                <Input type="date" value={brokerCommissionForm.orderDate} onChange={e => setBrokerCommissionForm(f => ({ ...f, orderDate: e.target.value }))} />
+                {/* ★ v60-fix113: robust date parsing — handle invalid/missing dates gracefully */}
+                <Input
+                  type="date"
+                  value={(() => {
+                    const d = brokerCommissionForm.orderDate
+                    if (!d) return ''
+                    // If it's already YYYY-MM-DD, use as-is
+                    if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
+                    // Try to parse as Date
+                    try {
+                      const parsed = new Date(d)
+                      if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0]
+                    } catch {}
+                    // Fallback: empty (don't show garbage)
+                    return ''
+                  })()}
+                  onChange={e => setBrokerCommissionForm(f => ({ ...f, orderDate: e.target.value }))}
+                />
               </div>
               <div className="space-y-2">
                 <Label>Sales Person Name</Label>
