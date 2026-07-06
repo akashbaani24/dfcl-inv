@@ -6422,8 +6422,16 @@ DEWS,720-500-B,5</pre>
                         notes: s.notes || '',
                         newCustomerName: '', newCustomerPhone: '', newCustomerEmail: '', newCustomerAddress: '',
                         salesType: 'cash' as 'cash' | 'order', tailorId: '',
-                        // ★ v60-fix110: use the SalesOrder's hasBroker flag directly
+                        // ★ v60-fix110: use the SalesOrder's hasBroker flag directly.
+                        //   All broker fields must be set here (even if empty) because
+                        //   salesOrderForm state expects all of them — TypeScript strict
+                        //   mode would reject partial updates. They're unused now but
+                        //   kept for type compatibility.
                         hasBroker: s.hasBroker || false,
+                        brokerName: '', brokerContact: '',
+                        brokerCommissionType: 'amount' as 'amount' | 'percentage',
+                        brokerCommissionAmount: '', brokerCommissionRate: '',
+                        brokerPaymentType: 'cash', brokerPaidStatus: 'unpaid',
                       })
                       fetchCustomers(); fetchEmployees(); fetchTailors(); fetchBrokerCommissions()
                       setCurrentView('newSalesOrder')
