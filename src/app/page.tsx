@@ -746,6 +746,14 @@ AS Display Centre,720-500-D,0
     checkedBy: '', approvedBy: '',
   })
   const [brokerCommissionSaving, setBrokerCommissionSaving] = useState(false)
+  // ★ v60-fix109: When user clicks the broker tick in Sales Order list,
+  //   we navigate to the broker commission page with this salesOrderId
+  //   pre-filled, so they can add/edit broker details directly.
+  const [brokerPreselectSalesOrderId, setBrokerPreselectSalesOrderId] = useState<string | null>(null)
+  // ★ v60-fix109: When editing an existing commission from the broker list,
+  //   this holds the commission row's id so handleSaveBrokerCommission can
+  //   use PUT (update) instead of POST (create new).
+  const [editingBrokerCommissionId, setEditingBrokerCommissionId] = useState<string | null>(null)
 
   const fetchBrokerCommissions = useCallback(async () => {
     try {
@@ -767,14 +775,18 @@ AS Display Centre,720-500-D,0
     e.preventDefault()
     setBrokerCommissionSaving(true)
     try {
-      const res = await authFetch('/api/broker-commissions', {
-        method: 'POST',
+      // ★ v60-fix109: Use PUT when editing an existing commission, POST when creating new.
+      const isEditing = !!editingBrokerCommissionId
+      const url = isEditing ? `/api/broker-commissions/${editingBrokerCommissionId}` : '/api/broker-commissions'
+      const method = isEditing ? 'PUT' : 'POST'
+      const res = await authFetch(url, {
+        method,
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(brokerCommissionForm),
       })
       const data = await res.json()
       if (res.ok) {
-        toast({ title: 'Success', description: 'Broker commission created' })
+        toast({ title: 'Success', description: isEditing ? 'Broker commission updated' : 'Broker commission created' })
         setBrokerCommissionForm({
           brokerName: '', brokerContact: '', brokerAddress: '',
           salesOrderId: '', orderDate: new Date().toISOString().split('T')[0],
@@ -784,13 +796,15 @@ AS Display Centre,720-500-D,0
           paidStatus: 'unpaid', deliveryStatus: 'pending',
           checkedBy: '', approvedBy: '',
         })
+        setEditingBrokerCommissionId(null)
+        setBrokerPreselectSalesOrderId(null)  // ★ clear preselect after save
         fetchBrokerCommissions() // ★ refresh so sales order list shows updated indicator
         setCurrentView('brokerCommission')
       } else {
         toast({ title: 'Error', description: data.error || 'Failed', variant: 'destructive' })
       }
     } catch {
-      toast({ title: 'Error', description: 'Failed to create broker commission', variant: 'destructive' })
+      toast({ title: 'Error', description: 'Failed to save broker commission', variant: 'destructive' })
     } finally {
       setBrokerCommissionSaving(false)
     }
@@ -831,52 +845,113 @@ AS Display Centre,720-500-D,0
             </Button>
           )}
           {(isManagerOrAdmin || hasPermission('menu', 'brokerCommission', 'create')) && (
-            <Button size="sm" onClick={() => { setBrokerCommissionForm({
-              brokerName: '', brokerContact: '', brokerAddress: '',
-              salesOrderId: '', orderDate: new Date().toISOString().split('T')[0],
-              salesPersonName: '',
-              commissionAmount: '', commissionType: 'amount', commissionRate: '',
-              paymentType: 'cash', paymentDetails: '',
-              paidStatus: 'unpaid', deliveryStatus: 'pending',
-              checkedBy: '', approvedBy: '',
-            }); setCurrentView('newBrokerCommission') }}>
+            <Button size="sm" onClick={() => {
+              // ★ v60-fix109: If we arrived here from a sales order tick click,
+              //   pre-fill the form with that salesOrderId so the user doesn't
+              //   have to type it manually.
+              const preselectSO = brokerPreselectSalesOrderId
+              const matchedSalesOrder = preselectSO ? salesOrders.find((s: any) => s.id === preselectSO) : null
+              setBrokerCommissionForm({
+                brokerName: '', brokerContact: '', brokerAddress: '',
+                salesOrderId: preselectSO || '',
+                orderDate: matchedSalesOrder?.orderDate ? new Date(matchedSalesOrder.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                salesPersonName: (matchedSalesOrder as any)?.salesPerson?.name || '',
+                commissionAmount: '', commissionType: 'amount', commissionRate: '',
+                paymentType: 'cash', paymentDetails: '',
+                paidStatus: 'unpaid', deliveryStatus: 'pending',
+                checkedBy: '', approvedBy: '',
+              });
+              setEditingBrokerCommissionId(null)
+              setCurrentView('newBrokerCommission') }}>
               <Plus className="w-4 h-4 mr-2" />New Commission
             </Button>
           )}
         </div>
       </div>
-      <div className="border rounded-lg overflow-hidden overflow-x-auto">
-        <Table>
+
+      {/* ★ v60-fix109: Notification banner when arrived from a Sales Order tick click */}
+      {brokerPreselectSalesOrderId && (
+        <div className="rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800 flex items-center justify-between gap-3">
+          <div>
+            <strong>Selected Sales Order:</strong>{' '}
+            {salesOrders.find((s: any) => s.id === brokerPreselectSalesOrderId)?.salesNo || brokerPreselectSalesOrderId.slice(0, 8)}
+            <div className="text-xs text-emerald-700 mt-0.5">
+              Click <strong>"New Commission"</strong> above to add broker details for this order.
+              Existing commissions for this order (if any) are highlighted below.
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => setBrokerPreselectSalesOrderId(null)} title="Clear selection">
+            <X className="w-4 h-4" />
+          </Button>
+        </div>
+      )}
+
+      <div className="border rounded-lg overflow-x-auto">
+        <Table className="min-w-[900px]">
           <TableHeader><TableRow className="bg-muted/50">
-            <TableHead className="font-semibold">Sl</TableHead>
-            <TableHead className="font-semibold">Broker Name</TableHead>
-            <TableHead className="font-semibold">Contact</TableHead>
-            <TableHead className="font-semibold">Order Date</TableHead>
-            <TableHead className="font-semibold">Sales Person</TableHead>
-            <TableHead className="font-semibold text-right">Commission</TableHead>
-            <TableHead className="font-semibold">Payment Type</TableHead>
-            <TableHead className="font-semibold">Paid</TableHead>
-            <TableHead className="font-semibold">Delivery</TableHead>
-            <TableHead className="font-semibold">Checked By</TableHead>
-            <TableHead className="font-semibold">Approved By</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Sl</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Broker Name</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Sales No</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Contact</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Order Date</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Sales Person</TableHead>
+            <TableHead className="font-semibold text-right whitespace-nowrap">Commission</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Paid</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Delivery</TableHead>
+            <TableHead className="font-semibold text-center whitespace-nowrap">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {brokerCommissions.length === 0 ? <TableRow><TableCell colSpan={11} className="text-center py-8 text-muted-foreground">No broker commissions yet</TableCell></TableRow>
-            : brokerCommissions.map((b, i) => (
-              <TableRow key={b.id} className="hover:bg-muted/30">
-                <TableCell className="text-muted-foreground">{i + 1}</TableCell>
-                <TableCell className="font-medium">{b.brokerName}</TableCell>
-                <TableCell className="text-xs">{b.brokerContact || '—'}</TableCell>
-                <TableCell className="text-xs">{b.orderDate ? bdDate(new Date(b.orderDate)) : '—'}</TableCell>
-                <TableCell className="text-xs">{b.salesPersonName || '—'}</TableCell>
-                <TableCell className="text-right font-bold">৳ {Number(b.commissionAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
-                <TableCell className="text-xs capitalize">{b.paymentType?.replace('_', ' ') || 'cash'}</TableCell>
-                <TableCell><Badge variant={b.paidStatus === 'paid' ? 'default' : 'secondary'} className="capitalize">{b.paidStatus}</Badge></TableCell>
-                <TableCell><Badge variant={b.deliveryStatus === 'delivered' ? 'default' : 'outline'} className="capitalize">{b.deliveryStatus}</Badge></TableCell>
-                <TableCell className="text-xs">{b.checkedBy || '—'}</TableCell>
-                <TableCell className="text-xs">{b.approvedBy || '—'}</TableCell>
-              </TableRow>
-            ))}
+            {brokerCommissions.length === 0 ? <TableRow><TableCell colSpan={10} className="text-center py-8 text-muted-foreground">No broker commissions yet</TableCell></TableRow>
+            : brokerCommissions.map((b, i) => {
+              // ★ Resolve the sales order's salesNo for display
+              const matchedSO = salesOrders.find((s: any) => s.id === b.salesOrderId)
+              const salesNoDisplay = matchedSO?.salesNo || (b.salesOrderId ? b.salesOrderId.slice(0, 8) : '—')
+              const isHighlighted = brokerPreselectSalesOrderId && b.salesOrderId === brokerPreselectSalesOrderId
+              return (
+                <TableRow key={b.id} className={`hover:bg-muted/30 ${isHighlighted ? 'bg-emerald-50 border-l-4 border-emerald-500' : ''}`}>
+                  <TableCell className="text-muted-foreground">{i + 1}</TableCell>
+                  <TableCell className="font-medium">{b.brokerName}</TableCell>
+                  <TableCell className="font-mono text-xs">{salesNoDisplay}</TableCell>
+                  <TableCell className="text-xs">{b.brokerContact || '—'}</TableCell>
+                  <TableCell className="text-xs">{b.orderDate ? bdDate(new Date(b.orderDate)) : '—'}</TableCell>
+                  <TableCell className="text-xs">{b.salesPersonName || '—'}</TableCell>
+                  <TableCell className="text-right font-bold">৳ {Number(b.commissionAmount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell><Badge variant={b.paidStatus === 'paid' ? 'default' : 'secondary'} className="capitalize">{b.paidStatus}</Badge></TableCell>
+                  <TableCell><Badge variant={b.deliveryStatus === 'delivered' ? 'default' : 'outline'} className="capitalize">{b.deliveryStatus}</Badge></TableCell>
+                  <TableCell className="text-center">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      title="Edit / View Details"
+                      onClick={() => {
+                        // Load this commission into the form for editing
+                        setBrokerCommissionForm({
+                          brokerName: b.brokerName,
+                          brokerContact: b.brokerContact || '',
+                          brokerAddress: b.brokerAddress || '',
+                          salesOrderId: b.salesOrderId || '',
+                          orderDate: b.orderDate ? new Date(b.orderDate).toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+                          salesPersonName: b.salesPersonName || '',
+                          commissionAmount: b.commissionType === 'amount' ? String(b.commissionAmount || '') : '',
+                          commissionType: b.commissionType || 'amount',
+                          commissionRate: b.commissionType === 'percentage' ? String(b.commissionRate || '') : '',
+                          paymentType: b.paymentType || 'cash',
+                          paymentDetails: b.paymentDetails || '',
+                          paidStatus: b.paidStatus || 'unpaid',
+                          deliveryStatus: b.deliveryStatus || 'pending',
+                          checkedBy: b.checkedBy || '',
+                          approvedBy: b.approvedBy || '',
+                        })
+                        setEditingBrokerCommissionId(b.id)
+                        setCurrentView('newBrokerCommission')
+                      }}
+                    >
+                      <Edit className="w-4 h-4" />
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              )
+            })}
           </TableBody>
         </Table>
       </div>
@@ -6364,22 +6439,32 @@ DEWS,720-500-B,5</pre>
                 <TableCell className="text-xs">{s.deliveryDate?bdDate(new Date(s.deliveryDate)):'—'}</TableCell>
                 <TableCell className="text-center" onClick={(e)=>e.stopPropagation()}>
                   {hasBroker ? (
-                    <span
-                      title={`Broker: ${brokerComm.brokerName}${brokerComm.commissionAmount ? ` • ৳${fmtBDT(brokerComm.commissionAmount)}` : ''}${brokerComm.paidStatus === 'paid' ? ' • Paid' : ' • Unpaid'}`}
-                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 text-xs font-semibold cursor-pointer hover:bg-emerald-200"
-                      onClick={() => { setCurrentView('brokerCommission') }}
+                    <button
+                      type="button"
+                      title={`Broker: ${brokerComm.brokerName}${brokerComm.commissionAmount ? ` • ৳${fmtBDT(brokerComm.commissionAmount)}` : ''}${brokerComm.paidStatus === 'paid' ? ' • Paid' : ' • Unpaid'} — Click to view in Broker Commission page`}
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-300 hover:bg-emerald-200 transition-colors"
+                      onClick={() => {
+                        // ★ v60-fix109: Navigate to Broker Commission page with this
+                        //   sales order pre-selected, so user can view/edit details.
+                        setBrokerPreselectSalesOrderId(s.id)
+                        setCurrentView('brokerCommission')
+                      }}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-600" />
-                      Yes
-                    </span>
+                      <CheckCircle2 className="w-4 h-4" />
+                    </button>
                   ) : (
-                    <span
-                      title="No broker commission for this order"
-                      className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-gray-100 text-gray-400 border border-gray-200 text-xs"
+                    <button
+                      type="button"
+                      title="No broker — click to add broker commission for this order"
+                      className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-muted/50 text-muted-foreground border border-dashed border-muted-foreground/40 hover:bg-primary/10 hover:text-primary hover:border-primary transition-colors"
+                      onClick={() => {
+                        // ★ Navigate to broker commission form with this salesOrderId pre-filled.
+                        setBrokerPreselectSalesOrderId(s.id)
+                        setCurrentView('brokerCommission')
+                      }}
                     >
-                      <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
-                      No
-                    </span>
+                      <Plus className="w-3.5 h-3.5" />
+                    </button>
                   )}
                 </TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>
