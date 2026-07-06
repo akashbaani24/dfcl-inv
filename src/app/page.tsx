@@ -955,38 +955,33 @@ AS Display Centre,720-500-D,0
 
             <Separator />
 
-            {/* Sales order details */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="space-y-2">
-                <Label>Sales Order</Label>
-                {/* ★ v60-fix112: Show salesNo (e.g. SO-20260705-4052) instead of raw id.
-                    Read-only — the sales order is pre-selected from the Broker menu. */}
-                <Select value={brokerCommissionForm.salesOrderId || '__none__'} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, salesOrderId: v === '__none__' ? '' : v }))}>
-                  <SelectTrigger><SelectValue placeholder="Select sales order" /></SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="__none__">— None —</SelectItem>
-                    {salesOrders.filter((s: any) => s.hasBroker).map((s: any) => (
-                      <SelectItem key={s.id} value={s.id}>{s.salesNo || s.id?.slice(0,8)} — {s.customer?.name || '—'}</SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
+            {/* Sales order details — v60-fix114: Sales Order on its own row (full width)
+                to prevent overlap with Order Date. Date + Sales Person on next row. */}
+            <div className="space-y-2">
+              <Label>Sales Order</Label>
+              <Select value={brokerCommissionForm.salesOrderId || '__none__'} onValueChange={v => setBrokerCommissionForm(f => ({ ...f, salesOrderId: v === '__none__' ? '' : v }))}>
+                <SelectTrigger className="w-full"><SelectValue placeholder="Select sales order" /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__none__">— None —</SelectItem>
+                  {salesOrders.filter((s: any) => s.hasBroker).map((s: any) => (
+                    <SelectItem key={s.id} value={s.id}>{s.salesNo || s.id?.slice(0,8)} — {s.customer?.name || '—'}</SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label>Order Date</Label>
-                {/* ★ v60-fix113: robust date parsing — handle invalid/missing dates gracefully */}
                 <Input
                   type="date"
                   value={(() => {
                     const d = brokerCommissionForm.orderDate
                     if (!d) return ''
-                    // If it's already YYYY-MM-DD, use as-is
                     if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d
-                    // Try to parse as Date
                     try {
                       const parsed = new Date(d)
                       if (!isNaN(parsed.getTime())) return parsed.toISOString().split('T')[0]
                     } catch {}
-                    // Fallback: empty (don't show garbage)
                     return ''
                   })()}
                   onChange={e => setBrokerCommissionForm(f => ({ ...f, orderDate: e.target.value }))}
