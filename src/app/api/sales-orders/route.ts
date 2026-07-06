@@ -57,6 +57,8 @@ export async function POST(request: NextRequest) {
 
     const body = await request.json();
     const { entityId, customerId, salesPersonId, discount, orderDate, deliveryDate, status, notes, items, payments, hasBroker } = body;
+    // ★ v60-fix110-debug: log whether hasBroker is coming through from the frontend
+    console.log('[POST /api/sales-orders] hasBroker from body:', hasBroker, 'type:', typeof hasBroker, 'full body keys:', Object.keys(body));
 
     if (!entityId) return NextResponse.json({ error: 'Entity is required' }, { status: 400 });
     if (!customerId) return NextResponse.json({ error: 'Customer is required' }, { status: 400 });
