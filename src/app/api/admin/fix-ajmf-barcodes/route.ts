@@ -16,14 +16,19 @@ export async function GET(request: NextRequest) {
 
     const updated = [];
     for (const item of ajmfItems) {
-      const newBarcode = `BC${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
+      const now = new Date();
+      const yy = String(now.getFullYear()).slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const newBarcode = `${yy}${mm}${dd}${Math.floor(1000000 + Math.random() * 9000000)}`;
       try {
         await db.item.update({ where: { id: item.id }, data: { barcode: newBarcode } });
         updated.push({ itemName: item.itemName, barcode: newBarcode });
       } catch (e: any) {
         // Retry with different barcode
         try {
-          const alt = `BC${Date.now()}${Math.floor(Math.random() * 99999)}`;
+          const now2 = new Date();
+          const alt = `${String(now2.getFullYear()).slice(-2)}${String(now2.getMonth() + 1).padStart(2, '0')}${String(now2.getDate()).padStart(2, '0')}${Math.floor(1000000 + Math.random() * 9000000)}`;
           await db.item.update({ where: { id: item.id }, data: { barcode: alt } });
           updated.push({ itemName: item.itemName, barcode: alt });
         } catch {}
@@ -38,7 +43,11 @@ export async function GET(request: NextRequest) {
     });
 
     for (const item of otherItems) {
-      const newBarcode = `BC${Date.now()}${Math.floor(1000 + Math.random() * 9000)}`;
+      const now = new Date();
+      const yy = String(now.getFullYear()).slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const newBarcode = `${yy}${mm}${dd}${Math.floor(1000000 + Math.random() * 9000000)}`;
       try {
         await db.item.update({ where: { id: item.id }, data: { barcode: newBarcode } });
         updated.push({ itemName: item.itemName, barcode: newBarcode });

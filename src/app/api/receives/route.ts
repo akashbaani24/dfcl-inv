@@ -147,10 +147,13 @@ export async function POST(request: NextRequest) {
           select: { barcode: true, itemName: true },
         });
         if (item && (!item.barcode || item.barcode.trim() === '')) {
-          // Generate barcode: BC-<timestamp>-<random 4 digits>
-          const ts = Date.now().toString().slice(-10);
-          const rand = Math.floor(1000 + Math.random() * 9000);
-          const newBarcode = `BC${ts}${rand}`;
+          // ★ v60-fix122: YYMMDD + 7 digits format
+          const now = new Date();
+          const yy = String(now.getFullYear()).slice(-2);
+          const mm = String(now.getMonth() + 1).padStart(2, '0');
+          const dd = String(now.getDate()).padStart(2, '0');
+          const rand = Math.floor(1000000 + Math.random() * 9000000);
+          const newBarcode = `${yy}${mm}${dd}${rand}`;
           await tx.item.update({
             where: { id: itemId },
             data: { barcode: newBarcode },

@@ -86,10 +86,13 @@ export async function POST(request: NextRequest) {
         continue;
       }
 
-      // Generate unique barcode
-      const ts = Date.now().toString().slice(-10);
-      const rand = Math.floor(1000 + Math.random() * 9000);
-      const barcode = `BC${ts}${rand}`;
+      // Generate unique barcode: YYMMDD + 7 digits
+      const now = new Date();
+      const yy = String(now.getFullYear()).slice(-2);
+      const mm = String(now.getMonth() + 1).padStart(2, '0');
+      const dd = String(now.getDate()).padStart(2, '0');
+      const rand = Math.floor(1000000 + Math.random() * 9000000);
+      const barcode = `${yy}${mm}${dd}${rand}`;
 
       // Create the item
       await db.item.create({

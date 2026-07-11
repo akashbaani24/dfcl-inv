@@ -180,7 +180,7 @@ export async function POST(request: NextRequest) {
     // Step 3: Ensure "Suthli" item exists
     let suthli = await db.item.findUnique({ where: { itemName: 'Suthli' } });
     if (!suthli) {
-      suthli = await db.item.create({ data: { year: 'N/A', lcNo: 'N/A', group: 'Mattress', subGroup: 'Raw Material', itemName: 'Suthli', price: 0, uom: 'PCS', barcode: `BC${Date.now()}${Math.floor(1000+Math.random()*9000)}`, description: 'Added via purchase batch' } });
+      suthli = await db.item.create({ data: { year: 'N/A', lcNo: 'N/A', group: 'Mattress', subGroup: 'Raw Material', itemName: 'Suthli', price: 0, uom: 'PCS', barcode: (() => { const n = new Date(); return `${String(n.getFullYear()).slice(-2)}${String(n.getMonth()+1).padStart(2,'0')}${String(n.getDate()).padStart(2,'0')}${Math.floor(1000000+Math.random()*9000000)}`; })(), description: 'Added via purchase batch' } });
     }
 
     // Step 4: Group by (date, supplier)
