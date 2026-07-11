@@ -364,6 +364,7 @@ export default function Home() {
 
   // ★ Purchase state
   const [purchases, setPurchases] = useState<any[]>([])
+  const [purchaseSearch, setPurchaseSearch] = useState('')
   const [purchaseForm, setPurchaseForm] = useState({
     purchaseDate: new Date().toISOString().split('T')[0],
     purchaseType: 'local' as 'foreign' | 'local',
@@ -7413,30 +7414,136 @@ DEWS,720-500-B,5</pre>
   }
 
   // Purchase List page — summary table + New Purchase button
-  const renderPurchaseListPage = () => (
+  const renderPurchaseListPage = () => {
+    // ★ v60-fix115: Filter purchases by search term (item name, supplier, purchase no, bill no)
+    const filteredPurchases = purchaseSearch.trim()
+      ? purchases.filter(p => {
+          const q = purchaseSearch.toLowerCase().trim()
+          // Search in purchase no, supplier name, bill no
+          if ((p.purchaseNo || '').toLowerCase().includes(q)) return true
+          if ((p.supplier?.name || '').toLowerCase().includes(q)) return true
+          if ((p.billNo || '').toLowerCase().includes(q)) return true
+          // Search in item names within the purchase
+          if ((p.items || []).some((pi: any) => (pi.item?.itemName || '').toLowerCase().includes(q))) return true
+          return false
+        })
+      : purchases
+
+    // ★ Excel export
+    const handlePurchaseExcelExport = () => {
+      const XLSX = require('xlsx')
+      const rows = filteredPurchases.map((p, i) => {
+        const itemNames = (p.items || []).map((pi: any) => pi.item?.itemName || '—').join('; ')
+        return {
+          Sl: i + 1,
+          'Purchase No': p.purchaseNo || '',
+          'Date': p.purchaseDate ? new Date(p.purchaseDate).toLocaleDateString('en-GB') : '',
+          'Type': p.purchaseType || '',
+          'Supplier': p.supplier?.name || '—',
+          'Bill No': p.billNo || '—',
+          'Items': itemNames,
+          'Item Count': p.itemCount || (p.items?.length || 0),
+          'Amount': p.grandTotal || 0,
+          'Status': p.status || '',
+        }
+      })
+      const ws = XLSX.utils.json_to_sheet(rows)
+      const wb = XLSX.utils.book_new()
+      XLSX.utils.book_append_sheet(wb, ws, 'Purchases')
+      XLSX.writeFile(wb, `purchases-${workingEntity?.name?.replace(/\s+/g, '-').toLowerCase() || 'entity'}-${new Date().toISOString().split('T')[0]}.xlsx`)
+    }
+
+    // ★ PDF export (opens print dialog with formatted table)
+    const handlePurchasePDFExport = () => {
+      const win = window.open('', '_blank', 'width=1000,height=700')
+      if (!win) return
+      const entityName = workingEntity?.name || ''
+      const totalAmount = filteredPurchases.reduce((s, p) => s + (p.grandTotal || 0), 0)
+      const rowsHtml = filteredPurchases.map((p, i) => {
+        const itemNames = (p.items || []).map((pi: any) => pi.item?.itemName || '—').join(', ')
+        return `<tr>
+          <td>${i + 1}</td>
+          <td>${p.purchaseNo || ''}</td>
+          <td>${p.purchaseDate ? new Date(p.purchaseDate).toLocaleDateString('en-GB') : ''}</td>
+          <td>${p.supplier?.name || '—'}</td>
+          <td>${p.billNo || '—'}</td>
+          <td>${itemNames}</td>
+          <td style="text-align:right">${(p.grandTotal || 0).toFixed(2)}</td>
+          <td>${p.status || ''}</td>
+        </tr>`
+      }).join('')
+      win.document.write(`<html><head><title>Purchase List - ${entityName}</title><style>
+        *{margin:0;padding:0;box-sizing:border-box}
+        body{font-family:Arial,sans-serif;padding:20px;font-size:12px}
+        h1{text-align:center;font-size:18px;margin-bottom:5px}
+        h2{text-align:center;font-size:13px;color:#666;margin-bottom:15px}
+        table{width:100%;border-collapse:collapse;margin-top:10px}
+        th{background:#00674F;color:#fff;padding:6px 8px;font-size:11px;text-transform:uppercase;text-align:left}
+        td{border:1px solid #ddd;padding:5px 8px;font-size:11px}
+        .total{text-align:right;font-weight:bold;font-size:14px;margin-top:15px}
+        @media print{body{padding:10px}}
+      </style></head><body>
+        <h1>Purchase List</h1>
+        <h2>${entityName} | ${filteredPurchases.length} purchase(s) | Total: ৳ ${totalAmount.toFixed(2)}</h2>
+        <table>
+          <thead><tr>
+            <th>Sl</th><th>Purchase No</th><th>Date</th><th>Supplier</th><th>Bill No</th><th>Items</th><th style="text-align:right">Amount</th><th>Status</th>
+          </tr></thead>
+          <tbody>${rowsHtml}</tbody>
+        </table>
+        <div class="total">Grand Total: ৳ ${totalAmount.toFixed(2)}</div>
+        <script>window.onload=()=>window.print()</script>
+      </body></html>`)
+      win.document.close()
+    }
+
+    return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-semibold">Purchase List - {workingEntity?.name}</h2>
-        <Button onClick={() => { resetPurchaseForm(); setCurrentView('newPurchase') }} className="gap-2" style={{ display: hasPermission('menu', 'purchase', 'create') ? '' : 'none' }}>
-          <Plus className="w-4 h-4" />New Purchase
-        </Button>
+        <div className="flex gap-2 flex-wrap">
+          {/* ★ v60-fix115: Search input */}
+          <Input
+            placeholder="Search by item, supplier, purchase no, bill no..."
+            value={purchaseSearch}
+            onChange={e => setPurchaseSearch(e.target.value)}
+            className="w-64 text-sm"
+          />
+          {canExportItems() && filteredPurchases.length > 0 && (
+            <>
+              <Button variant="outline" size="sm" onClick={handlePurchaseExcelExport} title="Export to Excel">
+                <Download className="w-4 h-4 mr-2" />Excel
+              </Button>
+              <Button variant="outline" size="sm" onClick={handlePurchasePDFExport} title="Export to PDF (Print)">
+                <FileText className="w-4 h-4 mr-2" />PDF
+              </Button>
+            </>
+          )}
+          <Button onClick={() => { resetPurchaseForm(); setCurrentView('newPurchase') }} className="gap-2" style={{ display: hasPermission('menu', 'purchase', 'create') ? '' : 'none' }}>
+            <Plus className="w-4 h-4" />New Purchase
+          </Button>
+        </div>
       </div>
-      <div className="border rounded-lg overflow-hidden">
-        <Table>
+      <div className="text-sm text-muted-foreground">
+        Showing {filteredPurchases.length} of {purchases.length} purchase(s)
+        {purchaseSearch && ` — filtered by "${purchaseSearch}"`}
+      </div>
+      <div className="border rounded-lg overflow-x-auto">
+        <Table className="min-w-[800px]">
           <TableHeader><TableRow className="bg-muted/50">
-            <TableHead className="font-semibold">Purchase No</TableHead>
-            <TableHead className="font-semibold">Date</TableHead>
-            <TableHead className="font-semibold">Type</TableHead>
-            <TableHead className="font-semibold">Supplier</TableHead>
-            <TableHead className="font-semibold">Bill No</TableHead>
-            <TableHead className="font-semibold text-center">Items</TableHead>
-            <TableHead className="font-semibold text-right">Amount</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
-            <TableHead className="font-semibold text-center">Actions</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Purchase No</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Date</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Type</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Supplier</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Bill No</TableHead>
+            <TableHead className="font-semibold text-center whitespace-nowrap">Items</TableHead>
+            <TableHead className="font-semibold text-right whitespace-nowrap">Amount</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Status</TableHead>
+            <TableHead className="font-semibold text-center whitespace-nowrap">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {purchases.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">No purchases yet. Click "New Purchase" to create one.</TableCell></TableRow>
-            : purchases.map(p => (
+            {filteredPurchases.length === 0 ? <TableRow><TableCell colSpan={9} className="text-center py-8 text-muted-foreground">{purchases.length === 0 ? 'No purchases yet.' : 'No purchases match your search.'}</TableCell></TableRow>
+            : filteredPurchases.map(p => (
               <TableRow key={p.id} className="hover:bg-muted/30">
                 <TableCell className="font-mono text-xs font-semibold">{p.purchaseNo}</TableCell>
                 <TableCell className="text-xs">{new Date(p.purchaseDate).toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' })}</TableCell>
@@ -7848,7 +7955,8 @@ DEWS,720-500-B,5</pre>
         </Table>
       </div>
     </div>
-  )
+    )
+  }
 
   // Purchase Detail page (currently unused — could be a full page in future)
   const renderPurchaseDetailPage = () => <div>{renderPurchaseListPage()}</div>
