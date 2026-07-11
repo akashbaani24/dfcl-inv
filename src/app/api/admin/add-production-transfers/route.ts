@@ -43,9 +43,22 @@ export async function POST(request: NextRequest) {
     }
     results.entityTo = entityTo.name;
 
-    // Step 2: Read file
-    const filePath = join(process.cwd(), 'upload', 'production-transfers.txt');
-    const fileContent = readFileSync(filePath, 'utf-8');
+    // Step 2: Read file (try multiple paths — Vercel puts files in different locations)
+    let fileContent: string;
+    const paths = [
+      join(process.cwd(), 'upload', 'production-transfers.txt'),
+      join(process.cwd(), 'public', 'upload', 'production-transfers.txt'),
+      join('/tmp', 'production-transfers.txt'),
+    ];
+    let fileRead = false;
+    for (const p of paths) {
+      try { fileContent = readFileSync(p, 'utf-8'); fileRead = true; break; } catch {}
+    }
+    if (!fileRead) {
+      // Fallback: embed a small subset for testing
+      return NextResponse.json({ error: 'File not found. Tried: ' + paths.join(', ') }, { status: 500 });
+    }
+    fileContent = fileContent!;
     const lines = fileContent.split('\n').filter(l => l.trim());
 
     const rows: Row[] = [];
