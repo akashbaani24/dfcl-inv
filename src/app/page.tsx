@@ -348,6 +348,7 @@ export default function Home() {
   const [multiAdjustmentReason, setMultiAdjustmentReason] = useState('')
 
   const [transfers, setTransfers] = useState<TransferData[]>([])
+  const [transferSearch, setTransferSearch] = useState('')
   const [transferForm, setTransferForm] = useState({ itemId: '', toEntityId: '', quantity: '', notes: '', barcode: '' })
   const [transferCurrentStock, setTransferCurrentStock] = useState<number | null>(null)
   const [transferPendingOutgoing, setTransferPendingOutgoing] = useState<number>(0)
@@ -5682,35 +5683,61 @@ DEWS,720-500-B,5</pre>
     )
   }
 
-  const renderTransferPage = () => (
+  const renderTransferPage = () => {
+    // ★ v60-fix120: Filter transfers by search term
+    const filteredTransfers = transferSearch.trim()
+      ? transfers.filter(t => {
+          const q = transferSearch.toLowerCase().trim()
+          if ((t.itemName || '').toLowerCase().includes(q)) return true
+          if ((t.fromEntityName || '').toLowerCase().includes(q)) return true
+          if ((t.toEntityName || '').toLowerCase().includes(q)) return true
+          if ((t.id || '').toLowerCase().includes(q)) return true
+          if ((t.notes || '').toLowerCase().includes(q)) return true
+          return false
+        })
+      : transfers
+
+    return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between flex-wrap gap-2">
         <h2 className="text-xl font-semibold">Transfer - {workingEntity?.name}</h2>
-        <Button onClick={() => {
-          setMultiTransferRows([])
-          setMultiTransferToEntityId('')
-          setMultiTransferNotes('')
-          setTxItemSearch('')
-          setTxItemResults([])
-          setTxSelectedItem(null)
-          setCurrentView('newTransfer')
-        }}><Plus className="w-4 h-4 mr-2" />New Transfer</Button>
+        <div className="flex gap-2 flex-wrap">
+          <Input
+            placeholder="Search by item, entity, transfer ID..."
+            value={transferSearch}
+            onChange={e => setTransferSearch(e.target.value)}
+            className="w-64 text-sm"
+          />
+          <Button onClick={() => {
+            setMultiTransferRows([])
+            setMultiTransferToEntityId('')
+            setMultiTransferNotes('')
+            setTxItemSearch('')
+            setTxItemResults([])
+            setTxSelectedItem(null)
+            setCurrentView('newTransfer')
+          }}><Plus className="w-4 h-4 mr-2" />New Transfer</Button>
+        </div>
+      </div>
+      <div className="text-sm text-muted-foreground">
+        Showing {filteredTransfers.length} of {transfers.length} transfer(s)
+        {transferSearch && ` — filtered by "${transferSearch}"`}
       </div>
       <div className="border rounded-lg overflow-x-auto">
-        <Table>
+        <Table className="min-w-[700px]">
           <TableHeader><TableRow className="bg-muted/50">
-            <TableHead className="font-semibold">Transfer ID</TableHead>
-            <TableHead className="font-semibold">Item</TableHead>
-            <TableHead className="font-semibold">From</TableHead>
-            <TableHead className="font-semibold">To</TableHead>
-            <TableHead className="font-semibold text-right">Qty</TableHead>
-            <TableHead className="font-semibold">Status</TableHead>
-            <TableHead className="font-semibold">Date</TableHead>
-            <TableHead className="font-semibold text-center">Actions</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Transfer ID</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Item</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">From</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">To</TableHead>
+            <TableHead className="font-semibold text-right whitespace-nowrap">Qty</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Status</TableHead>
+            <TableHead className="font-semibold whitespace-nowrap">Date</TableHead>
+            <TableHead className="font-semibold text-center whitespace-nowrap">Actions</TableHead>
           </TableRow></TableHeader>
           <TableBody>
-            {transfers.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">No transfers</TableCell></TableRow>
-            : transfers.map(t => {
+            {filteredTransfers.length === 0 ? <TableRow><TableCell colSpan={8} className="text-center py-8 text-muted-foreground">{transfers.length === 0 ? 'No transfers' : 'No transfers match your search.'}</TableCell></TableRow>
+            : filteredTransfers.map(t => {
               // Generate a short, readable transfer ID like TR-...AB12CD
               const shortId = `TR-${t.id.slice(-6).toUpperCase()}`
               return (
@@ -5885,7 +5912,8 @@ DEWS,720-500-B,5</pre>
         </DialogContent>
       </Dialog>
     </div>
-  )
+    )
+  }
 
   // ★ New Transfer page (full page, multi-item)
   // User scans/ypes barcode for each item → adds a row → enters qty → submit creates N transfers.

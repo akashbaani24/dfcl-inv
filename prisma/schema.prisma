@@ -624,7 +624,7 @@ model Transfer {
   barcode      String?  // ★ specific barcode being transferred (for multi-barcode items)
   fromEntityId String
   toEntityId   String
-  quantity     Int
+  quantity     Float    @default(0) // ★ v60-fix120: changed from Int to Float to support decimal quantities (e.g. Adhesive 0.250 Ltr)
   status       String   @default("pending") // "pending", "approved", "completed", "cancelled"
   batchId      String?  // ★ groups multiple transfers created in one multi-transfer action
   notes        String?

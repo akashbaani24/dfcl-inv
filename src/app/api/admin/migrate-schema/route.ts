@@ -1216,6 +1216,71 @@ const MIGRATIONS: { id: string; sql: string; description: string }[] = [
     sql: 'ALTER TABLE SalesOrder ADD COLUMN hasBroker BOOLEAN NOT NULL DEFAULT 0',
     description: 'Add hasBroker column to SalesOrder (default false)',
   },
+  // v74: Convert Transfer.quantity from INTEGER to REAL (Float) to support decimal quantities
+  //      SQLite doesn't support ALTER COLUMN type directly, so use table-recreate pattern.
+  {
+    id: '2026_07_11_transfer_qty_float_create_new',
+    sql: `CREATE TABLE IF NOT EXISTS "Transfer_new" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "itemId" TEXT NOT NULL,
+      "barcode" TEXT,
+      "fromEntityId" TEXT NOT NULL,
+      "toEntityId" TEXT NOT NULL,
+      "quantity" REAL NOT NULL DEFAULT 0,
+      "status" TEXT NOT NULL DEFAULT 'pending',
+      "batchId" TEXT,
+      "notes" TEXT,
+      "createdBy" TEXT,
+      "createdAt" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "updatedAt" DATETIME NOT NULL,
+      CONSTRAINT "Transfer_itemId_fkey_new" FOREIGN KEY ("itemId") REFERENCES "Item" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT "Transfer_fromEntityId_fkey_new" FOREIGN KEY ("fromEntityId") REFERENCES "Entity" ("id") ON DELETE CASCADE ON UPDATE CASCADE,
+      CONSTRAINT "Transfer_toEntityId_fkey_new" FOREIGN KEY ("toEntityId") REFERENCES "Entity" ("id") ON DELETE CASCADE ON UPDATE CASCADE
+    )`,
+    description: 'Create new Transfer table with quantity REAL',
+  },
+  {
+    id: '2026_07_11_transfer_qty_float_copy_data',
+    sql: `INSERT OR IGNORE INTO "Transfer_new" ("id", "itemId", "barcode", "fromEntityId", "toEntityId", "quantity", "status", "batchId", "notes", "createdBy", "createdAt", "updatedAt")
+          SELECT "id", "itemId", "barcode", "fromEntityId", "toEntityId", CAST("quantity" AS REAL), "status", "batchId", "notes", "createdBy", "createdAt", "updatedAt" FROM "Transfer"`,
+    description: 'Copy Transfer data to new table (integer → float)',
+  },
+  {
+    id: '2026_07_11_transfer_qty_float_drop_old',
+    sql: 'DROP TABLE IF EXISTS "Transfer"',
+    description: 'Drop old Transfer table',
+  },
+  {
+    id: '2026_07_11_transfer_qty_float_rename',
+    sql: 'ALTER TABLE "Transfer_new" RENAME TO "Transfer"',
+    description: 'Rename new Transfer table to Transfer',
+  },
+  // Recreate indexes on Transfer
+  {
+    id: '2026_07_11_transfer_idx_from',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_fromEntityId_idx" ON "Transfer"("fromEntityId")',
+    description: 'Recreate index on Transfer.fromEntityId',
+  },
+  {
+    id: '2026_07_11_transfer_idx_to',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_toEntityId_idx" ON "Transfer"("toEntityId")',
+    description: 'Recreate index on Transfer.toEntityId',
+  },
+  {
+    id: '2026_07_11_transfer_idx_status',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_status_idx" ON "Transfer"("status")',
+    description: 'Recreate index on Transfer.status',
+  },
+  {
+    id: '2026_07_11_transfer_idx_barcode',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_barcode_idx" ON "Transfer"("barcode")',
+    description: 'Recreate index on Transfer.barcode',
+  },
+  {
+    id: '2026_07_11_transfer_idx_batch',
+    sql: 'CREATE INDEX IF NOT EXISTS "Transfer_batchId_idx" ON "Transfer"("batchId")',
+    description: 'Recreate index on Transfer.batchId',
+  },
 ];
 
 export async function POST(request: NextRequest) {
