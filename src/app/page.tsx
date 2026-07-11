@@ -7524,9 +7524,19 @@ DEWS,720-500-B,5</pre>
           </Button>
         </div>
       </div>
-      <div className="text-sm text-muted-foreground">
-        Showing {filteredPurchases.length} of {purchases.length} purchase(s)
-        {purchaseSearch && ` — filtered by "${purchaseSearch}"`}
+      <div className="flex items-center justify-between flex-wrap gap-3 p-3 border rounded-lg bg-muted/30">
+        <div className="text-sm text-muted-foreground">
+          Showing {filteredPurchases.length} of {purchases.length} purchase(s)
+          {purchaseSearch && ` — filtered by "${purchaseSearch}"`}
+        </div>
+        <div className="flex items-center gap-4">
+          <div className="text-right">
+            <div className="text-[11px] text-muted-foreground uppercase tracking-wide">Total Purchase Amount</div>
+            <div className="text-xl font-bold text-primary">
+              ৳ {filteredPurchases.reduce((s: number, p: any) => s + (p.grandTotal || (p.items?.reduce((ts: number, pi: any) => ts + (pi.total || 0), 0) || 0)), 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </div>
+          </div>
+        </div>
       </div>
       <div className="border rounded-lg overflow-x-auto">
         <Table className="min-w-[800px]">
