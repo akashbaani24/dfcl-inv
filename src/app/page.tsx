@@ -5526,7 +5526,7 @@ DEWS,720-500-B,5</pre>
               <TableRow key={a.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{a.itemName}</TableCell>
                 <TableCell>{statusBadge(a.adjustmentType)}</TableCell>
-                <TableCell className="text-right">{a.quantity}</TableCell>
+                <TableCell className="text-right">{fmtQty(a.quantity)}</TableCell>
                 <TableCell>{a.reason}</TableCell>
                 <TableCell className="text-muted-foreground">{bdDate(new Date(a.createdAt))}</TableCell>
               </TableRow>
@@ -5755,7 +5755,7 @@ DEWS,720-500-B,5</pre>
                 <TableCell className="font-medium">{t.itemName}</TableCell>
                 <TableCell>{t.fromEntityName}</TableCell>
                 <TableCell>{t.toEntityName}</TableCell>
-                <TableCell className="text-right">{t.quantity}</TableCell>
+                <TableCell className="text-right">{fmtQty(t.quantity)}</TableCell>
                 <TableCell>{statusBadge(t.status)}</TableCell>
                 <TableCell className="text-muted-foreground">{bdDate(new Date(t.createdAt))}</TableCell>
                 <TableCell className="text-center">
@@ -5877,7 +5877,7 @@ DEWS,720-500-B,5</pre>
                   </div>
                 </div>
                 <div className="border rounded-lg p-3 grid grid-cols-2 gap-2">
-                  <div><span className="text-muted-foreground">Quantity:</span> <strong className="text-base">{t.quantity}</strong></div>
+                  <div><span className="text-muted-foreground">Quantity:</span> <strong className="text-base">{fmtQty(t.quantity)}</strong></div>
                   <div><span className="text-muted-foreground">UoM:</span> {(t as any).item?.uom || 'PCS'}</div>
                 </div>
                 {(t as any).notes && (
@@ -6171,7 +6171,7 @@ DEWS,720-500-B,5</pre>
                   {r.itemName}
                   {isFromPurchase && <Badge variant="outline" className="ml-2 text-[10px] bg-blue-100 text-blue-700">Purchase</Badge>}
                 </TableCell>
-                <TableCell className="text-right">{r.quantity}</TableCell>
+                <TableCell className="text-right">{fmtQty(r.quantity)}</TableCell>
                 <TableCell>{r.sourceEntityName || (isFromPurchase ? 'Supplier' : '-')}</TableCell>
                 <TableCell className="font-mono text-xs">{r.referenceNo || '-'}</TableCell>
                 <TableCell className="text-muted-foreground">{bdDate(new Date(r.createdAt))}</TableCell>
@@ -6346,7 +6346,7 @@ DEWS,720-500-B,5</pre>
                             <span className="font-mono text-[11px] bg-amber-100 text-amber-800 px-1.5 py-0.5 rounded">{t.barcode}</span>
                           ) : <span className="text-muted-foreground text-xs">—</span>}
                         </td>
-                        <td className="px-3 py-2 text-right font-bold">{t.quantity}</td>
+                        <td className="px-3 py-2 text-right font-bold">{fmtQty(t.quantity)}</td>
                         <td className="px-3 py-2 text-right">
                           <Input
                             type="number"
@@ -9897,7 +9897,7 @@ DEWS,720-500-B,5</pre>
                 <TableRow key={a.id} className="hover:bg-muted/30 bg-red-50/20">
                   <TableCell className="font-medium">{a.itemName}</TableCell>
                   <TableCell><Badge variant="outline" className="text-xs bg-red-100 text-red-800">Damage</Badge></TableCell>
-                  <TableCell className="text-right font-bold text-red-600">{a.quantity}</TableCell>
+                  <TableCell className="text-right font-bold text-red-600">{fmtQty(a.quantity)}</TableCell>
                   <TableCell className="text-sm">{a.reason}</TableCell>
                   <TableCell className="text-xs text-muted-foreground">{bdDate(new Date(a.createdAt))}</TableCell>
                 </TableRow>
@@ -10024,7 +10024,7 @@ DEWS,720-500-B,5</pre>
 
   // ---- Reports page helpers ----
   const fmtMoney = (n: number) => fmtBDT(n || 0)
-  const fmtNum = (n: number) => new Intl.NumberFormat('en-US').format(n || 0)
+  const fmtNum = (n: number) => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n || 0)
   const fmtDate = (s: string) => { try { return new Date(s).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: '2-digit' }) } catch { return s } }
   const fmtDay = (s: string) => { try { return new Date(s).toLocaleDateString(undefined, { month: 'short', day: '2-digit' }) } catch { return s } }
 
@@ -10865,7 +10865,7 @@ DEWS,720-500-B,5</pre>
                             <TableCell className="font-medium">{t.itemName}</TableCell>
                             <TableCell>{t.fromEntity}</TableCell>
                             <TableCell>{t.toEntity}</TableCell>
-                            <TableCell className="text-right">{t.quantity}</TableCell>
+                            <TableCell className="text-right">{fmtQty(t.quantity)}</TableCell>
                             <TableCell><Badge variant="outline" className="capitalize">{t.status}</Badge></TableCell>
                           </TableRow>
                         ))}
@@ -10931,7 +10931,7 @@ DEWS,720-500-B,5</pre>
                             <TableCell className="font-medium">{a.itemName}</TableCell>
                             <TableCell>{a.entityName}</TableCell>
                             <TableCell><Badge variant={a.adjustmentType === 'increase' ? 'default' : 'destructive'} className="capitalize">{a.adjustmentType}</Badge></TableCell>
-                            <TableCell className="text-right">{a.quantity}</TableCell>
+                            <TableCell className="text-right">{fmtQty(a.quantity)}</TableCell>
                             <TableCell className="text-xs">{a.reason}</TableCell>
                           </TableRow>
                         ))}
