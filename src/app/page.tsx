@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Combobox, type ComboOption } from '@/components/ui/combobox'
 import { useConfirmAction } from '@/hooks/use-confirm-action'
-import { bdDate, bdDateTime, bdTime, bdNow, bdTodayISO, fmtBDT } from '@/lib/bd-time'
+import { bdDate, bdDateTime, bdTime, bdNow, bdTodayISO, fmtBDT, fmtQty } from '@/lib/bd-time'
 import { Switch } from '@/components/ui/switch'
 import { Checkbox } from '@/components/ui/checkbox'
 import { useLanguage } from '@/lib/i18n'
@@ -4796,7 +4796,7 @@ AS Display Centre,720-500-D,0
                     <div className="grid grid-cols-3 gap-1 text-center">
                       <div className="bg-muted/40 rounded p-1.5">
                         <p className="text-[9px] text-muted-foreground">Qty</p>
-                        <p className="text-sm font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</p>
+                        <p className="text-sm font-bold">{fmtQty(s.quantity)}</p>
                       </div>
                       <div className={`rounded p-1.5 ${booked > 0 ? 'bg-amber-100' : 'bg-muted/40'}`}>
                         <p className="text-[9px] text-muted-foreground">Booked</p>
@@ -4860,7 +4860,7 @@ AS Display Centre,720-500-D,0
                   <TableCell className="text-xs">{s.group || '—'}</TableCell>
                   <TableCell className="text-xs">{s.subGroup || '—'}</TableCell>
                   <TableCell className="font-medium">{s.itemName}</TableCell>
-                  <TableCell className="text-right font-bold">{s.quantity.toLocaleString('en-US', { maximumFractionDigits: 2 })}</TableCell>
+                  <TableCell className="text-right font-bold">{fmtQty(s.quantity)}</TableCell>
                   <TableCell className="text-right">
                     {booked > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium">
@@ -5370,7 +5370,7 @@ DEWS,720-500-B,5</pre>
                   <TableCell>{s.subGroup}</TableCell>
                   {!entityId && <TableCell>{s.entityName}</TableCell>}
                   <TableCell>{s.uom}</TableCell>
-                  <TableCell className="text-right font-semibold">{s.quantity}</TableCell>
+                  <TableCell className="text-right font-semibold">{fmtQty(s.quantity)}</TableCell>
                   <TableCell className="text-right">
                     {s.bookedQty > 0 ? (
                       <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md bg-amber-100 text-amber-800 text-xs font-medium" title={`${s.bookings.length} active booking(s)\n${s.bookings.map((b: any) => `• ${b.bookingNo} → ${b.forEntityName}${b.tillDate ? ` (till ${bdDate(new Date(b.tillDate))})` : ''}`).join('\n')}`}>
@@ -5378,7 +5378,7 @@ DEWS,720-500-B,5</pre>
                       </span>
                     ) : <span className="text-muted-foreground">0</span>}
                   </TableCell>
-                  <TableCell className={`text-right font-bold ${available < 0 ? 'text-red-600' : available === 0 ? 'text-amber-600' : 'text-green-700'}`}>{available}</TableCell>
+                  <TableCell className={`text-right font-bold ${available < 0 ? 'text-red-600' : available === 0 ? 'text-amber-600' : 'text-green-700'}`}>{fmtQty(available)}</TableCell>
                 </TableRow>
               )})}
             </TableBody>
@@ -7993,7 +7993,7 @@ DEWS,720-500-B,5</pre>
               <TableRow key={s.id} className="hover:bg-muted/30">
                 <TableCell className="font-medium">{s.itemName}</TableCell>
                 <TableCell>{s.customerName}</TableCell>
-                <TableCell className="text-right">{s.quantity}</TableCell>
+                <TableCell className="text-right">{fmtQty(s.quantity)}</TableCell>
                 <TableCell className="text-right">{s.price.toLocaleString('en-US', { minimumFractionDigits: 2 })}</TableCell>
                 <TableCell>{s.reason}</TableCell>
                 <TableCell>{statusBadge(s.status)}</TableCell>

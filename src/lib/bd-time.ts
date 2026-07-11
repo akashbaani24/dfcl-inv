@@ -73,6 +73,17 @@ export function fmtBDT(n: number): string {
 }
 
 /**
+ * ★ v60-fix117: Format a stock quantity — always show at most 2 decimal places.
+ *   Fixes the floating-point precision issue where stock shows as
+ *   "583.2400000000008" instead of "583.24".
+ *   Uses Math.round to eliminate IEEE 754 float artifacts.
+ */
+export function fmtQty(n: number): string {
+  const rounded = Math.round((n || 0) * 100) / 100;
+  return rounded.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+}
+
+/**
  * Get today's date in BD time as YYYY-MM-DD (for <input type="date"> defaults).
  */
 export function bdTodayISO(): string {
