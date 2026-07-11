@@ -171,6 +171,33 @@ interface ReportData {
   transfer: ReportTransfer | null
   adjustment: ReportAdjustment | null
   incentive: ReportIncentive | null
+  pnl?: ReportPnL | null
+}
+
+interface ReportPnL {
+  // Income
+  totalSalesRevenue: number
+  totalReturns: number
+  netSalesRevenue: number
+  // Cost of Goods Sold
+  totalPurchaseCost: number
+  totalCogs: number
+  totalCogsAdjustments: number
+  netCogs: number
+  // Gross Profit
+  grossProfit: number
+  grossMargin: number
+  // Operating Expenses
+  totalIncentives: number
+  totalExpenses: number
+  totalAdjustmentLoss: number
+  totalOperatingExpenses: number
+  // Net Profit
+  netProfit: number
+  netMargin: number
+  // Details
+  byEntity: Array<{ entityName: string; revenue: number; cogs: number; grossProfit: number; expenses: number; netProfit: number }>
+  byMonth: Array<{ month: string; revenue: number; cogs: number; grossProfit: number; netProfit: number }>
 }
 
 type ViewType =
@@ -10437,6 +10464,7 @@ DEWS,720-500-B,5</pre>
       { key: 'transfer', label: 'Transfer', icon: <ArrowRightLeft className="w-4 h-4" />, permKey: 'transfer' },
       { key: 'adjustment', label: 'Adjustment', icon: <Settings2 className="w-4 h-4" />, permKey: 'adjustment' },
       { key: 'incentive', label: 'Incentive', icon: <DollarSign className="w-4 h-4" />, permKey: 'incentive' },
+      { key: 'pnl', label: 'Profit & Loss', icon: <TrendingUp className="w-4 h-4" />, permKey: 'pnl' },
     ].filter(t => isManagerOrAdmin || hasPermission('menu', 'reports_' + t.permKey, 'export'))
 
     return (
@@ -10959,13 +10987,111 @@ DEWS,720-500-B,5</pre>
                 ))}
               </div>
             )}
+
+            {/* ★ v60-fix118: PROFIT & LOSS TAB */}
+            {reportTab === 'pnl' && (isManagerOrAdmin || hasPermission('menu', 'reports_pnl', 'export')) && (
+              <div className="space-y-6">
+                {(() => {
+                  const pnl = reportData.pnl
+                  if (!pnl) return <Card><CardContent className="py-12 text-center text-muted-foreground">No P&L data for this period.</CardContent></Card>
+
+                  return (
+                    <>
+                      {/* Summary KPIs */}
+                      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                        {renderKPI('Net Revenue', fmtMoney(pnl.netSalesRevenue), `Gross: ${fmtMoney(pnl.totalSalesRevenue)} • Returns: ${fmtMoney(pnl.totalReturns)}`, <ShoppingCart className="w-5 h-5" />, 'green')}
+                        {renderKPI('COGS', fmtMoney(pnl.netCogs), `Purchases: ${fmtMoney(pnl.totalPurchaseCost)}`, <Package className="w-5 h-5" />, 'cyan')}
+                        {renderKPI('Gross Profit', fmtMoney(pnl.grossProfit), `Margin: ${pnl.grossMargin.toFixed(1)}%`, <TrendingUp className="w-5 h-5" />, pnl.grossProfit >= 0 ? 'green' : 'amber')}
+                        {renderKPI('Net Profit', fmtMoney(pnl.netProfit), `Margin: ${pnl.netMargin.toFixed(1)}%`, <DollarSign className="w-5 h-5" />, pnl.netProfit >= 0 ? 'green' : 'amber')}
+                      </div>
+
+                      {/* P&L Statement */}
+                      {renderChartCard('Profit & Loss Statement', `${fmtDate(reportData.from)} → ${fmtDate(reportData.to)}`, (
+                        <div className="space-y-1 text-sm">
+                          {/* Income */}
+                          <div className="font-semibold text-primary border-b pb-1 mb-2">INCOME</div>
+                          <div className="flex justify-between"><span>Total Sales Revenue</span><span className="font-mono text-green-600">{fmtMoney(pnl.totalSalesRevenue)}</span></div>
+                          <div className="flex justify-between text-muted-foreground"><span>Less: Sales Returns</span><span className="font-mono text-red-600">({fmtMoney(pnl.totalReturns)})</span></div>
+                          <div className="flex justify-between font-semibold border-t pt-1"><span>Net Sales Revenue</span><span className="font-mono">{fmtMoney(pnl.netSalesRevenue)}</span></div>
+
+                          {/* COGS */}
+                          <div className="font-semibold text-primary border-b pb-1 mb-2 mt-4">COST OF GOODS SOLD</div>
+                          <div className="flex justify-between"><span>Purchase Cost</span><span className="font-mono">{fmtMoney(pnl.totalPurchaseCost)}</span></div>
+                          <div className="flex justify-between text-muted-foreground"><span>COGS Adjustments</span><span className="font-mono">{fmtMoney(pnl.totalCogsAdjustments)}</span></div>
+                          <div className="flex justify-between font-semibold border-t pt-1"><span>Total COGS</span><span className="font-mono text-red-600">({fmtMoney(pnl.netCogs)})</span></div>
+
+                          {/* Gross Profit */}
+                          <div className="flex justify-between font-bold text-lg border-t-2 pt-2 mt-2"><span>GROSS PROFIT</span><span className="font-mono {pnl.grossProfit >= 0 ? 'text-green-600' : 'text-red-600'}">{fmtMoney(pnl.grossProfit)}</span></div>
+                          <div className="flex justify-between text-xs text-muted-foreground"><span>Gross Margin</span><span className="font-mono">{pnl.grossMargin.toFixed(1)}%</span></div>
+
+                          {/* Operating Expenses */}
+                      <div className="font-semibold text-primary border-b pb-1 mb-2 mt-4">OPERATING EXPENSES</div>
+                          <div className="flex justify-between"><span>Incentives</span><span className="font-mono">{fmtMoney(pnl.totalIncentives)}</span></div>
+                          <div className="flex justify-between"><span>Other Expenses</span><span className="font-mono">{fmtMoney(pnl.totalExpenses)}</span></div>
+                          <div className="flex justify-between"><span>Adjustment Loss</span><span className="font-mono">{fmtMoney(pnl.totalAdjustmentLoss)}</span></div>
+                          <div className="flex justify-between font-semibold border-t pt-1"><span>Total Operating Expenses</span><span className="font-mono text-red-600">({fmtMoney(pnl.totalOperatingExpenses)})</span></div>
+
+                          {/* Net Profit */}
+                          <div className="flex justify-between font-bold text-xl border-t-2 pt-2 mt-2 bg-muted/30 p-2 rounded">
+                            <span>NET PROFIT</span>
+                            <span className={`font-mono ${pnl.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmtMoney(pnl.netProfit)}</span>
+                          </div>
+                          <div className="flex justify-between text-xs text-muted-foreground"><span>Net Margin</span><span className="font-mono">{pnl.netMargin.toFixed(1)}%</span></div>
+                        </div>
+                      ))}
+
+                      {/* By Entity */}
+                      {pnl.byEntity && pnl.byEntity.length > 0 && renderChartCard('P&L by Entity', 'Breakdown per entity', (
+                        <div className="overflow-x-auto">
+                          <Table>
+                            <TableHeader><TableRow>
+                              <TableHead className="font-semibold text-xs">Entity</TableHead>
+                              <TableHead className="font-semibold text-xs text-right">Revenue</TableHead>
+                              <TableHead className="font-semibold text-xs text-right">COGS</TableHead>
+                              <TableHead className="font-semibold text-xs text-right">Gross Profit</TableHead>
+                              <TableHead className="font-semibold text-xs text-right">Expenses</TableHead>
+                              <TableHead className="font-semibold text-xs text-right">Net Profit</TableHead>
+                            </TableRow></TableHeader>
+                            <TableBody>
+                              {pnl.byEntity.map((e, i) => (
+                                <TableRow key={i}>
+                                  <TableCell className="font-medium text-sm">{e.entityName}</TableCell>
+                                  <TableCell className="text-right text-sm">{fmtMoney(e.revenue)}</TableCell>
+                                  <TableCell className="text-right text-sm">{fmtMoney(e.cogs)}</TableCell>
+                                  <TableCell className="text-right text-sm font-semibold">{fmtMoney(e.grossProfit)}</TableCell>
+                                  <TableCell className="text-right text-sm">{fmtMoney(e.expenses)}</TableCell>
+                                  <TableCell className={`text-right text-sm font-bold ${e.netProfit >= 0 ? 'text-green-600' : 'text-red-600'}`}>{fmtMoney(e.netProfit)}</TableCell>
+                                </TableRow>
+                              ))}
+                            </TableBody>
+                          </Table>
+                        </div>
+                      ))}
+
+                      {/* Monthly Trend */}
+                      {pnl.byMonth && pnl.byMonth.length > 0 && renderChartCard('Monthly P&L Trend', 'Revenue vs Net Profit', (
+                        <ResponsiveContainer width="100%" height={280}>
+                          <BarChart data={pnl.byMonth} margin={{ left: -10, right: 10, top: 5 }}>
+                            <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                            <XAxis dataKey="month" fontSize={11} stroke="#94a3b8" />
+                            <YAxis fontSize={11} stroke="#94a3b8" />
+                            <RTooltip />
+                            <Legend />
+                            <Bar dataKey="revenue" name="Revenue" fill="#10b981" radius={[4, 4, 0, 0]} />
+                            <Bar dataKey="netProfit" name="Net Profit" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      ))}
+                    </>
+                  )
+                })()}
+              </div>
+            )}
           </>
         )}
       </div>
     )
   }
-
-  // Entity selection page
   const renderEntitySelection = () => {
     const availableEntities = isManagerOrAdmin ? entities : entities.filter(e => user.entityAccess.some(ea => ea.entityId === e.id))
     const filteredEntities = entitySearch

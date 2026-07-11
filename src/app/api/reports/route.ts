@@ -313,6 +313,169 @@ export async function GET(request: NextRequest) {
       };
     }
 
+    // ─── P&L (Profit and Loss) ───
+    if (type === 'all' || type === 'pnl') {
+      try {
+        // 1. Sales Revenue (approved/delivered sales orders in date range)
+        const salesOrders = await db.salesOrder.findMany({
+          where: {
+            ...entityFilter('entityId'),
+            ...dateFilter('orderDate'),
+            status: { notIn: ['cancelled'] },
+          },
+          include: {
+            items: { include: { makingEntries: true } },
+            payments: { select: { amount: true } },
+          },
+        });
+        const totalSalesRevenue = salesOrders.reduce((s, so) => {
+          return s + so.items.reduce((ts: number, si: any) =>
+            ts + si.quantity * si.unitPrice + (si.makingEntries?.reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0) || 0)
+            , 0) - (so.discount || 0);
+        }, 0);
+
+        // 2. Sales Returns
+        const salesReturns = await db.salesReturn.findMany({
+          where: { ...entityFilter('entityId'), ...dateFilter('createdAt') },
+          select: { quantity: true, price: true },
+        });
+        const totalReturns = salesReturns.reduce((s, sr) => s + sr.quantity * sr.price, 0);
+
+        // 3. Purchase Cost (approved purchases in date range)
+        const purchases = await db.purchase.findMany({
+          where: {
+            ...entityFilter('entityId'),
+            ...dateFilter('purchaseDate'),
+            status: 'approved',
+          },
+          include: { items: true },
+        });
+        const totalPurchaseCost = purchases.reduce((s, p) =>
+          s + p.items.reduce((ts: number, pi: any) => ts + pi.total, 0), 0);
+
+        // 4. COGS = purchase cost (approximation — actual COGS would use landed cost * delivered qty)
+        const netCogs = totalPurchaseCost;
+        const totalCogsAdjustments = 0;
+        const totalCogs = netCogs;
+
+        // 5. Gross Profit
+        const netSalesRevenue = totalSalesRevenue - totalReturns;
+        const grossProfit = netSalesRevenue - netCogs;
+        const grossMargin = netSalesRevenue > 0 ? (grossProfit / netSalesRevenue) * 100 : 0;
+
+        // 6. Operating Expenses
+        const incentives = await db.incentive.findMany({
+          where: { ...entityFilter('entityId'), ...dateFilter('createdAt') },
+          select: { amount: true },
+        });
+        const totalIncentives = incentives.reduce((s, i) => s + i.amount, 0);
+
+        // Accounts entries (expenses)
+        const accountsEntries = await db.accountsEntry.findMany({
+          where: { ...entityFilter('entityId'), ...dateFilter('createdAt'), entryType: 'expense' },
+          select: { amount: true },
+        });
+        const totalExpenses = accountsEntries.reduce((s, e) => s + e.amount, 0);
+
+        // Adjustment losses (decrease adjustments)
+        const adjustments = await db.itemAdjustment.findMany({
+          where: { ...entityFilter('entityId'), ...dateFilter('createdAt'), adjustmentType: 'decrease' },
+          select: { quantity: true, itemId: true },
+        });
+        // Get item prices for adjustment valuation
+        const adjItemIds = [...new Set(adjustments.map(a => a.itemId))];
+        const adjItems = await db.item.findMany({ where: { id: { in: adjItemIds } }, select: { id: true, price: true } });
+        const adjItemMap = new Map(adjItems.map(i => [i.id, i.price || 0]));
+        const totalAdjustmentLoss = adjustments.reduce((s, a) => s + a.quantity * (adjItemMap.get(a.itemId) || 0), 0);
+
+        const totalOperatingExpenses = totalIncentives + totalExpenses + totalAdjustmentLoss;
+
+        // 7. Net Profit
+        const netProfit = grossProfit - totalOperatingExpenses;
+        const netMargin = netSalesRevenue > 0 ? (netProfit / netSalesRevenue) * 100 : 0;
+
+        // 8. By Entity breakdown
+        const entityMap = new Map<string, { revenue: number; cogs: number; expenses: number }>();
+        for (const so of salesOrders) {
+          const eId = so.entityId;
+          const rev = so.items.reduce((ts: number, si: any) =>
+            ts + si.quantity * si.unitPrice + (si.makingEntries?.reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0) || 0), 0) - (so.discount || 0);
+          const cur = entityMap.get(eId) || { revenue: 0, cogs: 0, expenses: 0 };
+          cur.revenue += rev;
+          entityMap.set(eId, cur);
+        }
+        for (const p of purchases) {
+          const eId = p.entityId;
+          const cost = p.items.reduce((ts: number, pi: any) => ts + pi.total, 0);
+          const cur = entityMap.get(eId) || { revenue: 0, cogs: 0, expenses: 0 };
+          cur.cogs += cost;
+          entityMap.set(eId, cur);
+        }
+        for (const i of incentives) {
+          // Incentives don't have entityId directly — skip for now
+        }
+
+        // Get entity names
+        const allEntities = await db.entity.findMany({ select: { id: true, name: true } });
+        const entityNameMap = new Map(allEntities.map(e => [e.id, e.name]));
+        const byEntity = [...entityMap.entries()].map(([eId, data]) => ({
+          entityName: entityNameMap.get(eId) || '—',
+          revenue: data.revenue,
+          cogs: data.cogs,
+          grossProfit: data.revenue - data.cogs,
+          expenses: data.expenses,
+          netProfit: data.revenue - data.cogs - data.expenses,
+        }));
+
+        // 9. By Month trend
+        const monthMap = new Map<string, { revenue: number; cogs: number; netProfit: number }>();
+        for (const so of salesOrders) {
+          const monthKey = new Date(so.orderDate).toISOString().slice(0, 7);
+          const rev = so.items.reduce((ts: number, si: any) =>
+            ts + si.quantity * si.unitPrice + (si.makingEntries?.reduce((m: number, me: any) => m + me.quantity * me.unitPrice, 0) || 0), 0) - (so.discount || 0);
+          const cur = monthMap.get(monthKey) || { revenue: 0, cogs: 0, netProfit: 0 };
+          cur.revenue += rev;
+          monthMap.set(monthKey, cur);
+        }
+        for (const p of purchases) {
+          const monthKey = new Date(p.purchaseDate).toISOString().slice(0, 7);
+          const cost = p.items.reduce((ts: number, pi: any) => ts + pi.total, 0);
+          const cur = monthMap.get(monthKey) || { revenue: 0, cogs: 0, netProfit: 0 };
+          cur.cogs += cost;
+          monthMap.set(monthKey, cur);
+        }
+        const byMonth = [...monthMap.entries()].map(([month, data]) => ({
+          month,
+          revenue: data.revenue,
+          cogs: data.cogs,
+          grossProfit: data.revenue - data.cogs,
+          netProfit: data.revenue - data.cogs,
+        })).sort((a, b) => a.month.localeCompare(b.month));
+
+        result.pnl = {
+          totalSalesRevenue,
+          totalReturns,
+          netSalesRevenue,
+          totalPurchaseCost,
+          totalCogs,
+          totalCogsAdjustments,
+          netCogs,
+          grossProfit,
+          grossMargin,
+          totalIncentives,
+          totalExpenses,
+          totalAdjustmentLoss,
+          totalOperatingExpenses,
+          netProfit,
+          netMargin,
+          byEntity,
+          byMonth,
+        };
+      } catch (pnlErr) {
+        console.error('P&L calculation error:', pnlErr);
+      }
+    }
+
     return NextResponse.json(result);
   } catch (error) {
     console.error('Reports API error:', error);
