@@ -80,7 +80,7 @@ export function fmtBDT(n: number): string {
  */
 export function fmtQty(n: number): string {
   const rounded = Math.round((n || 0) * 100) / 100;
-  return rounded.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 0 });
+  return rounded.toLocaleString('en-US', { maximumFractionDigits: 2, minimumFractionDigits: 2 });
 }
 
 /**
