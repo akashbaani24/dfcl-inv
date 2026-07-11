@@ -1301,7 +1301,7 @@ AS Display Centre,720-500-D,0
   // Reports state
   const [reportData, setReportData] = useState<ReportData | null>(null)
   const [reportLoading, setReportLoading] = useState(false)
-  const [reportTab, setReportTab] = useState<'overview' | 'accounts' | 'cashSales' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive'>('overview')
+  const [reportTab, setReportTab] = useState<'overview' | 'accounts' | 'cashSales' | 'stock' | 'sales' | 'transfer' | 'adjustment' | 'incentive' | 'pnl'>('overview')
   const [reportRange, setReportRange] = useState<'7' | '30' | '90' | '365' | 'all' | 'custom'>('30')
   const [reportEntity, setReportEntity] = useState<string>('__all__') // '__all__' = all my entities
   const [reportCustomFrom, setReportCustomFrom] = useState('') // YYYY-MM-DD
